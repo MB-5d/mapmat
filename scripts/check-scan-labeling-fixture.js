@@ -1,0 +1,390 @@
+/* eslint-disable no-console */
+const assert = require('assert');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const http = require('http');
+const os = require('os');
+const path = require('path');
+
+const BACKEND_PORT = Number(process.env.SCAN_LABELING_BACKEND_PORT || 4317);
+const API_BASE = process.env.API_BASE || `http://127.0.0.1:${BACKEND_PORT}`;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+  if (!response.ok) {
+    throw new Error(`${url} failed ${response.status}: ${data?.error || text}`);
+  }
+  return data;
+}
+
+function html({ title, body, status = 200, head = '' }) {
+  return {
+    status,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+    body: `<!doctype html><html><head><title>${title}</title><meta name="description" content="${title} description">${head}</head><body>${body}</body></html>`,
+  };
+}
+
+function createFixtureServer() {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://fixture.local');
+    const origin = `http://${req.headers.host}`;
+    let response;
+    if (url.pathname === '/') {
+      response = html({
+        title: 'Fixture Home',
+        body: [
+          '<h1>Fixture Home</h1>',
+          '<a href="/server-error">Server error</a>',
+          '<a href="/gone">Gone page</a>',
+          '<a href="/cloudflare-once">Cloudflare retry page</a>',
+          '<a href="/cloudflare-blocked">Cloudflare blocked page</a>',
+          '<a href="/cdn-cgi/l/email-protection">Email protection utility</a>',
+          '<a href="/duplicate-a">Duplicate A</a>',
+          '<a href="/duplicate-b">Duplicate B</a>',
+          '<a href="/docs/deep/page">Deep page</a>',
+          '<a href="/assets/logo.svg">Logo</a>',
+          '<a href="https://external.example/out">External page</a>',
+          '<a href="https://cdn.example/assets/manual.pdf">External file</a>',
+        ].join(''),
+      });
+    } else if (url.pathname === '/server-error') {
+      response = html({
+        status: 500,
+        title: 'Status Dashboard',
+        body: '<h1>Status Dashboard</h1><p>This error page is still viewable.</p>',
+      });
+    } else if (url.pathname === '/gone') {
+      response = html({
+        status: 404,
+        title: 'Page not found',
+        body: '<h1>Not found</h1>',
+      });
+    } else if (url.pathname === '/cloudflare-once') {
+      const userAgent = String(req.headers['user-agent'] || '');
+      if (userAgent.includes('VellicBot')) {
+        response = html({
+          status: 403,
+          title: 'Just a moment...',
+          body: '<h1>Checking your browser</h1><p>Cloudflare Ray ID fixture.</p>',
+        });
+        response.headers['cf-mitigated'] = 'challenge';
+      } else {
+        response = html({
+          title: 'Cloudflare Retry Success',
+          body: '<h1>Cloudflare Retry Success</h1><p>Browser retry reached the page.</p>',
+        });
+      }
+    } else if (url.pathname === '/cloudflare-blocked') {
+      response = html({
+        status: 403,
+        title: 'Just a moment...',
+        body: '<h1>Checking your browser</h1><p>Cloudflare Ray ID fixture.</p>',
+      });
+      response.headers['cf-mitigated'] = 'challenge';
+    } else if (url.pathname === '/cdn-cgi/l/email-protection') {
+      response = html({
+        status: 404,
+        title: 'Email protection utility',
+        body: '<h1>Email protection utility</h1>',
+      });
+    } else if (url.pathname === '/duplicate-a') {
+      response = html({
+        title: 'Canonical Fixture',
+        head: `<link rel="canonical" href="${origin}/duplicate-a">`,
+        body: '<h1>Canonical Fixture</h1>',
+      });
+    } else if (url.pathname === '/duplicate-b') {
+      response = html({
+        title: 'Canonical Fixture Copy',
+        head: `<link rel="canonical" href="${origin}/duplicate-a">`,
+        body: '<h1>Canonical Fixture Copy</h1>',
+      });
+    } else if (url.pathname === '/docs/deep/page') {
+      response = html({
+        title: 'Deep Fixture Page',
+        body: '<h1>Deep Fixture Page</h1>',
+      });
+    } else if (url.pathname === '/assets/logo.svg') {
+      response = {
+        status: 200,
+        headers: { 'content-type': 'image/svg+xml' },
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#4f46e5"/></svg>',
+      };
+    } else {
+      response = html({
+        status: 404,
+        title: 'Page not found',
+        body: '<h1>Not found</h1>',
+      });
+    }
+
+    res.writeHead(response.status, response.headers);
+    res.end(response.body);
+  });
+
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve(server));
+  });
+}
+
+function getServerUrl(server) {
+  const address = server.address();
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function waitForHealth() {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 30000) {
+    try {
+      const health = await fetchJson(`${API_BASE}/health`);
+      if (health?.ok) return;
+    } catch {
+      // Wait for server startup.
+    }
+    await sleep(500);
+  }
+  throw new Error('Timed out waiting for local backend health');
+}
+
+async function waitForScanJob(jobId, accessToken) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 90000) {
+    const data = await fetchJson(`${API_BASE}/scan-jobs/${jobId}?access_token=${accessToken}`);
+    const job = data?.job;
+    if (job?.status === 'complete') return job.result || {};
+    if (job?.status === 'failed' || job?.status === 'canceled') {
+      throw new Error(`Scan job ended with ${job.status}: ${job.error || 'no error'}`);
+    }
+    await sleep(500);
+  }
+  throw new Error('Timed out waiting for scan job to complete');
+}
+
+async function assertScanJobRequiresAccessToken(jobId) {
+  const response = await fetch(`${API_BASE}/scan-jobs/${jobId}`);
+  assert.strictEqual(response.status, 403, 'anonymous scan job should require its access token');
+}
+
+async function runScanJob(payload) {
+  const created = await fetchJson(`${API_BASE}/scan-jobs`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!created?.jobId || !created?.jobAccessToken) {
+    throw new Error('Scan job creation did not return jobId and access token');
+  }
+  await assertScanJobRequiresAccessToken(created.jobId);
+  return waitForScanJob(created.jobId, created.jobAccessToken);
+}
+
+function flattenTree(node, list = []) {
+  if (!node) return list;
+  list.push(node);
+  (node.children || []).forEach((child) => flattenTree(child, list));
+  return list;
+}
+
+function allArtifactUrls(result) {
+  return [
+    ...flattenTree(result.root).map((node) => node.url),
+    ...(result.orphans || []).flatMap((node) => flattenTree(node).map((entry) => entry.url)),
+    ...(result.subdomains || []).flatMap((node) => flattenTree(node).map((entry) => entry.url)),
+    ...(result.errors || []).map((entry) => entry.url),
+    ...(result.inactivePages || []).map((entry) => entry.url),
+    ...(result.brokenLinks || []).map((entry) => entry.url),
+    ...(result.files || []).map((entry) => entry.url),
+  ].filter(Boolean);
+}
+
+async function runScan(fixtureBase, files = true) {
+  return runScanJob({
+    url: `${fixtureBase}/`,
+    maxPages: 80,
+    options: {
+      errorPages: true,
+      inactivePages: true,
+      brokenLinks: true,
+      orphanPages: true,
+      authenticatedPages: true,
+      files,
+    },
+  });
+}
+
+async function runDefaultScan(fixtureBase) {
+  return runScanJob({
+    url: `${fixtureBase}/`,
+    maxPages: 80,
+    options: {},
+  });
+}
+
+async function runStatusOptionsOffScan(fixtureBase) {
+  return runScanJob({
+    url: `${fixtureBase}/`,
+    maxPages: 80,
+    options: {
+      errorPages: false,
+      inactivePages: false,
+      duplicates: false,
+    },
+  });
+}
+
+function assertLabeling(result, fixtureBase, { expectFiles = true } = {}) {
+  const nodes = [
+    ...flattenTree(result.root),
+    ...(result.orphans || []).flatMap((node) => flattenTree(node)),
+  ];
+  const byUrl = new Map(nodes.map((node) => [node.url, node]));
+
+  const viewableError = byUrl.get(`${fixtureBase}/server-error`);
+  assert.ok(viewableError, 'viewable 500 page should be included');
+  assert.strictEqual(viewableError.isError, true);
+  assert.strictEqual(viewableError.httpStatus, 500);
+  assert.strictEqual(viewableError.httpErrorLabel, 'HTTP 500');
+  assert.strictEqual(viewableError.isViewableError, true);
+  assert.strictEqual(viewableError.title, 'Status Dashboard');
+  assert.strictEqual(viewableError.metadataAvailable, true);
+
+  const notFound = byUrl.get(`${fixtureBase}/gone`);
+  assert.ok(notFound, 'real 404 page should be included');
+  assert.strictEqual(notFound.isError, true);
+  assert.strictEqual(notFound.httpStatus, 404);
+  assert.strictEqual(notFound.httpErrorLabel, 'HTTP 404 / Not Found');
+  assert.strictEqual(Boolean(notFound.isMissing), false);
+  assert.strictEqual(Boolean(notFound.isVirtualMissing), false);
+
+  const retryPage = byUrl.get(`${fixtureBase}/cloudflare-once`);
+  assert.ok(retryPage, 'Cloudflare challenge should be retried and included');
+  assert.strictEqual(retryPage.isError, false);
+  assert.strictEqual(retryPage.httpStatus, 200);
+  assert.strictEqual(retryPage.title, 'Cloudflare Retry Success');
+  assert.strictEqual(retryPage.scanStatus, 'active');
+
+  const blockedPage = byUrl.get(`${fixtureBase}/cloudflare-blocked`);
+  assert.ok(blockedPage, 'persistent Cloudflare challenge should be included as scan-limited');
+  assert.strictEqual(blockedPage.isError, false);
+  assert.strictEqual(blockedPage.httpStatus, 403);
+  assert.strictEqual(blockedPage.scanStatus, 'scan_limited');
+  assert.strictEqual(blockedPage.blockedReason, 'challenge_page');
+  assert.strictEqual(blockedPage.isChallengePage, true);
+  assert.ok(
+    !(result.errors || []).some((entry) => entry.url === `${fixtureBase}/cloudflare-blocked`),
+    'persistent Cloudflare challenge should not be counted as an error page'
+  );
+
+  const duplicate = byUrl.get(`${fixtureBase}/duplicate-b`);
+  assert.ok(duplicate, 'duplicate page should be included');
+  assert.strictEqual(duplicate.isDuplicate, true);
+  assert.strictEqual(duplicate.duplicateOf, `${fixtureBase}/duplicate-a`);
+
+  const virtualParent = byUrl.get(`${fixtureBase}/docs`);
+  assert.ok(virtualParent, 'inferred parent should be present');
+  assert.strictEqual(virtualParent.isMissing, true);
+  assert.strictEqual(virtualParent.isVirtualMissing, true);
+
+  const file = (result.files || []).find((entry) => entry.url === `${fixtureBase}/assets/logo.svg`);
+  if (expectFiles) {
+    assert.ok(file, 'same-host file should be included when Files is on');
+    assert.strictEqual(file.fileType, 'Image');
+  } else {
+    assert.ok(!file, 'files should stay hidden when Files is off');
+  }
+
+  const urls = allArtifactUrls(result);
+  assert.ok(!urls.some((url) => url.includes('external.example')), 'external page should be excluded');
+  assert.ok(!urls.some((url) => url.includes('cdn.example')), 'external file should be excluded');
+  assert.ok(!urls.some((url) => url.includes('/cdn-cgi/l/email-protection')), 'Cloudflare email utility should be ignored');
+  assert.ok(
+    (result.scanDiagnostics?.cloudflareBrowserRetryCount || 0) >= 1,
+    'Cloudflare challenge should trigger a browser retry'
+  );
+  assert.ok(
+    (result.scanDiagnostics?.cloudflareBrowserRetrySuccessCount || 0) >= 1,
+    'Cloudflare browser retry should record success'
+  );
+
+  assert.strictEqual(result.scanScope?.baseHost, '127.0.0.1');
+  assert.strictEqual(result.scanScope?.exactOnly, true);
+}
+
+async function main() {
+  let backend = null;
+  let fixture = null;
+  let tempDir = null;
+
+  if (!process.env.API_BASE) {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vellic-scan-labeling-'));
+    backend = spawn(process.execPath, ['server.js'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DB_PATH: path.join(tempDir, 'vellic.db'),
+        HOST: '127.0.0.1',
+        PORT: String(BACKEND_PORT),
+        RUN_MODE: 'web',
+        ALLOW_PRIVATE_NETWORKS: 'true',
+        SCREENSHOT_STORAGE_PROVIDER: 'local',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    backend.stdout.on('data', (chunk) => process.stdout.write(chunk));
+    backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
+  }
+
+  try {
+    fixture = await createFixtureServer();
+    const fixtureBase = getServerUrl(fixture);
+    await waitForHealth();
+
+    const defaultResult = await runDefaultScan(fixtureBase);
+    assertLabeling(defaultResult, fixtureBase, { expectFiles: false });
+    assert.strictEqual((defaultResult.files || []).length, 0, 'files should stay opt-in by default');
+
+    const statusOptionsOffResult = await runStatusOptionsOffScan(fixtureBase);
+    const statusOptionsOffNodes = flattenTree(statusOptionsOffResult.root);
+    assert.ok(
+      !statusOptionsOffNodes.some((node) => node.url === `${fixtureBase}/server-error`),
+      'error pages should still be removable when Error pages is off'
+    );
+    assert.ok(
+      !statusOptionsOffNodes.some((node) => node.isDuplicate),
+      'duplicates should still be removable when Duplicates is off'
+    );
+
+    const resultWithFiles = await runScan(fixtureBase, true);
+    assertLabeling(resultWithFiles, fixtureBase);
+
+    const resultWithoutFiles = await runScan(fixtureBase, false);
+    assert.strictEqual((resultWithoutFiles.files || []).length, 0, 'files should be hidden when Files is off');
+
+    console.log('[scan-labeling-fixture] Passed.');
+  } finally {
+    if (fixture) await new Promise((resolve) => fixture.close(resolve));
+    if (backend) backend.kill('SIGINT');
+    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+main().catch((error) => {
+  console.error(`[scan-labeling-fixture] Failed: ${error.stack || error.message}`);
+  process.exit(1);
+});

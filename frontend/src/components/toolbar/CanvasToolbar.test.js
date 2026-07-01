@@ -1,0 +1,1249 @@
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
+
+import CanvasToolbar from './CanvasToolbar';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
+
+describe('CanvasToolbar', () => {
+  let container;
+  let root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    container = null;
+    root = null;
+    jest.clearAllMocks();
+  });
+
+  test('composes toolbar actions from shared icon buttons', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          hasUnreadCommentMentions
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          undoRedoDisabledReason="Live editing is syncing"
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          canOpenShare
+          hasMap
+          hasSavedMap={false}
+          showVersionHistory={false}
+          shareDisabledReason="Save before sharing"
+          onBlockedShareAttempt={jest.fn()}
+        />
+      );
+    });
+
+    const selectButton = container.querySelector('button[aria-label="Select"]');
+    const commentsButton = container.querySelector('button[aria-label="Comments"]');
+    const undoButton = container.querySelector('button[aria-label="Undo"]');
+
+    expect(selectButton.className).toContain('ui-icon-btn');
+    expect(selectButton.className).toContain('canvas-tool-btn');
+    expect(selectButton.className).toContain('active');
+    expect(commentsButton.querySelector('.notification-dot')).not.toBeNull();
+    expect(undoButton.className).toContain('disabled');
+    expect(undoButton.disabled).toBe(false);
+  });
+
+  test('hides the comments button when comments are unavailable', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit={false}
+          canViewComments={false}
+          canViewVersionHistory={false}
+          activeTool="select"
+          connectionTool={null}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          showLayersMenu={false}
+          layersMenuRef={{ current: null }}
+          showLegendMenu={false}
+          legendMenuRef={{ current: null }}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="Comments"]')).toBeNull();
+  });
+
+  test('matches the requested toolbar order for a saved map', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          hasUnreadCommentMentions
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo
+          canRedo
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          onCollaborate={jest.fn()}
+          canOpenShare
+          canOpenCollaborate
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const toolbarLabels = Array.from(container.querySelectorAll('.canvas-toolbar button[aria-label]'))
+      .map((button) => button.getAttribute('aria-label'));
+
+    expect(toolbarLabels).toEqual([
+      'Select',
+      'User flow',
+      'Crosslink',
+      'Add page',
+      'Duplicate map',
+      'Undo',
+      'Redo',
+      'Comments',
+      'Report',
+      'Version history',
+      'Images',
+      'Layers',
+      'Legend',
+      'Clear canvas',
+      'Download',
+      'Share',
+      'Collaborate',
+    ]);
+
+    const duplicateButton = container.querySelector('button[aria-label="Duplicate map"]');
+    const collaborateButton = container.querySelector('button[aria-label="Collaborate"]');
+    expect(duplicateButton).not.toBeNull();
+    expect(duplicateButton.querySelector('svg')).not.toBeNull();
+    expect(collaborateButton).not.toBeNull();
+    expect(collaborateButton.getAttribute('title')).toBe('Collaborate');
+    expect(container.querySelector('.lucide-user-round-plus')).not.toBeNull();
+    expect(container.querySelector('.lucide-copy-plus')).toBeNull();
+  });
+
+  test('keeps save map in the final toolbar group for unsaved maps', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo
+          canRedo
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          canOpenShare
+          hasMap
+          hasSavedMap={false}
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const toolbarLabels = Array.from(container.querySelectorAll('.canvas-toolbar button[aria-label]'))
+      .map((button) => button.getAttribute('aria-label'));
+
+    expect(toolbarLabels).toEqual([
+      'Select',
+      'User flow',
+      'Crosslink',
+      'Add page',
+      'Undo',
+      'Redo',
+      'Comments',
+      'Report',
+      'Version history',
+      'Images',
+      'Layers',
+      'Legend',
+      'Save map',
+      'Clear canvas',
+      'Download',
+      'Share',
+    ]);
+  });
+
+  test('shows saving state on the canvas save button', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          isSavingMap
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap={false}
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const saveButton = container.querySelector('button[aria-label="Saving"]');
+    expect(saveButton).not.toBeNull();
+    expect(saveButton.textContent).toContain('Saving');
+    expect(saveButton.className).toContain('is-saving');
+    expect(saveButton.disabled).toBe(true);
+  });
+
+  test('does not include map orientation in the bottom toolbar', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit={false}
+          canViewComments={false}
+          canViewVersionHistory={false}
+          activeTool="select"
+          connectionTool={null}
+          showCommentsPanel={false}
+          showReportDrawer={false}
+          showLayersMenu={false}
+          layersMenuRef={{ current: null }}
+          showLegendMenu={false}
+          legendMenuRef={{ current: null }}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const orientationButton = container.querySelector('button[aria-label="Orientation"]');
+    expect(orientationButton).toBeNull();
+    expect(container.textContent).not.toContain('Map orientation');
+  });
+
+  test('uses combined image download actions', () => {
+    const onDownloadImagesAll = jest.fn();
+    const onDownloadImagesSelected = jest.fn();
+    const onAddScreenshotCredits = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onDownloadImagesAll={onDownloadImagesAll}
+          onDownloadImagesSelected={onDownloadImagesSelected}
+          screenshotCreditsLabel="24"
+          onAddScreenshotCredits={onAddScreenshotCredits}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          hasDownloadableImages
+          hasDownloadableSelectedImages
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const downloadAll = buttons.find((button) => button.textContent.includes('Download all'));
+    const downloadSelected = buttons.find((button) => button.textContent.includes('Download selected'));
+    const addCredits = buttons.find((button) => button.textContent.includes('Add credits'));
+    const imageMenu = container.querySelector('.canvas-tool-menu-images');
+    const scrollArea = imageMenu.querySelector('.canvas-tool-menu-images-scroll');
+    const creditsCopy = container.querySelector('.canvas-tool-menu-credits-copy');
+    const sectionHeaders = Array.from(container.querySelectorAll('.ui-menu-section-header'))
+      .map((header) => header.textContent);
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
+    expect(scrollArea).not.toBeNull();
+    expect(downloadAll).not.toBeNull();
+    expect(downloadSelected).not.toBeNull();
+    expect(addCredits).not.toBeNull();
+    expect(scrollArea.contains(addCredits)).toBe(false);
+    expect(imageMenu.lastElementChild.className).toContain('canvas-tool-menu-credits');
+    expect(container.querySelectorAll('.canvas-tool-menu-images .canvas-tool-menu-divider')).toHaveLength(1);
+    expect(container.querySelector('.canvas-tool-menu-credits-divider')).not.toBeNull();
+    expect(creditsCopy.textContent).toBe('Screenshot credits remaining: 24');
+    expect(creditsCopy.querySelector('strong')?.textContent).toBe('24');
+    expect(creditsCopy.querySelector('span')).toBeNull();
+    expect(addCredits.className).toContain('ui-btn--type-link');
+    expect(addCredits.querySelector('.ui-icon__svg')).not.toBeNull();
+    expect(sectionHeaders).toContain('Capture visible area');
+    expect(sectionHeaders).toContain('Capture full page');
+    expect(sectionHeaders).not.toContain('Thumbnails (visible area)');
+    expect(sectionHeaders).not.toContain('Full page');
+    expect(sectionHeaders).not.toContain('Review');
+    expect(container.textContent).not.toContain('Image report');
+    expect(container.querySelector('.canvas-tool-menu-download-divider')).toBeNull();
+    expect(buttons.some((button) => button.textContent.includes('Download thumbnails'))).toBe(false);
+    expect(buttons.some((button) => button.textContent.includes('Download full screenshots'))).toBe(false);
+
+    act(() => {
+      downloadAll.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      downloadSelected.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      addCredits.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onDownloadImagesAll).toHaveBeenCalledTimes(1);
+    expect(onDownloadImagesSelected).toHaveBeenCalledTimes(1);
+    expect(onAddScreenshotCredits).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the images menu 40px narrower with a pinned credits footer', () => {
+    expect(appCss).toMatch(/\.canvas-tool-menu\s*{[^}]*bottom:\s*calc\(48px \+ 4px\);/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-images\s*{[^}]*width:\s*232px;[^}]*min-width:\s*232px;[^}]*max-width:\s*232px;[^}]*overflow:\s*hidden;/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-images-scroll\s*{[^}]*overflow-y:\s*auto;/s);
+    expect(appCss).not.toMatch(/\.canvas-tool-menu-images \.ui-menu-title\s*{/);
+    expect(appCss).toMatch(/\.ui-menu-title \+ \.ui-menu-section,[\s\S]*\.ui-menu-title \+ \.layers-panel-list,[\s\S]*\.ui-menu-title \+ \.color-key-list,[\s\S]*\.ui-menu-title \+ \.canvas-tool-menu-hint\s*{[^}]*margin-top:\s*8px;/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-credits\s*{[^}]*flex:\s*0 0 auto;[^}]*flex-direction:\s*column;[^}]*align-items:\s*flex-start;/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-credits-copy\s*{[^}]*display:\s*block;/s);
+  });
+
+  test('does not render empty image menu sections', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
+    expect(container.querySelectorAll('.ui-menu-section')).toHaveLength(0);
+    expect(container.textContent).not.toContain('Visibility');
+    expect(container.textContent).not.toContain('Capture visible area');
+    expect(container.textContent).not.toContain('Capture full page');
+    expect(container.textContent).not.toContain('Review');
+    expect(container.textContent).not.toContain('Download');
+    expect(container.querySelector('.canvas-tool-menu-credits-copy')?.textContent).toBe('Screenshot credits remaining: 0');
+  });
+
+  test('keeps the images menu available but read-only when image tools are disabled', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit={false}
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          canUseImageTools={false}
+          hasAnyThumbnails
+          showThumbnails
+          onToggleThumbnails={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onUpdateCapturedThumbnails={jest.fn()}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onUpdateCapturedFullScreenshots={jest.fn()}
+          hasDownloadableThumbnails
+          hasFullScreenshotAssets
+          hasDownloadableImages
+          hasSelection
+          captureIssues={[{ id: 'missing:n1', nodeId: 'n1', label: 'Missing' }]}
+          onOpenImageReport={jest.fn()}
+          onAddScreenshotCredits={jest.fn()}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="Images"]')).not.toBeNull();
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
+    expect(container.textContent).toContain('Visibility');
+    expect(container.textContent).toContain('Node thumbnails');
+    expect(container.textContent).not.toContain('Capture visible area');
+    expect(container.textContent).not.toContain('Capture full page');
+    expect(container.textContent).not.toContain('Get thumbnails');
+    expect(container.textContent).not.toContain('Get full page');
+    expect(container.textContent).not.toContain('Update captured');
+    expect(container.textContent).not.toContain('Image report');
+    expect(container.textContent).not.toContain('Screenshot credits remaining');
+    expect(container.textContent).not.toContain('Add credits');
+    expect(container.querySelector('.canvas-tool-menu-credits')).toBeNull();
+  });
+
+  test('requires a saved map before image capture actions are available', () => {
+    const onGetThumbnailsAll = jest.fn();
+    const onGetThumbnailsSelected = jest.fn();
+    const onUpdateCapturedThumbnails = jest.fn();
+    const onGetFullScreenshotsAll = jest.fn();
+    const onGetFullScreenshotsSelected = jest.fn();
+    const onUpdateCapturedFullScreenshots = jest.fn();
+    const onDownloadImagesAll = jest.fn();
+    const onDownloadImagesSelected = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={onGetThumbnailsAll}
+          onGetThumbnailsSelected={onGetThumbnailsSelected}
+          onUpdateCapturedThumbnails={onUpdateCapturedThumbnails}
+          onGetFullScreenshotsAll={onGetFullScreenshotsAll}
+          onGetFullScreenshotsSelected={onGetFullScreenshotsSelected}
+          onUpdateCapturedFullScreenshots={onUpdateCapturedFullScreenshots}
+          onDownloadImagesAll={onDownloadImagesAll}
+          onDownloadImagesSelected={onDownloadImagesSelected}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          hasDownloadableThumbnails
+          hasFullScreenshotAssets
+          hasDownloadableImages
+          hasDownloadableSelectedImages
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap={false}
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Save this map before capturing screenshots.');
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const captureButtons = [
+      'Get thumbnails (all)',
+      'Get thumbnails (selected)',
+      'Update captured thumbnails',
+      'Get full page (all)',
+      'Get full page (selected)',
+      'Update captured full page',
+    ].map((label) => buttons.find((button) => button.textContent.includes(label)));
+
+    captureButtons.forEach((button) => {
+      expect(button).not.toBeNull();
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe('Save this map before capturing screenshots.');
+    });
+
+    const downloadAll = buttons.find((button) => button.textContent.includes('Download all'));
+    const downloadSelected = buttons.find((button) => button.textContent.includes('Download selected'));
+    expect(downloadAll.disabled).toBe(true);
+    expect(downloadSelected.disabled).toBe(true);
+
+    act(() => {
+      [...captureButtons, downloadAll, downloadSelected].forEach((button) => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    });
+
+    expect(onGetThumbnailsAll).not.toHaveBeenCalled();
+    expect(onGetThumbnailsSelected).not.toHaveBeenCalled();
+    expect(onUpdateCapturedThumbnails).not.toHaveBeenCalled();
+    expect(onGetFullScreenshotsAll).not.toHaveBeenCalled();
+    expect(onGetFullScreenshotsSelected).not.toHaveBeenCalled();
+    expect(onUpdateCapturedFullScreenshots).not.toHaveBeenCalled();
+    expect(onDownloadImagesAll).not.toHaveBeenCalled();
+    expect(onDownloadImagesSelected).not.toHaveBeenCalled();
+  });
+
+  test('keeps selected image actions visibly disabled when nothing is selected', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onDownloadImagesSelected={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          hasDownloadableSelectedImages
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const selectedActions = [
+      buttons.find((button) => button.textContent.includes('Get thumbnails (selected)')),
+      buttons.find((button) => button.textContent.includes('Get full page (selected)')),
+    ];
+
+    selectedActions.forEach((button) => {
+      expect(button).not.toBeNull();
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe('Select pages first');
+    });
+  });
+
+  test('uses captured image update actions only when saved images exist', () => {
+    const onUpdateCapturedThumbnails = jest.fn();
+    const onUpdateCapturedFullScreenshots = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onUpdateCapturedThumbnails={onUpdateCapturedThumbnails}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onUpdateCapturedFullScreenshots={onUpdateCapturedFullScreenshots}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          hasDownloadableThumbnails={false}
+          hasFullScreenshotAssets={false}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    let updateThumbnailButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Update captured thumbnails'));
+    let updateScreenshotButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Update captured full page'));
+    expect(updateThumbnailButton).toBeUndefined();
+    expect(updateScreenshotButton).toBeUndefined();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onUpdateCapturedThumbnails={onUpdateCapturedThumbnails}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onUpdateCapturedFullScreenshots={onUpdateCapturedFullScreenshots}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          hasDownloadableThumbnails
+          hasFullScreenshotAssets
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    updateThumbnailButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Update captured thumbnails'));
+    updateScreenshotButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Update captured full page'));
+    expect(updateThumbnailButton.disabled).toBe(false);
+    expect(updateScreenshotButton.disabled).toBe(false);
+
+    act(() => {
+      updateThumbnailButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      updateScreenshotButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onUpdateCapturedThumbnails).toHaveBeenCalledTimes(1);
+    expect(onUpdateCapturedFullScreenshots).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows remaining screenshot action when some full screenshots exist', () => {
+    const onGetFullScreenshotsAll = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetFullScreenshotsAll={onGetFullScreenshotsAll}
+          onGetFullScreenshotsSelected={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+          fullScreenshotsAllLabel="Get full page (remaining)"
+        />
+      );
+    });
+
+    const remainingButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Get full page (remaining)'));
+    expect(remainingButton).not.toBeNull();
+    expect(remainingButton.disabled).toBe(false);
+
+    act(() => {
+      remainingButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onGetFullScreenshotsAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows remaining thumbnail action when some thumbnails exist', () => {
+    const onGetThumbnailsAll = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={onGetThumbnailsAll}
+          onGetThumbnailsSelected={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+          thumbnailsAllLabel="Get thumbnails (remaining)"
+        />
+      );
+    });
+
+    const remainingButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Get thumbnails (remaining)'));
+    expect(remainingButton).not.toBeNull();
+    expect(remainingButton.disabled).toBe(false);
+
+    act(() => {
+      remainingButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onGetThumbnailsAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses recapture labels for selected saved image actions', () => {
+    const onGetThumbnailsSelected = jest.fn();
+    const onGetFullScreenshotsSelected = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsSelected={onGetThumbnailsSelected}
+          onGetFullScreenshotsSelected={onGetFullScreenshotsSelected}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+          thumbnailsSelectedLabel="Recapture"
+          fullScreenshotsSelectedLabel="Recapture"
+        />
+      );
+    });
+
+    const recaptureButtons = Array.from(container.querySelectorAll('button'))
+      .filter((button) => button.textContent.includes('Recapture'));
+    expect(recaptureButtons).toHaveLength(2);
+    expect(container.textContent).not.toContain('Get thumbnails (selected)');
+    expect(container.textContent).not.toContain('Get full page (selected)');
+
+    act(() => {
+      recaptureButtons.forEach((button) => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    });
+
+    expect(onGetThumbnailsSelected).toHaveBeenCalledTimes(1);
+    expect(onGetFullScreenshotsSelected).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows the image report option instead of inline capture issues', () => {
+    const onOpenImageReport = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          captureIssues={[{
+            id: 'n1:file',
+            nodeId: 'n1',
+            pageNumber: '40',
+            title: 'Handbook',
+            url: 'https://example.com/file.pdf',
+            type: 'file',
+            label: 'PDF/file',
+          }]}
+          onOpenImageReport={onOpenImageReport}
+          hasSelection={false}
+          hasAnyThumbnails
+          onToggleThumbnails={jest.fn()}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Image report');
+    expect(container.textContent).toContain('Image report1');
+    expect(container.textContent).toContain('Node thumbnails');
+    expect(container.textContent).toContain('Visibility');
+    expect(container.textContent).toContain('Review');
+    expect(container.textContent).not.toContain('Thumbnails (visible area)');
+    expect(container.textContent).not.toContain('Full page');
+    expect(container.textContent).not.toContain('Saves a full-page asset per page');
+    expect(container.textContent).not.toContain('View screenshots');
+    expect(container.textContent).not.toContain('Screenshots');
+    expect(container.textContent).not.toContain('Capture issues');
+    expect(container.textContent).not.toContain('PDF/file');
+    expect(container.textContent).not.toContain('Batch');
+
+    const imageReportButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Image report'));
+
+    act(() => {
+      imageReportButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onOpenImageReport).toHaveBeenCalledTimes(1);
+  });
+
+  test('marks the image menu as scrollable and contains wheel events', () => {
+    const onCanvasWheel = jest.fn();
+    container.addEventListener('wheel', onCanvasWheel);
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const imageMenu = container.querySelector('.canvas-tool-menu-images');
+    expect(imageMenu).not.toBeNull();
+
+    act(() => {
+      imageMenu.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 120 }));
+    });
+
+    expect(onCanvasWheel).not.toHaveBeenCalled();
+  });
+});

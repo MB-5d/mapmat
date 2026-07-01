@@ -4,8 +4,10 @@ const AuthContext = createContext({
   isLoggedIn: false,
   currentUser: null,
   onLogin: () => {},
+  onSignup: () => {},
   onLogout: () => {},
   onShowProfile: () => {},
+  onShowBilling: () => {},
   onShowSettings: () => {},
 });
 

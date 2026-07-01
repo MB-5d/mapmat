@@ -13,6 +13,7 @@ const OP_TYPES = Object.freeze({
   NODE_ADD: 'node.add',
   NODE_UPDATE: 'node.update',
   NODE_DELETE: 'node.delete',
+  NODE_MOVE: 'node.move',
   LINK_ADD: 'link.add',
   LINK_UPDATE: 'link.update',
   LINK_DELETE: 'link.delete',
@@ -24,7 +25,7 @@ const ALLOWED_OP_TYPE_SET = new Set(ALLOWED_OP_TYPES);
 
 const OP_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{5,127}$/;
 const SESSION_ID_PATTERN = /^[A-Za-z0-9._:-]{6,120}$/;
-const ENTITY_ID_PATTERN = /^[A-Za-z0-9._:-]{1,120}$/;
+const ENTITY_ID_PATTERN = /^[A-Za-z0-9._:-]{1,1024}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 class CoeditingContractError extends Error {
@@ -119,6 +120,33 @@ function normalizeTimestamp(raw, errors) {
   return new Date(timestampMs).toISOString();
 }
 
+function normalizeOptionalTimestamp(raw, field, errors) {
+  if (raw === null || raw === undefined || raw === '') return null;
+
+  const value = String(raw || '').trim();
+  const timestampMs = Date.parse(value);
+  if (!Number.isFinite(timestampMs)) {
+    pushError(errors, field, 'Must be a valid ISO-8601 timestamp');
+    return null;
+  }
+
+  return new Date(timestampMs).toISOString();
+}
+
+function normalizeBoolean(raw, field, errors, fallback = false) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  if (typeof raw === 'boolean') return raw;
+  if (raw === 1) return true;
+  if (raw === 0) return false;
+
+  const value = String(raw).trim().toLowerCase();
+  if (['true', '1'].includes(value)) return true;
+  if (['false', '0'].includes(value)) return false;
+
+  pushError(errors, field, 'Must be a boolean');
+  return fallback;
+}
+
 function normalizeChanges(raw, field, errors) {
   if (!isPlainObject(raw)) {
     pushError(errors, field, 'Must be an object');
@@ -186,6 +214,50 @@ function normalizeNodeDeletePayload(payload, errors) {
 
   return {
     nodeId: normalizePatternedString(payload.nodeId, 'payload.nodeId', ENTITY_ID_PATTERN, errors),
+  };
+}
+
+function normalizeNonNegativeInteger(raw, field, errors, fallback = 0) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : raw;
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    pushError(errors, field, 'Must be a non-negative integer');
+    return fallback;
+  }
+  return parsed;
+}
+
+function normalizeNodeMovePayload(payload, errors) {
+  const allowed = ['nodeId', 'targetParentId', 'insertIndex', 'rootChanges', 'markMovedPositionChanges', 'movedAt'];
+  ensureAllowedKeys(payload, allowed, 'payload', errors);
+
+  let rootChanges = null;
+  if (payload.rootChanges !== null && payload.rootChanges !== undefined) {
+    if (!isPlainObject(payload.rootChanges)) {
+      pushError(errors, 'payload.rootChanges', 'Must be an object');
+    } else {
+      const changeKeys = Object.keys(payload.rootChanges);
+      changeKeys.forEach((key) => {
+        if (key !== 'annotations') {
+          pushError(errors, `payload.rootChanges.${key}`, 'Unsupported field');
+        }
+      });
+      rootChanges = { ...payload.rootChanges };
+    }
+  }
+
+  return {
+    nodeId: normalizePatternedString(payload.nodeId, 'payload.nodeId', ENTITY_ID_PATTERN, errors),
+    targetParentId: normalizePatternedString(payload.targetParentId, 'payload.targetParentId', ENTITY_ID_PATTERN, errors),
+    insertIndex: normalizeNonNegativeInteger(payload.insertIndex, 'payload.insertIndex', errors, 0),
+    rootChanges,
+    markMovedPositionChanges: normalizeBoolean(
+      payload.markMovedPositionChanges,
+      'payload.markMovedPositionChanges',
+      errors,
+      false
+    ),
+    movedAt: normalizeOptionalTimestamp(payload.movedAt, 'payload.movedAt', errors),
   };
 }
 
@@ -280,6 +352,8 @@ function normalizePayload(type, rawPayload, errors) {
       return normalizeNodeUpdatePayload(rawPayload, errors);
     case OP_TYPES.NODE_DELETE:
       return normalizeNodeDeletePayload(rawPayload, errors);
+    case OP_TYPES.NODE_MOVE:
+      return normalizeNodeMovePayload(rawPayload, errors);
     case OP_TYPES.LINK_ADD:
       return normalizeLinkAddPayload(rawPayload, errors);
     case OP_TYPES.LINK_UPDATE:

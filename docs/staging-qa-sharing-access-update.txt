@@ -1,0 +1,121 @@
+Staging QA Testing Plan Update: Sharing, Access Requests, and Plan Gates
+
+Date: 2026-06-26
+
+Purpose
+This replaces the earlier wording that said to confirm "client share links,
+scheduled rescans, extra projects, and editor invites are blocked or
+upgrade-gated." That wording was too broad and could lead to the wrong tests.
+
+Confirmed Product Rules
+
+1. Viewer access
+- Viewer share links and viewer invites should be available on every plan.
+- Viewer access should not be upgrade-gated.
+- Viewer access should be unlimited on every plan.
+- A viewer invitee should not need an existing Vellic account before receiving
+  the invite. They should be able to sign up or log in after opening the invite
+  link.
+
+2. Commenter access
+- Commenter share links and commenter invites should be available on every plan.
+- Commenter access should not be upgrade-gated for now.
+- Commenter access should be unlimited on every plan for now.
+- A commenter invitee should not need an existing Vellic account before receiving
+  the invite. They should be able to sign up or log in after opening the invite
+  link.
+
+3. Editor access
+- Editor access should only be available on Studio and Agency accounts.
+- Free and Pro accounts should not be able to invite editors.
+- Free and Pro accounts should not create editor share links.
+- Free and Pro accounts should not receive editor access requests from outside
+  users.
+- Viewers and commenters should not see an option to request editor access from
+  Free or Pro-owned maps.
+
+4. Owner access
+- Owner invites should follow the same gate as editor access.
+- Owner invites should only be available on Studio and Agency accounts.
+- Free and Pro accounts should not be able to invite additional owners.
+
+5. Access requests
+- If "Allow access requests from outside users" is turned on, available request
+  options should match the owner's plan.
+- For Free and Pro-owned maps, outside users may request viewer/commenter access
+  only.
+- For Studio and Agency-owned maps, outside users may request viewer, commenter,
+  or editor access.
+- Owner access should not be a general outside-user request option unless the
+  product intentionally adds that later.
+
+6. Scheduled rescans
+- Scheduled rescans are not currently a user-facing feature to test.
+- Remove scheduled rescans from the current launch QA plan.
+- Remove or hide scheduled rescans from admin/plan language for now so testers
+  are not asked to find a feature that does not exist.
+
+Updated QA Checklist Wording
+
+Use this wording instead:
+
+"Confirm viewer and commenter sharing works on every plan. Confirm viewer and
+commenter invitees can sign up or log in after opening an invite link. Confirm
+editor and owner access are available only on Studio and Agency accounts, and
+are blocked or upgrade-gated on Free and Pro. Confirm Free and Pro-owned maps do
+not show editor access-request options to outside users. Skip scheduled rescans
+because that feature is not currently implemented."
+
+Plan-by-Plan Testing Notes
+
+Free account
+- Should allow viewer share links.
+- Should allow commenter share links.
+- Should allow viewer invites.
+- Should allow commenter invites.
+- Should not allow editor invites.
+- Should not allow owner invites.
+- Should not show editor as an outside access-request option.
+- Should not expose scheduled rescans.
+
+Pro account
+- Should allow viewer share links.
+- Should allow commenter share links.
+- Should allow viewer invites.
+- Should allow commenter invites.
+- Should not allow editor invites.
+- Should not allow owner invites.
+- Should not show editor as an outside access-request option.
+- Should not expose scheduled rescans.
+
+Studio account
+- Should allow viewer share links.
+- Should allow commenter share links.
+- Should allow editor share links if that is the intended active sharing method.
+- Should allow viewer invites.
+- Should allow commenter invites.
+- Should allow editor invites.
+- Should allow owner invites.
+- Should show editor as an outside access-request option when access requests
+  are enabled.
+- Should not expose scheduled rescans unless the feature is intentionally added.
+
+Agency account
+- Should allow viewer share links.
+- Should allow commenter share links.
+- Should allow editor share links if that is the intended active sharing method.
+- Should allow viewer invites.
+- Should allow commenter invites.
+- Should allow editor invites.
+- Should allow owner invites.
+- Should show editor as an outside access-request option when access requests
+  are enabled.
+- Should not expose scheduled rescans unless the feature is intentionally added.
+
+Open Product Checks
+
+- Confirm whether editor share links themselves are intended, or whether editor
+  access should only happen through named invites.
+- Confirm whether owner access should only happen through named invites.
+- Confirm where upgrade messaging should appear for Free and Pro users when they
+  try to add editors or owners.

@@ -295,6 +295,14 @@ function listLiveOpsByMapIdAfterVersionAsync(mapId, afterVersion, limit) {
   `, [mapId, afterVersion, limit]);
 }
 
+async function getMaxLiveOpVersionByMapIdAsync(mapId) {
+  const row = await adapter.queryOneAsync(
+    'SELECT MAX(version) as max_version FROM map_live_ops WHERE map_id = ?',
+    [mapId]
+  );
+  return Number(row?.max_version || row?.maxVersion || 0);
+}
+
 async function upsertObservabilityBucketAsync({
   bucketStart,
   metricType,
@@ -495,6 +503,7 @@ module.exports = {
   getLiveOpByIdAsync,
   createLiveOpAsync,
   listLiveOpsByMapIdAfterVersionAsync,
+  getMaxLiveOpVersionByMapIdAsync,
   upsertObservabilityBucketAsync,
   recordObservabilityMetricAsync,
   listObservabilityBucketsAsync,

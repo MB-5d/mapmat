@@ -92,6 +92,17 @@ async function executeAsync(sql, params = []) {
   };
 }
 
+async function closeAsync() {
+  if (pgPool) {
+    const pool = pgPool;
+    pgPool = null;
+    await pool.end();
+  }
+  if (runtime.activeProvider === 'sqlite' && db.open) {
+    db.close();
+  }
+}
+
 function transactionAsync(fn) {
   if (runtime.activeProvider === 'sqlite') {
     return async (...args) => {
@@ -141,6 +152,7 @@ module.exports = {
   queryOneAsync,
   queryAllAsync,
   executeAsync,
+  closeAsync,
   transactionAsync,
   placeholders,
 };

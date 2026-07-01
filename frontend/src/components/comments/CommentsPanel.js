@@ -1,14 +1,110 @@
-import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUpDown, ArrowUpToLine, CheckCircle2, Trash2 } from 'lucide-react';
 
+import AccountDrawer from '../drawers/AccountDrawer';
+import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
+import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
-import SelectInput from '../ui/SelectInput';
-import TextInput from '../ui/TextInput';
+import { MenuItem, MenuPanel, MenuSection } from '../ui/Menu';
+import SearchInput from '../ui/SearchInput';
 
-const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNode }) => {
+const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
+
+const BASE_COMMENT_SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'mentions', label: 'My mentions' },
+];
+
+const RESOLVED_COMMENT_SORT_OPTION = { value: 'resolved', label: 'Resolved' };
+
+const buildUserMentionKeys = (user) => {
+  const tokens = new Set();
+  const addTokens = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return;
+    tokens.add(normalized);
+    normalized
+      .split(/[^a-z0-9_]+/i)
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean)
+      .forEach((token) => tokens.add(token));
+  };
+
+  addTokens(user?.name);
+  addTokens(user?.email ? String(user.email).split('@')[0] : '');
+  addTokens(user?.username);
+  addTokens(user?.id);
+
+  return tokens;
+};
+
+const getCommentMentionTokens = (comment) => {
+  const savedMentions = Array.isArray(comment.mentions) ? comment.mentions : [];
+  const textMentions = String(comment.text || '').match(/@(\w+)/g) || [];
+  return [...savedMentions, ...textMentions.map((mention) => mention.slice(1))];
+};
+
+const isCommentAuthor = (comment, currentUser) => (
+  !!comment?.authorUserId && sameCommentId(comment.authorUserId, currentUser?.id)
+);
+
+const CommentsPanel = ({
+  isOpen,
+  root,
+  orphans,
+  currentUser,
+  selectedCommentId,
+  onClose,
+  onCommentClick,
+  onDeleteComment,
+  onToggleCompleted,
+  onNavigateToNode,
+  canResolveComments = false,
+}) => {
   const [filter, setFilter] = useState('');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'author', 'mention'
-  const [showCompleted, setShowCompleted] = useState(true);
+  const [sortMode, setSortMode] = useState('newest');
+  const [showResolved, setShowResolved] = useState(false);
+  const [openMenu, setOpenMenu] = useState(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const controlsRef = useRef(null);
+  const bodyRef = useRef(null);
+
+  const mentionKeys = useMemo(() => buildUserMentionKeys(currentUser), [currentUser]);
+
+  useEffect(() => {
+    if (!openMenu) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (controlsRef.current?.contains(event.target)) return;
+      setOpenMenu(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setOpenMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openMenu]);
+
+  useEffect(() => {
+    if (!showResolved && sortMode === 'resolved') {
+      setSortMode('newest');
+    }
+  }, [showResolved, sortMode]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowBackToTop(false);
+    }
+  }, [isOpen]);
 
   // Collect all comments from tree and orphans
   const getAllComments = () => {
@@ -49,96 +145,227 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
   };
 
   const allComments = getAllComments();
+  const isUserMentioned = (comment) => {
+    if (!mentionKeys.size) return false;
+    return getCommentMentionTokens(comment).some((mention) => (
+      mentionKeys.has(String(mention || '').trim().toLowerCase())
+    ));
+  };
+
+  const navigateToComment = (comment) => {
+    if (onCommentClick) {
+      onCommentClick(comment.nodeId, comment.id);
+      return;
+    }
+    onNavigateToNode?.(comment.nodeId);
+  };
 
   const filteredComments = allComments.filter(comment => {
-    // Filter by completed status
-    if (!showCompleted && comment.completed) return false;
-
+    if (comment.completed && !showResolved) return false;
     if (!filter) return true;
     const searchLower = filter.toLowerCase();
 
-    if (filterType === 'author') {
-      return comment.author.toLowerCase().includes(searchLower);
-    }
-    if (filterType === 'mention') {
-      return comment.mentions?.some(m => m.toLowerCase().includes(searchLower));
-    }
-    // 'all' - search text, author, and node title
     return (
       comment.text.toLowerCase().includes(searchLower) ||
       comment.author.toLowerCase().includes(searchLower) ||
       comment.nodeTitle.toLowerCase().includes(searchLower)
     );
+  }).sort((a, b) => {
+    if (sortMode === 'resolved') {
+      const resolvedDelta = Number(b.completed) - Number(a.completed);
+      if (resolvedDelta !== 0) return resolvedDelta;
+    }
+
+    if (sortMode === 'mentions') {
+      const mentionDelta = Number(isUserMentioned(b)) - Number(isUserMentioned(a));
+      if (mentionDelta !== 0) return mentionDelta;
+    }
+
+    return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
-  return (
-    <div className="comments-panel">
-      <div className="comments-panel-header">
-        <h3>All Comments</h3>
-        <IconButton className="comments-panel-close" onClick={onClose} aria-label="Close comments panel">
-          <X size={18} />
-        </IconButton>
-      </div>
+  const sortOptions = showResolved
+    ? [...BASE_COMMENT_SORT_OPTIONS, RESOLVED_COMMENT_SORT_OPTION]
+    : BASE_COMMENT_SORT_OPTIONS;
+  const sortLabel = sortOptions.find((option) => option.value === sortMode)?.label || 'Newest';
 
+  const handleBodyScroll = (event) => {
+    setShowBackToTop(event.currentTarget.scrollTop > 240);
+  };
+
+  const scrollToTop = () => {
+    bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <AccountDrawer
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Comments"
+      className="comments-drawer"
+      data-feedback-id="comments-panel"
+      data-feedback-label="Comments panel"
+    >
       <div className="comments-panel-filter">
         <div className="comments-filter-row">
-          <TextInput
-            type="text"
-            placeholder="Filter comments..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="comments-filter-input"
-          />
-          <SelectInput
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="comments-filter-select"
-          >
-            <option value="all">All</option>
-            <option value="author">By Author</option>
-            <option value="mention">By Mention</option>
-          </SelectInput>
+          <div className="comments-filter-input">
+            <SearchInput
+              size="sm"
+              inputStyle="mono"
+              placeholder="Search comments"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              onClear={() => setFilter('')}
+            />
+          </div>
+          <div className="comments-panel-controls" ref={controlsRef}>
+            <div className="comments-panel-menu-wrapper">
+              <IconButton
+                size="sm"
+                variant="ghost"
+                buttonStyle="mono"
+                onClick={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))}
+                aria-label={`Sort comments: ${sortLabel}`}
+                aria-expanded={openMenu === 'sort'}
+                aria-haspopup="menu"
+                title="Sort comments"
+              >
+                <ArrowUpDown />
+              </IconButton>
+              {openMenu === 'sort' ? (
+                <MenuPanel className="comments-panel-menu" role="menu" aria-label="Sort comments">
+                  <MenuSection>
+                    {sortOptions.map((option) => {
+                      const isActive = sortMode === option.value;
+                      return (
+                        <MenuItem
+                          key={option.value}
+                          className="comments-panel-menu-item"
+                          role="menuitemradio"
+                          aria-checked={isActive}
+                          label={option.label}
+                          onClick={() => {
+                            setSortMode(option.value);
+                            setOpenMenu(null);
+                          }}
+                          endSlot={isActive ? <span className="comments-panel-menu-dot" /> : null}
+                        />
+                      );
+                    })}
+                  </MenuSection>
+                </MenuPanel>
+              ) : null}
+            </div>
+          </div>
         </div>
-        <label className="comments-filter-toggle">
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={(e) => setShowCompleted(e.target.checked)}
-          />
-          <span>Show completed</span>
-        </label>
+        <CheckboxField
+          checked={showResolved}
+          onChange={(event) => setShowResolved(event.target.checked)}
+          label="Show resolved"
+          className="comments-panel-show-resolved"
+        />
       </div>
 
-      <div className="comments-panel-body">
+      <div className="comments-panel-body" ref={bodyRef} onScroll={handleBodyScroll}>
         {filteredComments.length > 0 ? (
           <div className="comments-panel-list">
-            {filteredComments.map(comment => (
-              <div
-                key={comment.id}
-                className="comments-panel-item"
-                onClick={() => {
-                  onNavigateToNode(comment.nodeId);
-                  onCommentClick(comment.nodeId);
-                }}
-              >
-                <div className="comments-panel-item-header">
-                  <span className="comments-panel-node-title">{comment.nodeTitle}</span>
+            {filteredComments.map(comment => {
+              const isSelected = sameCommentId(selectedCommentId, comment.id);
+              const completedTime = comment.completedAt ? formatTimeAgo(comment.completedAt) : '';
+              const canDeleteComment = onDeleteComment && isCommentAuthor(comment, currentUser);
+              return (
+                <div
+                  key={comment.id}
+                  className={`comments-panel-item${isSelected ? ' is-selected' : ''}${comment.completed ? ' is-resolved' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  onClick={() => navigateToComment(comment)}
+                  onKeyDown={(event) => {
+                    if (event.currentTarget !== event.target) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigateToComment(comment);
+                    }
+                  }}
+                >
+                  <div className="comments-panel-item-header">
+                    <span className="comments-panel-node-title">{comment.nodeTitle}</span>
+                    <div className="comments-panel-actions">
+                      {canDeleteComment ? (
+                        <IconButton
+                          size="xs"
+                          variant="ghost"
+                          className="comments-panel-delete"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDeleteComment(comment.nodeId, comment.id);
+                          }}
+                          aria-label="Delete comment"
+                        >
+                          <Trash2 />
+                        </IconButton>
+                      ) : null}
+                      {onToggleCompleted && canResolveComments ? (
+                        <IconButton
+                          size="xs"
+                          variant="ghost"
+                          className={`comments-panel-complete${comment.completed ? ' checked' : ''}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleCompleted(comment.nodeId, comment.id);
+                          }}
+                          aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
+                        >
+                          <CheckCircle2 />
+                        </IconButton>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="comments-panel-text">{comment.text}</div>
+                  <div className="comments-panel-meta-row">
+                    <div className="comments-panel-item-meta">
+                      <Avatar
+                        className="comments-panel-avatar"
+                        src={comment.authorAvatarUrl}
+                        label={comment.author || '?'}
+                        size="xs"
+                      />
+                      <span className="comments-panel-author">{comment.author}</span>
+                      <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
+                    </div>
+                    {comment.completed && comment.completedBy ? (
+                      <div className="comments-panel-completed-info">
+                        <span className="comments-panel-completed-author">{comment.completedBy}</span>
+                        {completedTime ? (
+                          <span className="comments-panel-completed-time">{completedTime}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="comments-panel-item-meta">
-                  <span className="comments-panel-author">{comment.author}</span>
-                  <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
-                </div>
-                <div className="comments-panel-text">{comment.text}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="comments-panel-empty">
             {filter ? 'No matching comments' : 'No comments yet'}
           </div>
         )}
+        {showBackToTop ? (
+          <Button
+            type="primary"
+            buttonStyle="mono"
+            size="sm"
+            className="drawer-back-to-top"
+            onClick={scrollToTop}
+            startIcon={<ArrowUpToLine />}
+          >
+            Back to top
+          </Button>
+        ) : null}
       </div>
-    </div>
+    </AccountDrawer>
   );
 };
 

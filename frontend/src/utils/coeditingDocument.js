@@ -1,3 +1,5 @@
+import { applyBranchMoveToMap } from './treeMoveUtils';
+
 class CoeditingDocumentError extends Error {
   constructor(code, message, details = null) {
     super(message);
@@ -12,29 +14,45 @@ function isPlainObject(value) {
 }
 
 function cloneDocument(document) {
-  return structuredClone(document || {});
+  return typeof structuredClone === 'function'
+    ? structuredClone(document || {})
+    : JSON.parse(JSON.stringify(document || {}));
+}
+
+function getCrosslinkRelationshipKey(connection) {
+  if (String(connection?.type || '').trim().toLowerCase() !== 'crosslink') return null;
+  const sourceNodeId = connection.sourceNodeId || connection.sourceId || null;
+  const targetNodeId = connection.targetNodeId || connection.targetId || null;
+  if (!sourceNodeId || !targetNodeId) return null;
+  return [String(sourceNodeId), String(targetNodeId)].sort().join('::');
 }
 
 function normalizeConnections(connections) {
   if (!Array.isArray(connections)) return [];
-  return connections
-    .map((connection) => {
-      if (!isPlainObject(connection)) return null;
-      const sourceNodeId = connection.sourceNodeId || connection.sourceId || null;
-      const targetNodeId = connection.targetNodeId || connection.targetId || null;
-      const id = connection.id
-        || (sourceNodeId && targetNodeId
-          ? `link-${sourceNodeId}-${targetNodeId}-${connection.type || 'connection'}`
-          : null);
-      if (!id || !sourceNodeId || !targetNodeId) return null;
-      return {
-        ...connection,
-        id,
-        sourceNodeId,
-        targetNodeId,
-      };
-    })
-    .filter(Boolean);
+  const seenCrosslinks = new Set();
+  return connections.reduce((normalized, connection) => {
+    if (!isPlainObject(connection)) return normalized;
+    const sourceNodeId = connection.sourceNodeId || connection.sourceId || null;
+    const targetNodeId = connection.targetNodeId || connection.targetId || null;
+    const id = connection.id
+      || (sourceNodeId && targetNodeId
+        ? `link-${sourceNodeId}-${targetNodeId}-${connection.type || 'connection'}`
+        : null);
+    if (!id || !sourceNodeId || !targetNodeId) return normalized;
+    const nextConnection = {
+      ...connection,
+      id,
+      sourceNodeId,
+      targetNodeId,
+    };
+    const crosslinkKey = getCrosslinkRelationshipKey(nextConnection);
+    if (crosslinkKey) {
+      if (seenCrosslinks.has(crosslinkKey)) return normalized;
+      seenCrosslinks.add(crosslinkKey);
+    }
+    normalized.push(nextConnection);
+    return normalized;
+  }, []);
 }
 
 function normalizeLiveDocument(document = {}) {
@@ -281,6 +299,33 @@ function applyNodeDelete(document, operation) {
   removeConnectionsForNodeIds(document, collectNodeIds(removedNode));
 }
 
+function applyNodeMove(document, operation) {
+  const result = applyBranchMoveToMap({
+    root: document.root,
+    orphans: document.orphans,
+    nodeId: operation.payload.nodeId,
+    targetParentId: operation.payload.targetParentId,
+    insertIndex: operation.payload.insertIndex,
+    rootChanges: operation.payload.rootChanges,
+    markMovedPositionChanges: operation.payload.markMovedPositionChanges,
+    movedAt: operation.payload.movedAt,
+  });
+
+  if (!result.ok) {
+    throw new CoeditingDocumentError(
+      'COEDITING_INVALID_NODE_MOVE',
+      result.error || 'Node move is invalid',
+      {
+        nodeId: operation.payload.nodeId,
+        targetParentId: operation.payload.targetParentId,
+      }
+    );
+  }
+
+  document.root = result.root;
+  document.orphans = result.orphans;
+}
+
 function validateLinkEndpoints(document, sourceNodeId, targetNodeId) {
   if (!sourceNodeId || !targetNodeId) {
     throw new CoeditingDocumentError(
@@ -311,12 +356,19 @@ function applyLinkAdd(document, operation) {
   }
 
   validateLinkEndpoints(document, operation.payload.sourceId, operation.payload.targetId);
-  document.connections.push({
+  const nextConnection = {
     ...(isPlainObject(operation.payload.link) ? operation.payload.link : {}),
     id: operation.payload.linkId,
     sourceNodeId: operation.payload.sourceId,
     targetNodeId: operation.payload.targetId,
-  });
+  };
+  const crosslinkKey = getCrosslinkRelationshipKey(nextConnection);
+  if (crosslinkKey && document.connections.some((connection) => (
+    getCrosslinkRelationshipKey(connection) === crosslinkKey
+  ))) {
+    return;
+  }
+  document.connections.push(nextConnection);
   document.connections = normalizeConnections(document.connections);
 }
 
@@ -434,6 +486,9 @@ export function applyOperationToDocument(document, operation) {
       break;
     case 'node.delete':
       applyNodeDelete(nextDocument, operation);
+      break;
+    case 'node.move':
+      applyNodeMove(nextDocument, operation);
       break;
     case 'link.add':
       applyLinkAdd(nextDocument, operation);

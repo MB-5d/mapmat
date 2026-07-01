@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -7,28 +7,31 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import {
-  AlertTriangle,
-  CheckCircle,
-  Info,
+  ExternalLink,
+  Check,
   Loader2,
   MessageSquare,
-  Moon,
   RefreshCw,
-  Sun,
   Trash2,
   Wifi,
   WifiOff,
-  X,
-  XCircle,
-  XOctagon,
 } from 'lucide-react';
 
 import './App.css';
 import * as api from './api';
-import LandingPage from './LandingPage';
+import createIllustrationDark from './assets/home/create-illustration-dark.png';
+import createIllustration from './assets/home/create-illustration.png';
+import modifyIllustrationDark from './assets/home/modify-illustration-dark.png';
+import modifyIllustration from './assets/home/modify-illustration.png';
+import uploadIllustrationDark from './assets/home/upload-illustration-dark.png';
+import uploadIllustration from './assets/home/upload-illustration.png';
+import MapSurfaceV2 from './components/canvas/MapSurfaceV2';
 import { DraggableNodeCard, DragOverlayTree } from './components/nodes/NodeCard';
 import CommentPopover from './components/comments/CommentPopover';
 import CommentsPanel from './components/comments/CommentsPanel';
+import FeedbackWidget from './components/feedback/FeedbackWidget';
+import InviteAcceptGate from './components/routes/InviteAcceptGate';
+import MapAccessGate from './components/routes/MapAccessGate';
 import AuthModal from './components/modals/AuthModal';
 import CreateMapModal from './components/modals/CreateMapModal';
 import DeleteConfirmModal from './components/modals/DeleteConfirmModal';
@@ -38,33 +41,81 @@ import ExportModal from './components/modals/ExportModal';
 import HistoryModal from './components/modals/HistoryModal';
 import ImageOverlay from './components/modals/ImageOverlay';
 import ImportModal from './components/modals/ImportModal';
+import AccessRequestInboxModal from './components/modals/AccessRequestInboxModal';
+import InviteInboxModal from './components/modals/InviteInboxModal';
+import WelcomeModal from './components/modals/WelcomeModal';
 import ProfileDrawer from './components/drawers/ProfileDrawer';
 import SettingsDrawer from './components/drawers/SettingsDrawer';
 import VersionHistoryDrawer from './components/drawers/VersionHistoryDrawer';
 import ProjectsModal from './components/modals/ProjectsModal';
 import PromptModal from './components/modals/PromptModal';
+import ImageReportDrawer from './components/reports/ImageReportDrawer';
 import ReportDrawer from './components/reports/ReportDrawer';
 import SaveMapModal from './components/modals/SaveMapModal';
-import SaveVersionModal from './components/modals/SaveVersionModal';
 import ShareModal from './components/modals/ShareModal';
+import ScanBar from './components/scan/ScanBar';
 import ScanProgressModal from './components/scan/ScanProgressModal';
 import VersionEditPromptModal from './components/modals/VersionEditPromptModal';
+import Button from './components/ui/Button';
+import Avatar from './components/ui/Avatar';
+import SegmentedControl from './components/ui/SegmentedControl';
+import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from './components/ui/Menu';
+import Modal from './components/ui/Modal';
+import StatusAlert from './components/ui/StatusAlert';
+import Toast from './components/ui/Toast';
+import TextInput from './components/ui/TextInput';
+import ColorKey from './components/toolbar/ColorKey';
+import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname } from './utils/url';
+import { getNodeHttpErrorLabel, isRealHttpErrorNode, isVirtualMissingNode } from './utils/scanStatus';
+import { getFindingBadgesForNode } from './utils/nodeFindingBadges';
 import {
+  APP_ONLY_MODE,
   API_BASE,
   DEFAULT_COLORS,
+  DEFAULT_CONNECTION_COLORS,
+  getDepthColor,
   ACCESS_LEVELS,
   SCAN_MESSAGES,
   REPORT_TYPE_OPTIONS,
   ANNOTATION_STATUS_OPTIONS,
   LAYOUT,
+  TESTER_NOT_READY_MESSAGE,
+  AUTHENTICATED_SCAN_ENABLED,
 } from './utils/constants';
+import {
+  findMapNameConflict,
+  getMapNameConflictMessage,
+} from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
+import classNames from './utils/classNames';
+import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './utils/scanPrefill';
+import {
+  BILLING_RETURN_EVENT_KEY,
+  isBillingFlowWindow,
+  openBillingUrlInNewTab,
+  publishBillingReturnEvent,
+} from './utils/billingRedirect';
+import {
+  getCenteredNodeTransform as getCenteredCanvasNodeTransform,
+  getFitBoundsTransform,
+} from './utils/canvasView';
+import { normalizeWorldBounds as normalizeCanvasWorldBounds } from './utils/canvasBounds';
+import {
+  getViewportSelectionRectStyle,
+  nodeIntersectsSelectionRect,
+} from './utils/canvasSelection';
+import {
+  DEFAULT_SCAN_LAYER_AVAILABILITY,
+  DEFAULT_SCAN_LAYER_VISIBILITY,
+  buildMapDisplaySummary,
+  isNodeGhostedByLayers,
+  normalizeMapDisplaySummary,
+} from './utils/mapDisplaySummary';
 import {
   buildExpandedStackMap,
-  getMaxDepth,
   countNodes,
   findNodeById,
   findParent,
@@ -73,27 +124,636 @@ import {
   checkLayoutInvariants,
 } from './utils/treeUtils';
 import {
+  buildReportStats,
   buildReportEntries,
   comparePageNumbers,
 } from './utils/reportUtils';
 import {
-  parseXmlSitemap,
-  parseRssAtom,
-  parseHtml,
-  parseCsv,
-  parseMarkdown,
-  parsePlainText,
-  buildTreeFromUrls,
+  buildExportMetadata,
+  buildSiteIndexHtml,
+  buildSiteIndexMarkdown,
+  buildTxtSitemap,
+  buildSitemapCsv,
+  buildSitemapExportRows,
+  buildSitemapJsonPayload,
+  buildSitemapXml,
+  getSitemapExportFilenameBase,
+} from './utils/fileExports';
+import {
+  parseImportFileContent,
+  stripImportedImageState,
 } from './utils/importParsers';
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
+import { useConsent } from './contexts/ConsentContext';
 import { useCoeditingLive, COEDITING_LIVE_STATUS } from './hooks/useCoeditingLive';
+import {
+  ROUTE_SURFACES,
+  MAP_ORIENTATIONS,
+  buildRouteUrl,
+  createAppHomeRoute,
+  createInviteInboxRoute,
+  createMapRoute,
+  createShareRoute,
+  normalizeMapOrientation,
+} from './utils/appRoutes';
+import {
+  getCollapsedScanMessage,
+  getRootOnlyScanFailureMessage,
+  shouldPreserveExistingMapForCollapsedScan,
+  shouldRejectFreshRootOnlyScan,
+} from './utils/scanCompletion';
+import {
+  clearAnalyticsUser,
+  identifyAnalyticsUser,
+  trackEvent,
+} from './utils/analytics';
+import {
+  buildCaptureIssueFromResult,
+  formatImageCaptureCompletionToast,
+  getReconciledCaptureProgress,
+  normalizeCaptureIssue,
+  shouldShowImageCaptureProgressToast,
+} from './utils/captureIssues';
+import {
+  countVisibleThumbnails,
+  filterVisibleLayoutConnectors,
+  filterVisibleLayoutNodes,
+  getCanvasViewportWorldBounds,
+  isDataImageUrl,
+  shouldRenderConnectionForVisibleNodes,
+} from './utils/canvasPerformance';
+import {
+  countMapNodes as countLargeMapNodes,
+  shouldUseLargeMapSurface,
+} from './utils/largeMapPerformance';
+import {
+  DEFAULT_ORPHAN_CONTAINER_ID,
+  DEFAULT_SUBDOMAIN_CONTAINER_ID,
+  applyBranchMoveToMap,
+  collectNodeIds as collectBranchNodeIds,
+  getBranchMoveBlockReason,
+} from './utils/treeMoveUtils';
+import {
+  BILLING_CYCLE_OPTIONS,
+  PAID_BILLING_PLAN_KEYS,
+  buildPlanCardsFromBillingCatalog,
+  buildPageCreditPackCards,
+  buildScreenshotCreditPackCards,
+} from './utils/billingPlans';
+import {
+  buildConnectorBezier,
+  USER_FLOW_ARROWHEAD,
+} from './utils/connectorGeometry';
+import {
+  buildExportScene,
+  drawExportSceneToPdf,
+  drawVellicLogoPdf,
+  getPngExportLimitReason,
+  getPdfSceneScale,
+  loadExportThumbnailDataUrls,
+  PNG_EXPORT_PIXEL_RATIO,
+  registerExportPdfFonts,
+  renderEditableExportSvg,
+  renderExportSceneToPngBlob,
+} from './utils/exportScene';
+import {
+  getReportDetailRows,
+  getReportFindingTypes,
+} from './utils/reportDetails';
 
-const DEFAULT_CONNECTION_COLORS = {
-  userFlows: '#14b8a6',
-  crossLinks: '#f97316',
-  brokenLinks: '#fca5a5',
+const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
+const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
+const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
+const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
+const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
+const GUEST_SCAN_PAGE_LIMIT = 25;
+const SCAN_JOB_CREATE_RETRY_DELAYS_MS = [0, 600, 1400];
+const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
+const TRIAL_PLAN_KEYS = new Set(['pro']);
+const ADD_ON_QUANTITY_MAX = 100;
+const BILLING_MODAL_TABS = {
+  PLANS: 'plans',
+  UPGRADES: 'upgrades',
 };
+const BILLING_MODAL_TAB_OPTIONS = [
+  { value: BILLING_MODAL_TABS.PLANS, label: 'Plans' },
+  { value: BILLING_MODAL_TABS.UPGRADES, label: 'Upgrades' },
+];
+const COMMENT_POPOVER_WIDTH = 384;
+const COMMENT_POPOVER_MAX_HEIGHT = 400;
+const COMMENT_POPOVER_EDGE_GAP = 8;
+const COMMENT_POPOVER_NODE_GAP = 4;
+const COMMENT_POPOVER_DRAWER_GAP = 32;
+const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
+
+function getAnchorReservationKey(nodeId, anchor) {
+  return `${nodeId || ''}:${anchor || ''}`;
+}
+
+function getLayoutConnectorEndpointAnchorReservation(nodeData, point) {
+  if (!nodeData || !point) return null;
+
+  const nodeX = Number(nodeData.x);
+  const nodeY = Number(nodeData.y);
+  const nodeW = Number(nodeData.w);
+  const nodeH = Number(nodeData.h);
+  const pointX = Number(point.x);
+  const pointY = Number(point.y);
+
+  if (![nodeX, nodeY, nodeW, nodeH, pointX, pointY].every(Number.isFinite)) return null;
+
+  const nodeRight = nodeX + nodeW;
+  const nodeBottom = nodeY + nodeH;
+  const nodeCenterX = nodeX + nodeW / 2;
+  const nodeCenterY = nodeY + nodeH / 2;
+  const withinX = pointX >= nodeX - LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+    && pointX <= nodeRight + LAYOUT_CONNECTOR_ENDPOINT_EPSILON;
+  const withinY = pointY >= nodeY - LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+    && pointY <= nodeBottom + LAYOUT_CONNECTOR_ENDPOINT_EPSILON;
+
+  if (withinX && Math.abs(pointY - nodeY) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'top', offset: pointX - nodeCenterX };
+  }
+  if (withinX && Math.abs(pointY - nodeBottom) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'bottom', offset: pointX - nodeCenterX };
+  }
+  if (withinY && Math.abs(pointX - nodeRight) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'right', offset: pointY - nodeCenterY };
+  }
+  if (withinY && Math.abs(pointX - nodeX) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'left', offset: pointY - nodeCenterY };
+  }
+
+  return null;
+}
+
+function escapeCssSelectorValue(value) {
+  const raw = String(value || '');
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(raw);
+  }
+  return raw.replace(/["\\]/g, '\\$&');
+}
+
+function formatEntitlementCount(value) {
+  if (value === null || value === undefined) return 'Unlimited';
+  return Number(value || 0).toLocaleString();
+}
+
+function toNonNegativeScanCount(value, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.floor(parsed));
+}
+
+function normalizeScanEntitlementPreview(preview = null, fallback = {}) {
+  const requestedPages = Math.max(1, toNonNegativeScanCount(
+    preview?.requestedPages
+      ?? fallback.requestedPages
+      ?? DEFAULT_SCAN_REQUESTED_PAGES
+  ));
+  const mode = preview?.mode || fallback.mode || 'account';
+  const allowedFallback = mode === 'guest'
+    ? Math.min(requestedPages, GUEST_SCAN_PAGE_LIMIT)
+    : requestedPages;
+  const allowedPages = toNonNegativeScanCount(
+    preview?.allowedPages
+      ?? fallback.allowedPages
+      ?? allowedFallback
+  );
+  const capped = preview?.capped !== undefined
+    ? Boolean(preview.capped)
+    : allowedPages < requestedPages;
+
+  return {
+    ...fallback,
+    ...(preview || {}),
+    mode,
+    planName: preview?.planName || fallback.planName || (mode === 'guest' ? 'Guest' : 'Free'),
+    requestedPages,
+    allowedPages,
+    remaining: preview?.remaining ?? fallback.remaining ?? allowedPages,
+    capped,
+    capReason: preview?.capReason || fallback.capReason || (capped ? 'account_limit' : null),
+  };
+}
+
+function hasScanEntitlementSessionMismatch({ isLoggedIn = false, preview = null, jobEntitlement = null } = {}) {
+  if (!isLoggedIn || !jobEntitlement) return false;
+  const previewMode = normalizeScanEntitlementPreview(preview).mode;
+  const jobMode = normalizeScanEntitlementPreview(jobEntitlement, preview || {}).mode;
+  return previewMode === 'account' && jobMode !== 'account';
+}
+
+function formatCurrencyMinorAmount(amount, currency = 'usd') {
+  const safeAmount = Math.max(0, Math.floor(Number(amount || 0)));
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: String(currency || 'usd').trim().toUpperCase() || 'USD',
+      minimumFractionDigits: safeAmount % 100 === 0 ? 0 : 2,
+      maximumFractionDigits: safeAmount % 100 === 0 ? 0 : 2,
+    }).format(safeAmount / 100);
+  } catch {
+    return `$${(safeAmount / 100).toLocaleString('en-US')}`;
+  }
+}
+
+function formatListParts(parts) {
+  if (parts.length <= 1) return parts[0] || '';
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+}
+
+function getBillingPurchaseMeterLabel(meter, quantity) {
+  const singular = quantity === 1;
+  if (meter === 'screenshot_credits') return singular ? 'screenshot credit' : 'screenshot credits';
+  if (meter === 'active_pages' || meter === 'crawl_pages') return singular ? 'active page' : 'active pages';
+  if (meter === 'organized_exports') return singular ? 'download' : 'downloads';
+  return singular ? 'credit' : 'credits';
+}
+
+function formatBillingUpgradeSuccessMessage(refreshResult) {
+  const summary = refreshResult?.purchaseSummary || null;
+  const meterParts = (summary?.meters || [])
+    .map((entry) => {
+      const quantity = Math.max(0, Math.floor(Number(entry?.quantity || 0)));
+      if (quantity <= 0) return '';
+      return `${formatEntitlementCount(quantity)} ${getBillingPurchaseMeterLabel(entry?.meter, quantity)}`;
+    })
+    .filter(Boolean);
+  if (meterParts.length > 0) {
+    return `Upgrade successful! ${formatListParts(meterParts)} added and ready to use.`;
+  }
+  if (summary?.plan?.name) {
+    return `Upgrade successful! ${summary.plan.name} plan applied to your account.`;
+  }
+  return 'Upgrade successful and applied to your account';
+}
+
+function normalizeAddOnQuantity(value) {
+  const parsed = Math.floor(Number(value || 1));
+  return Math.min(ADD_ON_QUANTITY_MAX, Math.max(1, Number.isFinite(parsed) ? parsed : 1));
+}
+
+function limitImportedMapToPageCount(imported, pageLimit) {
+  const safeLimit = Math.max(0, Math.floor(Number(pageLimit || 0)));
+  if (!imported?.root || safeLimit <= 0) return null;
+
+  const remaining = { value: safeLimit };
+  const keptNodeIds = new Set();
+  const cloneNode = (node) => {
+    if (!node || remaining.value <= 0) return null;
+    remaining.value -= 1;
+    if (node.id) keptNodeIds.add(node.id);
+    const nextNode = {
+      ...node,
+      children: [],
+    };
+    (node.children || []).forEach((child) => {
+      if (remaining.value <= 0) return;
+      const nextChild = cloneNode(child);
+      if (nextChild) nextNode.children.push(nextChild);
+    });
+    return nextNode;
+  };
+
+  const root = cloneNode(imported.root);
+  if (!root) return null;
+  const orphans = [];
+  (imported.orphans || []).forEach((orphan) => {
+    if (remaining.value <= 0) return;
+    const nextOrphan = cloneNode(orphan);
+    if (nextOrphan) orphans.push(nextOrphan);
+  });
+
+  const connections = (imported.connections || []).filter((connection) => (
+    keptNodeIds.has(connection?.sourceNodeId) && keptNodeIds.has(connection?.targetNodeId)
+  ));
+  const importedCount = countNodes(root) + orphans.reduce((total, orphan) => total + countNodes(orphan), 0);
+
+  return {
+    ...imported,
+    root,
+    orphans,
+    connections,
+    count: importedCount,
+    partialImport: true,
+  };
+}
+
+function normalizeBillingCycle(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['month', 'monthly'].includes(normalized)) return 'monthly';
+  if (['year', 'yearly', 'annual', 'annually'].includes(normalized)) return 'yearly';
+  return 'monthly';
+}
+
+function isEntitlementLockedNode(node) {
+  return Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
+}
+
+function cloneScanNode(node) {
+  if (!node) return node;
+  return {
+    ...node,
+    children: Array.isArray(node.children) ? node.children.map(cloneScanNode) : [],
+  };
+}
+
+function getCommentPopoverPosition({
+  nodeRect,
+  canvasRect,
+  forceSide = null,
+  popoverWidth = COMMENT_POPOVER_WIDTH,
+  edgeGap = COMMENT_POPOVER_NODE_GAP,
+}) {
+  if (!nodeRect || !canvasRect) return null;
+
+  const nodeWidth = nodeRect.width ?? (nodeRect.right - nodeRect.left);
+  const relativeLeft = nodeRect.left - canvasRect.left;
+  const relativeRight = nodeRect.right - canvasRect.left;
+  const relativeCenterX = relativeLeft + nodeWidth / 2;
+  const relativeTop = nodeRect.top - canvasRect.top;
+  const side = forceSide || (relativeCenterX <= canvasRect.width / 2 ? 'right' : 'left');
+
+  return {
+    side,
+    x: Math.round(side === 'right'
+      ? relativeRight + edgeGap
+      : relativeLeft - popoverWidth - edgeGap),
+    y: Math.round(relativeTop),
+  };
+}
+
+function getCommentPopoverDrawerPosition({
+  canvasRect,
+  drawerRect,
+  popoverWidth = COMMENT_POPOVER_WIDTH,
+  popoverHeight = COMMENT_POPOVER_MAX_HEIGHT,
+  drawerGap = COMMENT_POPOVER_DRAWER_GAP,
+  edgeGap = COMMENT_POPOVER_EDGE_GAP,
+}) {
+  if (!canvasRect || !drawerRect) return null;
+
+  const centeredTop = (canvasRect.height - popoverHeight) / 2;
+  const maxTop = Math.max(edgeGap, canvasRect.height - popoverHeight - edgeGap);
+
+  return {
+    side: 'right',
+    x: Math.round(drawerRect.left - canvasRect.left - popoverWidth - drawerGap),
+    y: Math.round(Math.min(Math.max(edgeGap, centeredTop), maxTop)),
+  };
+}
+
+function getCommentDrawerNodeFocusTarget({
+  canvasRect,
+  drawerRect,
+  popoverWidth = COMMENT_POPOVER_WIDTH,
+  popoverHeight = COMMENT_POPOVER_MAX_HEIGHT,
+  drawerGap = COMMENT_POPOVER_DRAWER_GAP,
+  nodeGap = COMMENT_POPOVER_NODE_GAP,
+}) {
+  const popoverPosition = getCommentPopoverDrawerPosition({
+    canvasRect,
+    drawerRect,
+    popoverWidth,
+    popoverHeight,
+    drawerGap,
+  });
+  if (!popoverPosition) return null;
+
+  return {
+    screenRight: Math.round(popoverPosition.x - nodeGap),
+    screenTop: popoverPosition.y,
+  };
+}
+
+function createEntitlementGhostNode({ id, url, title, parentUrl = '', subdomainRoot = false }) {
+  return {
+    id,
+    url,
+    title,
+    pageType: 'Locked',
+    description: 'Upgrade to see full map',
+    parentUrl,
+    thumbnailUrl: undefined,
+    metadataAvailable: false,
+    scanStatus: 'scan_limited',
+    isEntitlementLocked: true,
+    entitlementLocked: true,
+    subdomainRoot,
+    orphanType: subdomainRoot ? 'subdomain' : null,
+    children: [],
+  };
+}
+
+function getScanLimitGhostCounts(entitlement = null, visibleNodeCount = 0) {
+  const estimate = Math.max(0, Number(entitlement?.lockedPageEstimate || 0) || 0);
+  const allowedPages = Math.max(0, Number(entitlement?.allowedPages || entitlement?.visiblePageLimit || 0) || 0);
+  const visibleCount = Math.max(0, Number(visibleNodeCount || entitlement?.visiblePageCount || 0) || 0);
+  const visibleGap = allowedPages > 0 ? Math.max(0, allowedPages - visibleCount) : 0;
+  const lockedEstimate = Math.max(estimate, visibleGap);
+  const basis = lockedEstimate > 0 ? lockedEstimate : 4;
+  return {
+    lockedEstimate,
+    rootGhostCount: Math.min(7, Math.max(3, basis)),
+    subdomainGhostCount: Math.min(7, Math.max(3, Math.ceil(basis / 2))),
+  };
+}
+
+function getScanLimitProgressNote(prompt = null) {
+  if (!prompt?.capped) return '';
+  const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
+  const planName = prompt.planName || 'Free';
+  if (prompt.mode === 'guest') {
+    return `Guest scans can include up to ${allowed} pages. If Vellic finds more, it will show a partial map.`;
+  }
+  if (String(planName).toLowerCase() === 'free') {
+    return `Free scans can include up to ${allowed} pages. If Vellic finds more, it will show a partial map.`;
+  }
+  if (prompt.capReason === 'monthly_remaining') {
+    return `This scan can include up to ${allowed} pages from your current billing period. If Vellic finds more, it will show a partial map.`;
+  }
+  if (prompt.capReason === 'per_scan_limit') {
+    return `${planName} scans can include up to ${allowed} pages. If Vellic finds more, it will show a partial map.`;
+  }
+  return `This scan can include up to ${allowed} pages on your current plan. If Vellic finds more, it will show a partial map.`;
+}
+
+function getScanLimitPromptSubtitle(prompt = null) {
+  return '';
+}
+
+function getScanLimitPromptBody(prompt = null) {
+  if (!prompt?.capped) return '';
+  const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
+  const progressNote = getScanLimitProgressNote(prompt);
+  const actionNote = `Continue to scan up to ${allowed} pages, or upgrade before scanning a larger map.`;
+  return progressNote ? `${progressNote} ${actionNote}` : actionNote;
+}
+
+function getGuestScanPromptSubtitle() {
+  return `Continue as a guest for up to ${formatEntitlementCount(GUEST_SCAN_PAGE_LIMIT)} pages, or sign in to save the scan.`;
+}
+
+function getGuestScanPromptBody() {
+  return 'Sign up or choose Upgrade to select a plan before scanning larger maps.';
+}
+
+function deriveImportedMapNameFromFileName(fileName = '') {
+  const baseName = String(fileName || '')
+    .split(/[\\/]/)
+    .pop()
+    ?.trim() || '';
+  const withoutExtension = baseName.replace(/\.[^.]+$/, '').trim();
+  return withoutExtension || baseName || '';
+}
+
+const GUEST_SCAN_SIGNIN_CONTEXT_MESSAGE = 'Sign in to save this scan to your account. Vellic will start it after you sign in.';
+const GUEST_SCAN_SIGNUP_CONTEXT_MESSAGE = 'Create an account to choose a plan before Vellic starts this scan.';
+
+function shouldShowScanLimitPreview(entitlement = null) {
+  return Boolean(entitlement?.capped && entitlement.limitReached !== false);
+}
+
+function getVisibleScanAllowanceForEntitlements({
+  entitlements = null,
+  isLoggedIn = false,
+  requestedPages = DEFAULT_SCAN_REQUESTED_PAGES,
+} = {}) {
+  if (!isLoggedIn) {
+    return {
+      blocked: false,
+      allowedPages: Math.min(requestedPages, GUEST_SCAN_PAGE_LIMIT),
+    };
+  }
+  if (entitlements?.archived) {
+    return {
+      blocked: true,
+      allowedPages: 0,
+    };
+  }
+
+  const meter = entitlements?.meters?.crawlPages;
+  if (!meter || meter.unlimited) {
+    return {
+      blocked: false,
+      allowedPages: requestedPages,
+    };
+  }
+
+  const remaining = Math.max(0, Math.floor(Number(meter.remaining || 0)));
+  if (remaining <= 0) {
+    return {
+      blocked: true,
+      allowedPages: 0,
+    };
+  }
+
+  const perScanLimit = entitlements?.limits?.scanPagesPerRun;
+  const perScanAllowed = perScanLimit?.unlimited
+    ? requestedPages
+    : Math.max(1, Math.floor(Number(perScanLimit?.limit || requestedPages)));
+
+  return {
+    blocked: false,
+    allowedPages: Math.min(requestedPages, remaining, perScanAllowed),
+  };
+}
+
+function getVisibleScanLimitFromEntitlement(entitlement = null) {
+  return Math.max(0, Math.floor(Number(
+    entitlement?.visiblePageLimit
+      || entitlement?.allowedPages
+      || entitlement?.visiblePageCount
+      || 0,
+  )) || 0);
+}
+
+function canRescanEntitlementLimitedMap({
+  scanMeta = null,
+  entitlements = null,
+  isLoggedIn = false,
+  requestedPages = DEFAULT_SCAN_REQUESTED_PAGES,
+} = {}) {
+  const entitlement = scanMeta?.entitlement || scanMeta;
+  if (!shouldShowScanLimitPreview(entitlement)) return false;
+
+  const currentLimit = getVisibleScanLimitFromEntitlement(entitlement);
+  const nextAllowance = getVisibleScanAllowanceForEntitlements({
+    entitlements,
+    isLoggedIn,
+    requestedPages,
+  });
+
+  return !nextAllowance.blocked && nextAllowance.allowedPages > currentLimit;
+}
+
+function addScanLimitGhosts(rootNode, orphanNodes = [], entitlement = null) {
+  if (!rootNode || !shouldShowScanLimitPreview(entitlement)) return { root: rootNode, orphans: orphanNodes };
+  const visibleNodes = collectAllNodesWithOrphans(rootNode, orphanNodes);
+  if (visibleNodes.some(isEntitlementLockedNode)) {
+    return { root: rootNode, orphans: orphanNodes };
+  }
+
+  const root = cloneScanNode(rootNode);
+  const orphans = (orphanNodes || []).map(cloneScanNode);
+  let origin = 'https://locked.vellic.local';
+  let hostname = 'locked.vellic.local';
+  try {
+    const parsed = new URL(root.url || '');
+    origin = parsed.origin;
+    hostname = parsed.hostname.replace(/^www\./i, '');
+  } catch {
+    // Use fallback preview URLs for imported or malformed roots.
+  }
+
+  const { rootGhostCount, subdomainGhostCount } = getScanLimitGhostCounts(entitlement, visibleNodes.length);
+
+  root.children = [
+    ...(root.children || []),
+    ...Array.from({ length: rootGhostCount }, (_, index) => createEntitlementGhostNode({
+      id: `entitlement-ghost-root-${index + 1}`,
+      url: `${origin}/locked-preview-${index + 1}`,
+      title: 'Upgrade to see full map',
+      parentUrl: root.url || '',
+    })),
+  ];
+
+  const ghostSubdomains = Array.from({ length: subdomainGhostCount }, (_, index) => createEntitlementGhostNode({
+    id: `entitlement-ghost-subdomain-${index + 1}`,
+    url: `https://preview-${index + 1}.${hostname}/`,
+    title: 'Upgrade to see subdomains',
+    subdomainRoot: true,
+  }));
+
+  return { root, orphans: [...orphans, ...ghostSubdomains] };
+}
+
+function getEntitlementErrorCode(error) {
+  return error?.code || error?.payload?.code || null;
+}
+
+function isEntitlementError(error) {
+  const code = getEntitlementErrorCode(error);
+  return code === 'ENTITLEMENT_REQUIRED'
+    || code === 'ACCOUNT_ARCHIVED'
+    || error?.status === 402
+    || error?.status === 403;
+}
+
+function getImageCaptureJobErrorMessage(error, fallback = 'Image capture failed') {
+  const message = String(error?.message || error?.error || '').trim();
+  if (error?.code === 'IMAGE_CAPTURE_JOB_ACTIVE' || error?.payload?.code === 'IMAGE_CAPTURE_JOB_ACTIVE') {
+    return 'A previous image capture is still finishing. Wait a moment, then retry.';
+  }
+  if (/unknown job type:\s*image_capture/i.test(message)) {
+    return 'Screenshot capture did not start because staging is still updating. Refresh in a minute and retry.';
+  }
+  return message || fallback;
+}
 
 // ============================================================================
 // SITEMAP TREE COMPONENT (Deterministic Layout with Absolute Positioning)
@@ -103,6 +763,139 @@ const DEFAULT_CONNECTION_COLORS = {
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 4;
 const INTERACTIVE_MIN_SCALE = 0.1;
+const CANVAS_EDGE_PADDING_MAX = 400;
+const CANVAS_NODE_OVERSCAN_PX = 1200;
+const CANVAS_PERF_PROBE_INTERVAL_MS = 2000;
+const CANVAS_TRANSFORM_COMMIT_IDLE_MS = 120;
+const FOCUS_NODE_MAX_ATTEMPTS = 14;
+const FOCUS_NODE_RETRY_MS = 160;
+
+const getExpandedStackIds = (expandedStacks = {}) => (
+  Object.entries(expandedStacks || {})
+    .filter(([, expanded]) => !!expanded)
+    .map(([id]) => id)
+    .filter(Boolean)
+    .sort()
+);
+const getNextExpandedStackState = (expandedStacks = {}, nodeId) => {
+  const id = String(nodeId || '').trim();
+  if (!id) return expandedStacks || {};
+  return {
+    ...(expandedStacks || {}),
+    [id]: !expandedStacks?.[id],
+  };
+};
+const getMapLayoutRefreshTransformOptions = () => ({
+  skipPanClamp: true,
+});
+
+const getInitialLargeMapHomeTransform = ({
+  pending,
+  homeNode,
+  canvasWidth,
+  canvasHeight,
+  scale = 1,
+} = {}) => {
+  if (!pending || !homeNode) return null;
+  return getCenteredCanvasNodeTransform(homeNode, {
+    canvasWidth,
+    canvasHeight,
+    scale,
+  });
+};
+
+const queueNormalMapInitialCenter = ({
+  pendingInitialCenterRef,
+  pendingInitialLargeMapCenterRef,
+  scheduleResetViewRef,
+  attempts,
+} = {}) => {
+  if (!pendingInitialCenterRef) return false;
+  pendingInitialCenterRef.current = true;
+  if (pendingInitialLargeMapCenterRef) {
+    pendingInitialLargeMapCenterRef.current = false;
+  }
+  if (scheduleResetViewRef?.current) {
+    if (Number.isFinite(Number(attempts))) {
+      scheduleResetViewRef.current(Number(attempts));
+    } else {
+      scheduleResetViewRef.current();
+    }
+  }
+  return true;
+};
+
+const DUPLICATE_REVEAL_MARGIN_PX = 24;
+const getPanToRevealLayoutNode = ({
+  nodeData,
+  viewportWidth,
+  viewportHeight,
+  scale,
+  pan,
+  marginPx = DUPLICATE_REVEAL_MARGIN_PX,
+} = {}) => {
+  const safeScale = Number(scale);
+  const width = Number(viewportWidth);
+  const height = Number(viewportHeight);
+  if (!nodeData || !Number.isFinite(safeScale) || safeScale <= 0 || width <= 0 || height <= 0) {
+    return null;
+  }
+
+  const currentPan = {
+    x: Number(pan?.x || 0),
+    y: Number(pan?.y || 0),
+  };
+  const safeMargin = Math.max(0, Math.min(Number(marginPx) || 0, Math.min(width, height) / 3));
+  const minX = safeMargin;
+  const minY = safeMargin;
+  const maxX = Math.max(minX, width - safeMargin);
+  const maxY = Math.max(minY, height - safeMargin);
+  let nextX = currentPan.x;
+  let nextY = currentPan.y;
+
+  const nodeLeft = Number(nodeData.x || 0) * safeScale + currentPan.x;
+  const nodeTop = Number(nodeData.y || 0) * safeScale + currentPan.y;
+  const nodeRight = (Number(nodeData.x || 0) + Number(nodeData.w || 0)) * safeScale + currentPan.x;
+  const nodeBottom = (Number(nodeData.y || 0) + Number(nodeData.h || 0)) * safeScale + currentPan.y;
+  const nodeWidth = nodeRight - nodeLeft;
+  const nodeHeight = nodeBottom - nodeTop;
+
+  if (nodeWidth > maxX - minX) {
+    if (nodeLeft > minX) nextX += minX - nodeLeft;
+    else if (nodeRight < maxX) nextX += maxX - nodeRight;
+  } else if (nodeLeft < minX) {
+    nextX += minX - nodeLeft;
+  } else if (nodeRight > maxX) {
+    nextX -= nodeRight - maxX;
+  }
+
+  if (nodeHeight > maxY - minY) {
+    if (nodeTop > minY) nextY += minY - nodeTop;
+    else if (nodeBottom < maxY) nextY += maxY - nodeBottom;
+  } else if (nodeTop < minY) {
+    nextY += minY - nodeTop;
+  } else if (nodeBottom > maxY) {
+    nextY -= nodeBottom - maxY;
+  }
+
+  if (Math.abs(nextX - currentPan.x) < 0.5 && Math.abs(nextY - currentPan.y) < 0.5) {
+    return null;
+  }
+  return { x: nextX, y: nextY };
+};
+
+const clampCanvasPanAxis = (value, min, max) => {
+  if (min <= max) return Math.max(min, Math.min(max, value));
+  return Math.max(max, Math.min(min, value));
+};
+
+const getCanvasGridMetrics = (scaleValue) => {
+  const canvasGridScale = scaleValue || 1;
+  return {
+    size: Math.max(4, Math.round(16 * canvasGridScale)),
+    dotRadius: canvasGridScale < 0.5 ? 0.25 : (canvasGridScale > 2 ? 1 : 0.75),
+  };
+};
 
 const parseEnvBool = (value, fallback = false) => {
   if (value === undefined || value === null || value === '') return fallback;
@@ -110,6 +903,200 @@ const parseEnvBool = (value, fallback = false) => {
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   return fallback;
+};
+
+const buildAiSiteBriefMarkdown = ({ hostname, mode, rows, generatedAt }) => {
+  const mainRows = rows.filter((row) => row.section === 'main');
+  const orphanRows = rows.filter((row) => row.section === 'orphan');
+  const pageList = (list) => list.map((row) => {
+    const indent = '  '.repeat(row.depth);
+    const details = [
+      `type: ${row.pageType}`,
+      row.url ? `url: ${row.url}` : '',
+      row.description ? `description: ${row.description}` : '',
+      row.h1 ? `h1: ${row.h1}` : '',
+      row.annotationStatus && row.annotationStatus !== 'none' ? `status: ${row.annotationStatus}` : '',
+      row.annotationTags.length ? `tags: ${row.annotationTags.join(', ')}` : '',
+      row.annotationNote ? `note: ${row.annotationNote}` : '',
+    ].filter(Boolean).join('; ');
+    return `${indent}- ${row.number}. ${row.title} (${details})`;
+  }).join('\n');
+
+  return `# AI Site Brief
+
+Generated from Vellic for ${hostname}
+Generated: ${generatedAt}
+Mode: ${mode}
+
+## How to use this with other files
+- Treat this file as the site structure and information architecture brief.
+- Brand guidelines, design system files, and reference images override visual style notes here.
+- Copy docs or content matrices override placeholder copy or page descriptions here.
+- Existing code, routes, CMS fields, analytics, SEO settings, and working behavior should be preserved unless the user explicitly asks to change them.
+- If this brief conflicts with another supplied file, ask the user before choosing.
+
+## Build instruction
+Use the Vellic map to ${mode === 'Improve Existing Site' ? 'improve the existing site structure without blindly replacing the current implementation' : 'build a new site from this structure'}. Page types should guide the layout pattern for each page. Use URLs, hierarchy, SEO fields, annotations, and relationships to decide navigation, routing, redirects, and content gaps.
+
+## Recommended IA changes
+- Preserve important existing behavior unless a requested IA change requires a careful update.
+- Use moved, missing, duplicate, orphan, file, subdomain, and broken-page signals as recommendations, not automatic destructive changes.
+- For an existing site, propose redirects for renamed, moved, or removed URLs before changing routes.
+
+## Main site structure
+${pageList(mainRows) || '- No main pages found.'}
+
+## Orphan, file, subdomain, or exception pages
+${pageList(orphanRows) || '- None found.'}
+
+## Companion files
+- site-map.json contains the full structured map data.
+- sitemap.xml contains the URL list for tools that expect XML.
+- sitemap.txt contains one URL per line for tools that expect a plain text sitemap.
+- site-index.html and site-index.md contain readable nested site indexes.
+- site-map.csv contains spreadsheet-friendly page data.
+- Screenshots and thumbnails are referenced in site-map.json when available.
+`;
+};
+
+const buildAiSiteData = ({
+  root,
+  orphans,
+  connections,
+  colors,
+  connectionColors,
+  rows,
+  mode,
+  hostname,
+  generatedAt,
+  metadata,
+}) => ({
+  exportType: 'vellic-ai-site-build',
+  version: 1,
+  metadata,
+  mode,
+  hostname,
+  generatedAt,
+  instructions: {
+    sourcePriority: [
+      'Brand and design-system files override visual style notes.',
+      'Copy docs and content matrices override placeholder copy.',
+      'Reference images override visual assumptions.',
+      'Vellic map data defines structure, navigation, URLs, page relationships, page types, and IA recommendations.',
+      'Ask the user before choosing when supplied files conflict.',
+    ],
+    existingSiteSafety: 'Preserve existing design system, routes, components, CMS fields, analytics, SEO settings, and working behavior unless explicitly asked to change them.',
+  },
+  pages: rows,
+  root,
+  orphans: Array.isArray(orphans) ? orphans : [],
+  connections: Array.isArray(connections) ? connections : [],
+  colors,
+  connectionColors,
+});
+
+const zipCrcTable = Array.from({ length: 256 }, (_, index) => {
+  let c = index;
+  for (let k = 0; k < 8; k += 1) {
+    c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+  }
+  return c >>> 0;
+});
+
+const getZipCrc32 = (bytes) => {
+  let crc = 0xffffffff;
+  bytes.forEach((byte) => {
+    crc = zipCrcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  });
+  return (crc ^ 0xffffffff) >>> 0;
+};
+
+const getZipDosTimestamp = (date = new Date()) => ({
+  time: (
+    (date.getHours() << 11)
+    | (date.getMinutes() << 5)
+    | Math.floor(date.getSeconds() / 2)
+  ) & 0xffff,
+  date: (
+    ((date.getFullYear() - 1980) << 9)
+    | ((date.getMonth() + 1) << 5)
+    | date.getDate()
+  ) & 0xffff,
+});
+
+const createZipPackageBlob = (files) => {
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const centralDirectory = [];
+  let offset = 0;
+  const timestamp = getZipDosTimestamp();
+
+  const pushHeader = (values) => {
+    const bytes = new Uint8Array(values.length * 2);
+    const view = new DataView(bytes.buffer);
+    values.forEach((value, index) => view.setUint16(index * 2, value, true));
+    chunks.push(bytes);
+    offset += bytes.length;
+  };
+
+  files.forEach(({ path, content }) => {
+    const nameBytes = encoder.encode(path);
+    const dataBytes = encoder.encode(content);
+    const crc = getZipCrc32(dataBytes);
+    const localOffset = offset;
+    const commonHeader = [
+      0x0014, 0x0800, 0x0000, timestamp.time, timestamp.date,
+      crc & 0xffff, crc >>> 16,
+      dataBytes.length & 0xffff, dataBytes.length >>> 16,
+      dataBytes.length & 0xffff, dataBytes.length >>> 16,
+      nameBytes.length, 0x0000,
+    ];
+
+    pushHeader([0x4b50, 0x0403, ...commonHeader]);
+    chunks.push(nameBytes, dataBytes);
+    offset += nameBytes.length + dataBytes.length;
+
+    centralDirectory.push({
+      nameBytes,
+      commonHeader,
+      localOffset,
+    });
+  });
+
+  const centralStart = offset;
+  centralDirectory.forEach(({ nameBytes, commonHeader, localOffset }) => {
+    pushHeader([
+      0x4b50, 0x0201, 0x0014,
+      ...commonHeader,
+      0x0000, 0x0000, 0x0000,
+      0x0000, 0x0000,
+      localOffset & 0xffff, localOffset >>> 16,
+    ]);
+    chunks.push(nameBytes);
+    offset += nameBytes.length;
+  });
+
+  const centralSize = offset - centralStart;
+  pushHeader([
+    0x4b50, 0x0605, 0x0000, 0x0000,
+    files.length, files.length,
+    centralSize & 0xffff, centralSize >>> 16,
+    centralStart & 0xffff, centralStart >>> 16,
+    0x0000,
+  ]);
+
+  return new Blob(chunks, { type: 'application/zip' });
+};
+
+const downloadBlob = (filename, blob) => {
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 };
 
 const COLLABORATION_UI_ENABLED = parseEnvBool(
@@ -120,6 +1107,498 @@ const REALTIME_BASELINE_ENABLED = parseEnvBool(
   process.env.REACT_APP_REALTIME_BASELINE_ENABLED,
   false
 );
+
+const extractCommentMentions = (text) => (
+  Array.from(
+    new Set((String(text || '').match(/@(\w+)/g) || []).map((mention) => mention.slice(1)))
+  )
+);
+
+const COMMENT_MENTION_READ_STORAGE_PREFIX = 'vellic-comment-mentions';
+const LEGACY_COMMENT_MENTION_READ_STORAGE_PREFIX = 'mapmat-comment-mentions';
+const THEME_STORAGE_KEY = 'vellic-theme';
+const LEGACY_THEME_STORAGE_KEY = 'mapmat-theme';
+export const WELCOME_MODAL_STORAGE_KEY = 'vellic:welcome-modal-hidden:v1';
+const LEGACY_WELCOME_MODAL_STORAGE_KEY = 'mapmat:welcome-modal-hidden:v1';
+const FIGMA_CAPTURE_TOOLS_ENABLED = process.env.NODE_ENV !== 'production';
+const FIGMA_CAPTURE_THEME_OPTIONS = new Set(['light', 'dark']);
+
+const normalizeFigmaCaptureTheme = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return FIGMA_CAPTURE_THEME_OPTIONS.has(normalized) ? normalized : '';
+};
+
+const readInitialFigmaCaptureTheme = (route) => {
+  if (!FIGMA_CAPTURE_TOOLS_ENABLED) return '';
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  const isLocalHost = host === 'localhost'
+    || host === '127.0.0.1'
+    || host === '0.0.0.0'
+    || host === '[::1]'
+    || host === '::1';
+  if (!isLocalHost) return '';
+  return normalizeFigmaCaptureTheme(route?.searchParams?.get('figmaTheme'));
+};
+
+export const readWelcomeModalHidden = (
+  storage = typeof window !== 'undefined' ? window.localStorage : null
+) => {
+  if (!storage) return false;
+  try {
+    if (storage.getItem(WELCOME_MODAL_STORAGE_KEY) === 'true') return true;
+    if (storage.getItem(LEGACY_WELCOME_MODAL_STORAGE_KEY) === 'true') {
+      storage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
+      storage.removeItem(LEGACY_WELCOME_MODAL_STORAGE_KEY);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.warn('Failed to load welcome modal dismissal state', error);
+    return false;
+  }
+};
+
+export const writeWelcomeModalHidden = (
+  hidden,
+  storage = typeof window !== 'undefined' ? window.localStorage : null
+) => {
+  if (!storage) return;
+  try {
+    if (hidden) {
+      storage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
+      storage.removeItem(LEGACY_WELCOME_MODAL_STORAGE_KEY);
+      return;
+    }
+    storage.removeItem(WELCOME_MODAL_STORAGE_KEY);
+    storage.removeItem(LEGACY_WELCOME_MODAL_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Failed to persist welcome modal dismissal state', error);
+  }
+};
+const flattenCommentsForNode = (comments = [], nodeId, entries = []) => {
+  (comments || []).forEach((comment) => {
+    if (!comment?.id) return;
+    entries.push({ comment, nodeId });
+    if (Array.isArray(comment.replies) && comment.replies.length > 0) {
+      flattenCommentsForNode(comment.replies, nodeId, entries);
+    }
+  });
+  return entries;
+};
+
+const collectCommentEntriesFromTree = (node, entries = []) => {
+  if (!node) return entries;
+  flattenCommentsForNode(node.comments || [], node.id, entries);
+  (node.children || []).forEach((child) => collectCommentEntriesFromTree(child, entries));
+  return entries;
+};
+
+const buildUserMentionKeys = (user) => {
+  const tokens = new Set();
+  const addTokens = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return;
+    tokens.add(normalized);
+    normalized
+      .split(/[^a-z0-9_]+/i)
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean)
+      .forEach((token) => tokens.add(token));
+  };
+
+  addTokens(user?.name);
+  addTokens(user?.email ? String(user.email).split('@')[0] : '');
+  addTokens(user?.username);
+  addTokens(user?.id);
+
+  return tokens;
+};
+
+const getCommentMentionReadStorageKey = (user, mapKey) => {
+  const userKey = String(user?.id || user?.email || user?.name || 'anonymous')
+    .trim()
+    .toLowerCase();
+  const normalizedMapKey = String(mapKey || 'draft').trim().toLowerCase();
+  return `${COMMENT_MENTION_READ_STORAGE_PREFIX}:${userKey}:${normalizedMapKey}`;
+};
+
+const getLegacyCommentMentionReadStorageKey = (user, mapKey) => {
+  const userKey = String(user?.id || user?.email || user?.name || 'anonymous')
+    .trim()
+    .toLowerCase();
+  const normalizedMapKey = String(mapKey || 'draft').trim().toLowerCase();
+  return `${LEGACY_COMMENT_MENTION_READ_STORAGE_PREFIX}:${userKey}:${normalizedMapKey}`;
+};
+
+const attachCommentsToNodeTree = (node, commentsByNode) => {
+  if (!node) return node;
+  return {
+    ...node,
+    comments: Array.isArray(commentsByNode?.[node.id]) ? commentsByNode[node.id] : [],
+    children: Array.isArray(node.children)
+      ? node.children.map((child) => attachCommentsToNodeTree(child, commentsByNode))
+      : [],
+  };
+};
+
+const filterVisibleCommentThread = (comments = []) => (
+  (comments || [])
+    .filter((comment) => !comment?.completed)
+    .map((comment) => ({
+      ...comment,
+      replies: filterVisibleCommentThread(comment.replies || []),
+    }))
+);
+
+const filterVisibleCommentsByNode = (commentsByNode = {}) => (
+  Object.fromEntries(
+    Object.entries(commentsByNode || {}).map(([nodeId, comments]) => [
+      nodeId,
+      filterVisibleCommentThread(Array.isArray(comments) ? comments : []),
+    ])
+  )
+);
+
+const filterVisibleCommentsInNodeTree = (node) => {
+  if (!node) return node;
+  return {
+    ...node,
+    comments: filterVisibleCommentThread(node.comments || []),
+    children: Array.isArray(node.children)
+      ? node.children.map(filterVisibleCommentsInNodeTree)
+      : [],
+  };
+};
+
+const DEFAULT_CAPTURE_LAYERS = Object.freeze({
+  userFlows: true,
+  crossLinks: true,
+  brokenLinks: true,
+  pageNumbers: true,
+});
+
+const buildFigmaCaptureCommentsByNode = ({ focusNode, secondaryNode }) => {
+  const primaryNodeId = String(focusNode?.id || '');
+  const secondaryNodeId = String(
+    secondaryNode?.id && secondaryNode.id !== focusNode?.id
+      ? secondaryNode.id
+      : focusNode?.id || ''
+  );
+  if (!primaryNodeId) return {};
+
+  return {
+    [primaryNodeId]: [
+      {
+        id: 'figma-comment-collapsed',
+        author: 'Frank S.',
+        text: 'Keep the status chip and tag row visible even when the node title wraps to a second line so the canvas stays scannable.',
+        createdAt: '2026-06-15T20:45:00.000Z',
+        completed: false,
+        completedBy: null,
+        completedAt: null,
+        mentions: [],
+        replies: [],
+      },
+    ],
+    ...(secondaryNodeId ? {
+      [secondaryNodeId]: [
+        {
+          id: 'figma-comment-completed',
+          author: 'Matthew Braun',
+          text: 'Archive this branch after the pricing review wraps.',
+          createdAt: '2026-06-15T18:10:00.000Z',
+          completed: true,
+          completedBy: 'Frank S.',
+          completedAt: '2026-06-15T19:20:00.000Z',
+          mentions: [],
+          replies: [],
+        },
+      ],
+    } : {}),
+  };
+};
+
+const findCommentInThread = (comments, commentId) => {
+  for (const comment of comments || []) {
+    if (comment?.id === commentId) return comment;
+    const replyMatch = findCommentInThread(comment?.replies, commentId);
+    if (replyMatch) return replyMatch;
+  }
+  return null;
+};
+
+const ACTIVITY_POLL_INTERVAL_MS = 5000;
+const SHARE_STATUS_POLL_INTERVAL_MS = 2500;
+const MAX_TRACKED_ACTIVITY_IDS = 80;
+const AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS = 15000;
+const ASSET_AUTOSAVE_SUPPRESSION_MS = 2500;
+const IMAGE_CAPTURE_BATCH_SIZE = 25;
+const IMAGE_CAPTURE_SCALE_TIERS = Object.freeze({
+  small: 'small',
+  medium: 'medium',
+  large: 'large',
+});
+const IMAGE_CAPTURE_SCALE_LIMITS = Object.freeze({
+  thumbnail: Object.freeze({
+    smallMax: 250,
+    mediumMax: 2000,
+    stageSize: 500,
+  }),
+  screenshot: Object.freeze({
+    smallMax: 50,
+    mediumMax: 500,
+    stageSize: 100,
+  }),
+});
+const SCREENSHOT_ASSET_VALIDATION_BATCH_SIZE = 100;
+const THUMBNAIL_DISPLAY_RETRY_DELAY_MS = 1200;
+const THUMBNAIL_DISPLAY_MAX_VALIDATED_RETRIES = 2;
+const LARGE_MAP_THUMBNAIL_INFO_NODE_COUNT = 500;
+const SCREENSHOT_ASSET_FILENAME_PATTERN = /(?:^|\/)[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
+const CLEARABLE_NODE_ASSET_KEYS = new Set([
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+]);
+const IMAGE_CAPTURE_ASSET_FIELDS = [
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+  'fullScreenshotTruncated',
+  'authRequired',
+  'thumbnailCaptureFailed',
+  'thumbnailCaptureError',
+  'thumbnailCaptureFailedAt',
+];
+const collectImageAssetUpdatesFromNode = (node) => {
+  if (!node) return {};
+  return IMAGE_CAPTURE_ASSET_FIELDS.reduce((acc, field) => {
+    if (node[field] !== undefined) acc[field] = node[field];
+    return acc;
+  }, {});
+};
+const getCaptureAssetUrl = (nodeOrAssets, mode) => (
+  mode === 'screenshot'
+    ? nodeOrAssets?.fullScreenshotUrl
+    : nodeOrAssets?.thumbnailUrl
+);
+const getImageCaptureScaleTierForCount = (mode, count) => {
+  const limits = IMAGE_CAPTURE_SCALE_LIMITS[mode === 'screenshot' ? 'screenshot' : 'thumbnail'];
+  const total = Math.max(0, Number(count) || 0);
+  if (total <= limits.smallMax) return IMAGE_CAPTURE_SCALE_TIERS.small;
+  if (total <= limits.mediumMax) return IMAGE_CAPTURE_SCALE_TIERS.medium;
+  return IMAGE_CAPTURE_SCALE_TIERS.large;
+};
+const getImageCaptureStageTotalForCount = (mode, count) => {
+  const limits = IMAGE_CAPTURE_SCALE_LIMITS[mode === 'screenshot' ? 'screenshot' : 'thumbnail'];
+  const total = Math.max(0, Number(count) || 0);
+  if (getImageCaptureScaleTierForCount(mode, total) !== IMAGE_CAPTURE_SCALE_TIERS.large) return 1;
+  return Math.max(1, Math.ceil(total / limits.stageSize));
+};
+const getLargeMapAutoCenterKey = ({ mapId, orientation } = {}) => [
+  mapId || 'unsaved',
+  orientation || 'vertical',
+].join(':');
+const LARGE_MAP_CACHE_ASSET_FIELDS = [
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+  'fullScreenshotTruncated',
+  'authRequired',
+  'thumbnailCaptureFailed',
+  'thumbnailCaptureError',
+  'thumbnailCaptureFailedAt',
+];
+const hasLargeMapAssetValue = (value) => value !== undefined && value !== null && value !== '';
+const mergeLargeMapNodeSnapshot = (
+  existingNode,
+  incomingNode,
+  { preserveExistingAssetsOnEmpty = true } = {},
+) => {
+  if (!existingNode && !incomingNode) return null;
+  const existing = existingNode || {};
+  const incoming = incomingNode || {};
+  const next = {
+    ...existing,
+    ...incoming,
+  };
+
+  if (preserveExistingAssetsOnEmpty) {
+    LARGE_MAP_CACHE_ASSET_FIELDS.forEach((field) => {
+      if (!hasLargeMapAssetValue(incoming[field]) && hasLargeMapAssetValue(existing[field])) {
+        next[field] = existing[field];
+      }
+    });
+  }
+
+  next.hasThumbnail = Boolean(
+    next.thumbnailUrl
+      || incoming.hasThumbnail
+      || (preserveExistingAssetsOnEmpty && existing.hasThumbnail)
+  );
+  delete next.children;
+  return next;
+};
+const mergeLargeMapDocumentNodesIntoCache = (
+  cache,
+  rootNode,
+  orphanNodes = [],
+  { preserveExistingAssetsOnEmpty = true } = {},
+) => {
+  if (!(cache instanceof Map)) return false;
+  const nodes = collectAllNodesWithOrphans(rootNode, orphanNodes).filter((node) => node?.id);
+  if (!nodes.length) return false;
+
+  let changed = false;
+  nodes.forEach((node) => {
+    const id = String(node?.id || '').trim();
+    if (!id) return;
+    const existing = cache.get(id);
+    const merged = mergeLargeMapNodeSnapshot(existing, node, { preserveExistingAssetsOnEmpty });
+    if (JSON.stringify(existing || null) !== JSON.stringify(merged || null)) {
+      cache.set(id, merged);
+      changed = true;
+    }
+  });
+  return changed;
+};
+const getLargeMapStackSelectionIdsFromNode = (node, fallbackId = null) => {
+  const fallback = String(fallbackId || node?.id || '').trim();
+  const rawIds = Array.isArray(node?.stackInfo?.selectionIds) ? node.stackInfo.selectionIds : [];
+  const ids = rawIds.map((id) => String(id || '').trim()).filter(Boolean);
+  return ids.length ? Array.from(new Set(ids)) : (fallback ? [fallback] : []);
+};
+const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
+  accessPolicy: 'private',
+  nonViewerInvitesRequireOwner: true,
+  accessRequestsEnabled: true,
+  presenceIdentityMode: 'named',
+});
+
+const sameId = (left, right) => {
+  if (left === undefined || left === null || right === undefined || right === null) return false;
+  return String(left) === String(right);
+};
+
+const normalizeShareAccessForApp = (value) => (
+  Object.values(ACCESS_LEVELS).includes(value) ? value : ACCESS_LEVELS.VIEW
+);
+
+const SHARE_ACCESS_RANK = {
+  [ACCESS_LEVELS.VIEW]: 1,
+  [ACCESS_LEVELS.COMMENT]: 2,
+  [ACCESS_LEVELS.EDIT]: 3,
+};
+
+const getRequestedRoleForShareAccess = (access) => {
+  const normalized = normalizeShareAccessForApp(access);
+  if (normalized === ACCESS_LEVELS.EDIT) return 'editor';
+  if (normalized === ACCESS_LEVELS.COMMENT) return 'commenter';
+  return 'viewer';
+};
+
+const hasRequiredPermissionForShareAccess = (permissions, access) => {
+  const features = permissions?.features || {};
+  const normalized = normalizeShareAccessForApp(access);
+  if (normalized === ACCESS_LEVELS.EDIT) return !!features.mapEdit;
+  if (normalized === ACCESS_LEVELS.COMMENT) return !!features.mapComment || !!features.mapEdit;
+  return !!features.mapView || !!features.mapComment || !!features.mapEdit;
+};
+
+const trimActivityText = (value, maxLength = 72) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}...`;
+};
+
+const formatActivityActorLabel = (actor = {}, fallback = 'Collaborator') => {
+  const name = trimActivityText(actor?.name, 40);
+  if (name) return name;
+  const email = trimActivityText(actor?.email, 60);
+  if (email) return email.split('@')[0];
+  const role = trimActivityText(actor?.role, 24);
+  if (role) return role.charAt(0).toUpperCase() + role.slice(1);
+  return fallback;
+};
+
+const buildActivityToastMessage = (event) => {
+  if (!event?.summary || event.eventScope === 'content') return null;
+  return `${formatActivityActorLabel(event.actor)}: ${event.summary}`;
+};
+
+const buildLiveOperationToastMessage = (operation, participant = null) => {
+  if (!operation?.type) return null;
+  const actorLabel = trimActivityText(participant?.displayName, 40) || 'Collaborator';
+  const operationType = String(operation.type || '').trim();
+  const changes = operation.payload?.changes || {};
+  switch (operationType) {
+    case 'metadata.update': {
+      const nextName = trimActivityText(changes.name, 60);
+      return nextName
+        ? `${actorLabel} renamed the map to "${nextName}"`
+        : `${actorLabel} updated the map details`;
+    }
+    case 'node.add': {
+      const nodeTitle = trimActivityText(operation.payload?.node?.title, 60) || 'a node';
+      return `${actorLabel} added "${nodeTitle}"`;
+    }
+    case 'node.update': {
+      const title = trimActivityText(changes.title, 60);
+      return title
+        ? `${actorLabel} renamed a node to "${title}"`
+        : `${actorLabel} updated a node`;
+    }
+    case 'node.delete':
+      return `${actorLabel} deleted a node`;
+    case 'node.move':
+      return `${actorLabel} moved a branch`;
+    case 'link.add':
+      return `${actorLabel} added a link`;
+    case 'link.update':
+      return `${actorLabel} updated a link`;
+    case 'link.delete':
+      return `${actorLabel} removed a link`;
+    default:
+      return `${actorLabel} updated the map`;
+  }
+};
+
+const mergeCollaborationSettingsPatch = (currentSettings, patch = {}) => {
+  const nextSettings = {
+    ...DEFAULT_COLLABORATION_SETTINGS,
+    ...(currentSettings || {}),
+  };
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'access_policy')) {
+    nextSettings.accessPolicy = patch.access_policy;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'accessPolicy')) {
+    nextSettings.accessPolicy = patch.accessPolicy;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'non_viewer_invites_require_owner')) {
+    nextSettings.nonViewerInvitesRequireOwner = !!patch.non_viewer_invites_require_owner;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'nonViewerInvitesRequireOwner')) {
+    nextSettings.nonViewerInvitesRequireOwner = !!patch.nonViewerInvitesRequireOwner;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'access_requests_enabled')) {
+    nextSettings.accessRequestsEnabled = !!patch.access_requests_enabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'accessRequestsEnabled')) {
+    nextSettings.accessRequestsEnabled = !!patch.accessRequestsEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'presence_identity_mode')) {
+    nextSettings.presenceIdentityMode = patch.presence_identity_mode;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'presenceIdentityMode')) {
+    nextSettings.presenceIdentityMode = patch.presenceIdentityMode;
+  }
+
+  return nextSettings;
+};
+
 const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COEDITING_EXPERIMENT_ENABLED,
   false
@@ -128,15 +1607,23 @@ const PERMISSION_GATING_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_PERMISSION_GATING_ENABLED,
   false
 );
-const SCREENSHOT_JOB_PIPELINE_ENABLED = parseEnvBool(
-  process.env.REACT_APP_SCREENSHOT_JOB_PIPELINE_ENABLED,
-  false
-);
 const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
   Number.parseInt(process.env.REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC || '20', 10) || 20,
   5,
   60
 );
+const UNCATEGORIZED_PROJECT_ID = 'uncategorized';
+const SHARED_PROJECT_ID = 'shared-with-me';
+const PRESENCE_PREVIEW_LIMIT = 4;
+
+const normalizeProjectSelection = (projectId) => {
+  const normalized = String(projectId || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === UNCATEGORIZED_PROJECT_ID || normalized === SHARED_PROJECT_ID) {
+    return null;
+  }
+  return String(projectId).trim();
+};
 
 const createPresenceSessionId = () => {
   if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
@@ -145,6 +1632,340 @@ const createPresenceSessionId = () => {
   return `web-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
 };
 
+const formatPresenceAccessLabel = (accessMode) => {
+  switch (String(accessMode || '').trim().toLowerCase()) {
+    case 'edit':
+      return 'Editing';
+    case 'comment':
+      return 'Commenting';
+    default:
+      return 'Viewing';
+  }
+};
+
+const buildPresenceCollaborators = (
+  entries = [],
+  { excludeSessionId = null, excludeActorId = null } = {}
+) => {
+  const seen = new Set();
+
+  return (entries || []).reduce((collaborators, entry) => {
+    if (!entry || (excludeSessionId && entry.sessionId && entry.sessionId === excludeSessionId)) {
+      return collaborators;
+    }
+    const actorOrUserId = entry.actorId || entry.userId || null;
+    if (excludeActorId && actorOrUserId && sameId(actorOrUserId, excludeActorId)) {
+      return collaborators;
+    }
+
+    const dedupeKey = actorOrUserId
+      ? `actor:${actorOrUserId}`
+      : (entry.sessionId ? `session:${entry.sessionId}` : null);
+
+    if (!dedupeKey || seen.has(dedupeKey)) {
+      return collaborators;
+    }
+
+    seen.add(dedupeKey);
+
+    const label = trimActivityText(
+      entry.displayName || entry.userEmail || entry.clientName,
+      40,
+    ) || 'Collaborator';
+    const avatarLabel = trimActivityText(entry.avatarLabel, 4)
+      || label.slice(0, 2).toUpperCase();
+    const tone = Number.isFinite(Number(entry.tone))
+      ? Math.abs(Number(entry.tone)) % 4
+      : 0;
+
+    collaborators.push({
+      id: dedupeKey,
+      label,
+      avatarLabel,
+      avatarUrl: entry.avatarUrl || null,
+      tone,
+      accessMode: String(entry.accessMode || '').trim().toLowerCase() || 'view',
+    });
+
+    return collaborators;
+  }, []);
+};
+
+const PresenceChipList = ({ collaborators = [] }) => {
+  if (!collaborators.length) return null;
+
+  const visibleCollaborators = collaborators.slice(0, PRESENCE_PREVIEW_LIMIT);
+  const overflowCount = Math.max(0, collaborators.length - visibleCollaborators.length);
+
+  return (
+    <div
+      className="presence-chip-list"
+      role="list"
+      aria-label={`${collaborators.length} active collaborator${collaborators.length === 1 ? '' : 's'}`}
+    >
+      {visibleCollaborators.map((collaborator) => (
+        <div
+          key={collaborator.id}
+          className={`presence-chip tone-${collaborator.tone}`}
+          role="listitem"
+          title={`${collaborator.label} • ${formatPresenceAccessLabel(collaborator.accessMode)}`}
+        >
+          <Avatar
+            className="presence-chip-avatar"
+            imageClassName="presence-chip-avatar-image"
+            src={collaborator.avatarUrl}
+            label={collaborator.avatarLabel}
+            size="sm"
+            tone={collaborator.tone}
+            aria-hidden="true"
+          />
+          <span className="presence-chip-label">{collaborator.label}</span>
+        </div>
+      ))}
+      {overflowCount > 0 && (
+        <span className="presence-chip presence-chip-more" role="listitem">
+          +{overflowCount}
+        </span>
+      )}
+    </div>
+  );
+};
+
+const SAVED_SCAN_META_KEY = 'vellicScanMeta';
+const MAX_PERSISTED_DISCOVERY_MANIFEST_ENTRIES = 1000;
+
+const trimPersistedUrl = (value) => String(value || '').trim().slice(0, 2048);
+
+const normalizePersistedDiscoveryManifest = (manifest = null) => {
+  if (!manifest || typeof manifest !== 'object') return null;
+  const rawEntries = Array.isArray(manifest.entries) ? manifest.entries : [];
+  const entries = rawEntries
+    .slice(0, MAX_PERSISTED_DISCOVERY_MANIFEST_ENTRIES)
+    .map((entry, index) => ({
+      url: trimPersistedUrl(entry?.url),
+      parentUrl: trimPersistedUrl(entry?.parentUrl),
+      source: String(entry?.source || 'crawl').trim().slice(0, 80),
+      depth: Math.max(0, Math.floor(Number(entry?.depth || 0) || 0)),
+      order: Math.max(0, Math.floor(Number(entry?.order ?? index) || 0)),
+    }))
+    .filter((entry) => entry.url);
+  const hiddenPageCount = Math.max(
+    entries.length,
+    Math.floor(Number(manifest.hiddenPageCount || 0) || 0)
+  );
+  if (hiddenPageCount <= 0) return null;
+  return {
+    version: 1,
+    seedUrl: trimPersistedUrl(manifest.seedUrl),
+    capturedPageCount: Math.max(0, Math.floor(Number(manifest.capturedPageCount || 0) || 0)),
+    totalDiscoveredPageCount: Math.max(0, Math.floor(Number(manifest.totalDiscoveredPageCount || 0) || 0)),
+    hiddenPageCount,
+    storedHiddenPageCount: entries.length,
+    truncated: Boolean(manifest.truncated || entries.length < hiddenPageCount),
+    maxStoredEntries: Math.max(entries.length, Math.floor(Number(manifest.maxStoredEntries || entries.length) || 0)),
+    entries,
+  };
+};
+
+const normalizePersistedScanMeta = (scanMeta = null) => {
+  const entitlement = scanMeta?.entitlement || null;
+  if (!shouldShowScanLimitPreview(entitlement)) return null;
+  return {
+    brokenLinks: Array.isArray(scanMeta?.brokenLinks) ? scanMeta.brokenLinks : [],
+    partial: scanMeta?.partial !== false,
+    partialReason: scanMeta?.partialReason || 'entitlement_cap',
+    scanDiagnostics: scanMeta?.scanDiagnostics || null,
+    entitlement,
+    discoveryManifest: normalizePersistedDiscoveryManifest(scanMeta?.discoveryManifest),
+  };
+};
+
+const getPersistedScanMetaFromRoot = (rootNode = null) => {
+  if (!rootNode || typeof rootNode !== 'object') return null;
+  return normalizePersistedScanMeta(rootNode[SAVED_SCAN_META_KEY]);
+};
+
+const attachPersistedScanMetaToRoot = (rootNode = null, scanMeta = undefined, hasExplicitScanMeta = false) => {
+  if (!rootNode || typeof rootNode !== 'object') return rootNode;
+  const persistedScanMeta = hasExplicitScanMeta
+    ? normalizePersistedScanMeta(scanMeta)
+    : getPersistedScanMetaFromRoot(rootNode);
+  const next = { ...rootNode };
+  if (persistedScanMeta) {
+    next[SAVED_SCAN_META_KEY] = persistedScanMeta;
+  } else if (Object.prototype.hasOwnProperty.call(next, SAVED_SCAN_META_KEY)) {
+    delete next[SAVED_SCAN_META_KEY];
+  }
+  return next;
+};
+
+const hydratePersistedScanLimitMap = (rootNode = null, orphanNodes = []) => {
+  const scanMeta = getPersistedScanMetaFromRoot(rootNode);
+  if (!scanMeta) {
+    return {
+      root: rootNode,
+      orphans: Array.isArray(orphanNodes) ? orphanNodes : [],
+      scanMeta: { brokenLinks: [] },
+    };
+  }
+  const display = addScanLimitGhosts(rootNode, orphanNodes, scanMeta.entitlement);
+  return {
+    root: display.root,
+    orphans: display.orphans,
+    scanMeta,
+  };
+};
+
+const getDuplicateNodeDefaultParentId = ({ node = null, parent = null, rootNode = null } = {}) => (
+  node?.parentId || parent?.id || (rootNode?.id && rootNode.id === node?.id ? rootNode.id : ORPHAN_PARENT_ID)
+);
+
+const stripNodeForMapSave = (node) => {
+  if (!node || typeof node !== 'object') return node;
+  if (node.isEntitlementLocked || node.entitlementLocked) return null;
+  const next = { ...node };
+  delete next.internalLinks;
+  delete next._childUrls;
+  delete next._treeDepth;
+  delete next._treeSize;
+  ['thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl'].forEach((field) => {
+    if (isDataImageUrl(next[field])) {
+      delete next[field];
+    }
+  });
+  if (Array.isArray(node.children)) {
+    next.children = node.children.map(stripNodeForMapSave).filter(Boolean);
+  }
+  return next;
+};
+
+const prepareMapTreeForSave = (payload = {}) => {
+  const { root, orphans, scanMeta } = payload;
+  const hasExplicitScanMeta = Object.prototype.hasOwnProperty.call(payload, 'scanMeta');
+  const strippedRoot = root ? stripNodeForMapSave(root) : root;
+  return {
+    root: strippedRoot
+      ? attachPersistedScanMetaToRoot(strippedRoot, scanMeta, hasExplicitScanMeta)
+      : strippedRoot,
+    orphans: Array.isArray(orphans) ? orphans.map(stripNodeForMapSave).filter(Boolean) : [],
+  };
+};
+
+const buildMapSavePayload = (payload = {}) => {
+  const tree = prepareMapTreeForSave({
+    root: payload.root,
+    orphans: payload.orphans,
+    ...(Object.prototype.hasOwnProperty.call(payload, 'scanMeta') ? { scanMeta: payload.scanMeta } : {}),
+  });
+  const next = { ...payload };
+  delete next.scanMeta;
+  if (Object.prototype.hasOwnProperty.call(payload, 'root')) next.root = tree.root || null;
+  if (Object.prototype.hasOwnProperty.call(payload, 'orphans')) next.orphans = tree.orphans;
+  return next;
+};
+
+const cloneNodeTree = (tree) => (
+  typeof structuredClone === 'function'
+    ? structuredClone(tree)
+    : JSON.parse(JSON.stringify(tree))
+);
+
+const applyNodeAssetUpdates = (tree, nodeId, assetEntries) => {
+  if (!tree || !nodeId || !assetEntries?.length || !findNodeById(tree, nodeId)) {
+    return { tree, updated: false };
+  }
+  const nextTree = cloneNodeTree(tree);
+  const target = findNodeById(nextTree, nodeId);
+  if (!target) return { tree, updated: false };
+  assetEntries.forEach(([key, value]) => {
+    target[key] = value;
+  });
+  return { tree: nextTree, updated: true };
+};
+
+const applyNodeAssetUpdatesToMap = ({ root, orphans, nodeId, assetEntries }) => {
+  const rootUpdate = applyNodeAssetUpdates(root, nodeId, assetEntries);
+  let updated = rootUpdate.updated;
+  let nextOrphans = Array.isArray(orphans) ? orphans : [];
+
+  if (nextOrphans.length > 0) {
+    nextOrphans = nextOrphans.map((orphan) => {
+      const orphanUpdate = applyNodeAssetUpdates(orphan, nodeId, assetEntries);
+      if (!orphanUpdate.updated) return orphan;
+      updated = true;
+      return orphanUpdate.tree;
+    });
+  }
+
+  return {
+    root: rootUpdate.tree,
+    orphans: nextOrphans,
+    updated,
+  };
+};
+
+const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const serializeMapAutosaveSnapshot = ({
+  root,
+  orphans,
+  connections,
+  colors,
+  connectionColors,
+  scanMeta,
+} = {}) => {
+  const payload = buildMapSavePayload({ root, orphans, scanMeta });
+  return JSON.stringify({
+    root: payload.root || null,
+    orphans: Array.isArray(payload.orphans) ? payload.orphans : [],
+    connections: Array.isArray(connections) ? connections : [],
+    colors: colors || DEFAULT_COLORS,
+    connectionColors: connectionColors || DEFAULT_CONNECTION_COLORS,
+  });
+};
+
+function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
+  const projectsById = new Map();
+  const orderedProjects = (projectRows || []).map((project) => {
+    const nextProject = { ...project, maps: [] };
+    projectsById.set(project.id, nextProject);
+    return nextProject;
+  });
+
+  const sharedMaps = [];
+  const uncategorizedMaps = [];
+
+  (mapRows || []).forEach((map) => {
+    if (map?.project_id && projectsById.has(map.project_id)) {
+      projectsById.get(map.project_id).maps.push(map);
+      return;
+    }
+    if (map?.membership_role && map.membership_role !== 'owner') {
+      sharedMaps.push(map);
+      return;
+    }
+    uncategorizedMaps.push(map);
+  });
+
+  if (sharedMaps.length > 0) {
+    orderedProjects.push({
+      id: SHARED_PROJECT_ID,
+      name: 'Shared With Me',
+      maps: sharedMaps,
+      isVirtual: true,
+    });
+  }
+
+  orderedProjects.push({
+    id: UNCATEGORIZED_PROJECT_ID,
+    name: 'Uncategorized',
+    maps: uncategorizedMaps,
+    isVirtual: true,
+  });
+
+  return orderedProjects;
+}
+
 const SitemapTree = ({
   data,
   orphans = [],
@@ -152,6 +1973,10 @@ const SitemapTree = ({
   showCommentBadges,
   canEdit,
   canComment,
+  showCommentAction,
+  commentActionLabel,
+  showExternalLinkAction,
+  showDeleteAction,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -171,7 +1996,6 @@ const SitemapTree = ({
   layerVisibility,
   changeFilters,
   showPageNumbers,
-  onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
   thumbnailReloadMap,
@@ -181,7 +2005,10 @@ const SitemapTree = ({
   expandedStacks,
   onToggleStack,
   layout: layoutOverride,
+  orientation = MAP_ORIENTATIONS.VERTICAL,
+  viewportBounds = null,
   selectedNodeIds,
+  activeBranchNodeIds,
   children,
 }) => {
   const toggleStack = (nodeId) => {
@@ -194,45 +2021,46 @@ const SitemapTree = ({
     return computeLayout(data, orphans, showThumbnails, expandedStacks, {
       mode: 'after-root', // or 'after-tree'
       renderOrphanChildren: true,
+      orientation,
     });
-  }, [data, orphans, showThumbnails, expandedStacks, layoutOverride]);
+  }, [data, orphans, showThumbnails, expandedStacks, layoutOverride, orientation]);
 
   const layout = layoutOverride || computedLayout;
 
   // Run invariant checks in development
   useEffect(() => {
     if (!layout || process.env.NODE_ENV === 'production') return;
+    if (layout.orientation === MAP_ORIENTATIONS.HORIZONTAL) return;
     checkLayoutInvariants(layout.nodes, orphans, layout.connectors);
   }, [layout, orphans]);
+
+  const alwaysVisibleNodeIds = useMemo(() => {
+    const ids = new Set();
+    if (activeId) ids.add(activeId);
+    if (activeBranchNodeIds) {
+      activeBranchNodeIds.forEach((id) => ids.add(id));
+    }
+    return ids;
+  }, [activeId, activeBranchNodeIds]);
+
+  const visibleNodeData = useMemo(() => (
+    layout
+      ? filterVisibleLayoutNodes(layout.nodes, viewportBounds, { alwaysIncludeIds: alwaysVisibleNodeIds })
+      : []
+  ), [layout, viewportBounds, alwaysVisibleNodeIds]);
+
+  const visibleLayoutConnectors = useMemo(() => (
+    layout ? filterVisibleLayoutConnectors(layout.connectors, viewportBounds) : []
+  ), [layout, viewportBounds]);
 
   if (!data || !layout) return null;
 
   const statusFilters = changeFilters?.statuses || {};
 
-  const getBadgesForNode = (node, nodeMeta) => {
-    const badges = [];
-    if (node.isDuplicate) badges.push('Duplicate');
-    if (node.isMissing) badges.push('Missing');
-    const orphanType = nodeMeta?.orphanType || node.orphanType;
-    const isSubdomainTree = node.subdomainRoot || nodeMeta?.isSubdomainTree || orphanType === 'subdomain';
-    const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
-    if (isSubdomainTree && badgeVisibility?.subdomains) badges.push('Subdomain');
-    if (orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
-    if (orphanType === 'file' && badgeVisibility?.files) badges.push('File');
-    if (orphanType === 'broken' && !isOrphanRoot && badgeVisibility?.brokenLinks) badges.push('Broken Link');
-    if (orphanType === 'inactive' && badgeVisibility?.inactivePages) badges.push('Inactive');
-    if (node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
-    if (node.isBroken && !isOrphanRoot && badgeVisibility?.brokenLinks && !badges.includes('Broken Link')) {
-      badges.push('Broken Link');
-    }
-    if (node.isInactive && badgeVisibility?.inactivePages && !badges.includes('Inactive')) badges.push('Inactive');
-    if (node.authRequired && badgeVisibility?.authenticatedPages) badges.push('Auth');
-    if (node.isError && badgeVisibility?.errorPages) badges.push('Error');
-    return badges;
-  };
+  const getBadgesForNode = (node, nodeMeta) => getFindingBadgesForNode(node, nodeMeta, badgeVisibility);
 
   // Convert connector data to SVG path strings
-  const connectorPaths = layout.connectors.map(c => {
+  const connectorPaths = visibleLayoutConnectors.map(c => {
     if (c.type === 'horizontal-bus' || c.type === 'horizontal-tick') {
       return `M ${c.x1} ${c.y1} L ${c.x2} ${c.y2}`;
     }
@@ -249,22 +2077,31 @@ const SitemapTree = ({
         minWidth: layout.bounds.w,
         minHeight: layout.bounds.h,
       }}
+      data-layout-node-count={layout.nodes.size}
+      data-rendered-node-count={visibleNodeData.length}
+      data-rendered-connector-count={visibleLayoutConnectors.length}
     >
       {/* Single SVG overlay for all connectors */}
       <svg
-        className="connector-overlay"
+        className="connector-overlay connector-overlay--map"
         aria-hidden="true"
       >
         {connectorPaths.map((d, i) => (
-          <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
+          <path
+            key={i}
+            d={d}
+            fill="none"
+            stroke="var(--ui-connection-map-default)"
+            strokeWidth="var(--ui-connection-map-stroke-width)"
+          />
         ))}
       </svg>
 
       {children}
 
       {/* Render all nodes with absolute positioning */}
-      {Array.from(layout.nodes.values()).map(nodeData => {
-        const color = colors[Math.min(nodeData.depth, colors.length - 1)];
+      {visibleNodeData.map(nodeData => {
+        const color = getDepthColor(colors, nodeData.depth);
         const isRoot = nodeData.node.id === data.id;
         const badges = getBadgesForNode(nodeData.node, nodeData);
         const annotations = nodeData.node?.annotations || {};
@@ -275,7 +2112,7 @@ const SitemapTree = ({
           || (Array.isArray(annotations.tags) && annotations.tags.length > 0);
         const isDeleted = status === 'deleted';
         const markerFilteredOut = status !== 'none' && statusFilters[status] === false;
-        const isGhosted = isNodeGhosted(nodeData.node, nodeData, layerVisibility)
+        const isGhosted = isNodeGhostedByLayers(nodeData.node, nodeData, layerVisibility)
           || markerFilteredOut
           || (isDeleted && hasAnnotation);
         const stackInfo = nodeData.stackInfo;
@@ -283,6 +2120,7 @@ const SitemapTree = ({
         const shouldWrapStack = !!stackInfo?.collapsed;
 
         const isSelected = selectedNodeIds?.has(nodeData.node.id);
+        const isBranchDragging = activeBranchNodeIds?.has(nodeData.node.id);
         const card = (
           <DraggableNodeCard
             node={nodeData.node}
@@ -292,6 +2130,10 @@ const SitemapTree = ({
             showCommentBadges={showCommentBadges}
             canEdit={canEdit}
             canComment={canComment}
+            showCommentAction={showCommentAction}
+            commentActionLabel={commentActionLabel}
+            showExternalLinkAction={showExternalLinkAction}
+            showDeleteAction={showDeleteAction}
             connectionTool={connectionTool}
             snapTarget={snapTarget}
             onAnchorMouseDown={onAnchorMouseDown}
@@ -302,12 +2144,11 @@ const SitemapTree = ({
             onViewImage={onViewImage}
             onAddNote={onAddNote}
             onViewNotes={onViewNotes}
-            activeId={activeId}
+            activeId={isBranchDragging ? nodeData.node.id : activeId}
             isGhosted={isGhosted}
             badges={badges}
             showPageNumbers={showPageNumbers}
             showAnnotations={!markerFilteredOut}
-            onRequestThumbnail={onRequestThumbnail}
             thumbnailRequestIds={thumbnailRequestIds}
             thumbnailSessionId={thumbnailSessionId}
             thumbnailReloadKey={thumbnailReloadMap?.[nodeData.node.id] || 0}
@@ -316,7 +2157,9 @@ const SitemapTree = ({
             onThumbnailError={onThumbnailError}
             stackInfo={stackInfo}
             onToggleStack={() => {
-              if (stackToggleParentId) toggleStack(stackToggleParentId);
+              if (stackToggleParentId !== undefined && stackToggleParentId !== null) {
+                toggleStack(stackToggleParentId);
+              }
             }}
             isSelected={isSelected}
           />
@@ -333,7 +2176,13 @@ const SitemapTree = ({
               left: nodeData.x,
               top: nodeData.y,
             }}
-            onDoubleClick={() => onNodeDoubleClick?.(nodeData.node.id)}
+            onDoubleClick={() => {
+              if (isEntitlementLockedNode(nodeData.node)) {
+                onNodeClick?.(nodeData.node);
+                return;
+              }
+              onNodeDoubleClick?.(nodeData.node.id);
+            }}
             onClick={(e) => onNodeClick?.(nodeData.node, e)}
             onContextMenu={(e) => onNodeContextMenu?.(nodeData.node.id, e)}
           >
@@ -367,12 +2216,104 @@ const collectAllNodesWithOrphans = (rootNode, orphanNodes = []) => {
   return result;
 };
 
+const mapHasThumbnailAsset = (rootNode, orphanNodes = []) => {
+  let found = false;
+  const walk = (node) => {
+    if (!node || found) return;
+    if (node.thumbnailUrl) {
+      found = true;
+      return;
+    }
+    node.children?.forEach(walk);
+  };
+  if (rootNode) walk(rootNode);
+  (Array.isArray(orphanNodes) ? orphanNodes : []).forEach(walk);
+  return found;
+};
+
+const isStoredScreenshotAsset = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  if (raw.startsWith('/screenshots/') || raw.includes('/screenshots/')) return true;
+  const withoutQuery = raw.split(/[?#]/)[0];
+  if (SCREENSHOT_ASSET_FILENAME_PATTERN.test(withoutQuery)) return true;
+  try {
+    const parsed = new URL(raw);
+    return parsed.pathname.includes('/screenshots/')
+      || SCREENSHOT_ASSET_FILENAME_PATTERN.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+};
+
+const getImageCaptureStats = ({
+  rootNode,
+  orphanNodes = [],
+  assetKey,
+  invalidAssetIds = new Set(),
+  isUnavailable = () => false,
+}) => {
+  if (!rootNode) {
+    return {
+      total: 0,
+      captured: 0,
+      unavailable: 0,
+      remaining: 0,
+      hasPartial: false,
+      allCaptured: false,
+    };
+  }
+  const nodes = collectAllNodesWithOrphans(rootNode, orphanNodes).filter((node) => node?.url);
+  const hasCapturedAsset = (node) => (
+    isStoredScreenshotAsset(node?.[assetKey])
+    && !invalidAssetIds.has(node?.id)
+  );
+  const captured = nodes.filter(hasCapturedAsset).length;
+  const unavailable = nodes.filter(
+    (node) => !hasCapturedAsset(node) && isUnavailable(node)
+  ).length;
+  const remaining = Math.max(0, nodes.length - captured - unavailable);
+  return {
+    total: nodes.length,
+    captured,
+    unavailable,
+    remaining,
+    hasPartial: captured > 0 && remaining > 0,
+    allCaptured: nodes.length > 0 && remaining === 0,
+  };
+};
+
+const collectNodeAndDescendantIds = (node, result = []) => {
+  if (!node?.id) return result;
+  result.push(node.id);
+  node.children?.forEach((child) => collectNodeAndDescendantIds(child, result));
+  return result;
+};
+
 const hasAssignedUrl = (node) => typeof node?.url === 'string' && node.url.trim() !== '';
-const ORPHAN_CONTAINER_ID = '__orphans__';
-const SUBDOMAIN_CONTAINER_ID = '__subdomains__';
+const ORPHAN_CONTAINER_ID = DEFAULT_ORPHAN_CONTAINER_ID;
+const SUBDOMAIN_CONTAINER_ID = DEFAULT_SUBDOMAIN_CONTAINER_ID;
 const HOME_PARENT_ID = '__home__';
 const ORPHAN_PARENT_ID = '__orphan_root__';
 const SUBDOMAIN_PARENT_ID = '__subdomain_root__';
+const PAGE_TYPE_HOME = 'Home';
+const PAGE_TYPE_PAGE = 'Page';
+const getLargeMapEditParentId = (node) => {
+  if (!node) return '';
+  if (node.parentId) return node.parentId;
+  if (!node.isOrphan && !node.orphanType) return '';
+  return node.subdomainRoot || node.orphanType === 'subdomain'
+    ? SUBDOMAIN_PARENT_ID
+    : ORPHAN_PARENT_ID;
+};
+const buildLargeMapEditModalNode = (node, { detailsVersion = '' } = {}) => {
+  if (!node) return null;
+  return {
+    ...node,
+    parentId: getLargeMapEditParentId(node),
+    ...(detailsVersion ? { __detailsVersion: detailsVersion } : {}),
+  };
+};
 
 // Build a unified index for root + orphan + subdomain trees
 const buildForestIndex = (rootNode, orphanNodes = []) => {
@@ -381,45 +2322,96 @@ const buildForestIndex = (rootNode, orphanNodes = []) => {
     trees: new Map(), // treeRootId -> { type, hasUrl, nodeIds }
   };
 
-  const registerTree = (treeRoot, treeType) => {
+  const registerTree = (treeRoot, treeType, treeIndex = 0) => {
     if (!treeRoot?.id) return;
     const treeRootId = treeRoot.id;
     const nodeIds = new Set();
-    const stack = [{ node: treeRoot, parentId: null }];
+    let visitOrder = 0;
+    const stack = [{
+      node: treeRoot,
+      parentId: null,
+      depth: 0,
+      siblingIndex: 0,
+      orderPath: '00000',
+    }];
 
     while (stack.length > 0) {
-      const { node, parentId } = stack.pop();
+      const { node, parentId, depth, siblingIndex, orderPath } = stack.pop();
       if (!node?.id) continue;
       nodeIds.add(node.id);
       index.nodes.set(node.id, {
         treeRootId,
         treeType,
+        treeIndex,
         parentId,
+        depth,
+        siblingIndex,
+        order: visitOrder,
+        orderPath,
         hasUrl: hasAssignedUrl(node),
       });
+      visitOrder += 1;
 
       const children = node.children || [];
       for (let i = children.length - 1; i >= 0; i -= 1) {
-        stack.push({ node: children[i], parentId: node.id });
+        stack.push({
+          node: children[i],
+          parentId: node.id,
+          depth: depth + 1,
+          siblingIndex: i,
+          orderPath: `${orderPath}.${String(i).padStart(5, '0')}`,
+        });
       }
     }
 
     index.trees.set(treeRootId, {
       type: treeType,
+      treeIndex,
       hasUrl: hasAssignedUrl(treeRoot),
       nodeIds,
     });
   };
 
-  if (rootNode) registerTree(rootNode, 'root');
+  if (rootNode) registerTree(rootNode, 'root', 0);
   const list = Array.isArray(orphanNodes) ? orphanNodes : [];
-  list.forEach((orphan) => {
+  list.forEach((orphan, index) => {
     const treeType = orphan?.subdomainRoot ? 'subdomain' : 'orphan';
-    registerTree(orphan, treeType);
+    registerTree(orphan, treeType, index + 1);
   });
 
   return index;
 };
+
+function getDisplayScanLayerAvailability(rootNode, orphanNodes = []) {
+  const nodesForCounts = collectAllNodesWithOrphans(rootNode, orphanNodes)
+    .filter((node) => !isEntitlementLockedNode(node));
+  const forestIndex = buildForestIndex(rootNode, orphanNodes);
+  const realOrphans = (orphanNodes || []).filter((orphan) => !isEntitlementLockedNode(orphan));
+  const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
+
+  return {
+    placementPrimary: nodesForCounts.some((node) => forestIndex.nodes.get(node.id)?.treeType === 'root'),
+    placementSubdomain: realOrphans.some((orphan) => !!orphan.subdomainRoot),
+    placementOrphan: realOrphans.some((orphan) => !orphan.subdomainRoot),
+    typePages: false,
+    typeFiles: false,
+    statusMissing: nodesForCounts.some((node) => isVirtualMissingNode(node)),
+    statusBroken: nodesForCounts.some((node) => {
+      const meta = forestIndex.nodes.get(node.id);
+      if (isTopLevelOrphanRootMeta(meta)) return false;
+      return !!node.isBroken || node.orphanType === 'broken';
+    }),
+    statusError: nodesForCounts.some((node) => isRealHttpErrorNode(node)),
+    statusInactive: nodesForCounts.some((node) => (
+      node.scanStatus !== 'scan_limited'
+      && !isRealHttpErrorNode(node)
+      && !node.authRequired
+      && (!!node.isInactive || node.orphanType === 'inactive')
+    )),
+    statusAuth: nodesForCounts.filter((node) => !node.isBlocked && !node.isChallengePage && !!node.authRequired).length > 0,
+    statusDuplicate: nodesForCounts.filter((node) => node.isDuplicate).length > 0,
+  };
+}
 
 const makeNodeIdFromUrl = (url) => `url_${url.replace(/[^a-z0-9]/gi, '_')}`;
 
@@ -447,6 +2439,19 @@ const buildUrlNodeMap = (rootNode, orphanNodes = []) => {
   return map;
 };
 
+const removeNodeFromTreeById = (tree, nodeId) => {
+  if (!tree?.children?.length) return null;
+  const idx = tree.children.findIndex((child) => child.id === nodeId);
+  if (idx !== -1) {
+    return tree.children.splice(idx, 1)[0];
+  }
+  for (const child of tree.children) {
+    const removed = removeNodeFromTreeById(child, nodeId);
+    if (removed) return removed;
+  }
+  return null;
+};
+
 const normalizeUrlForCompare = (raw) => {
   try {
     const u = new URL(raw);
@@ -465,63 +2470,73 @@ const normalizeUrlForCompare = (raw) => {
   }
 };
 
+const normalizeScanHost = (hostname) => String(hostname || '').replace(/^www\./i, '').toLowerCase();
+
+const isLocalOrIpHost = (hostname) => {
+  const host = normalizeScanHost(hostname).replace(/^\[|\]$/g, '');
+  return host === 'localhost'
+    || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
+    || host.includes(':');
+};
+
+const getRootDomain = (hostname) => {
+  const host = normalizeScanHost(hostname);
+  if (!host || isLocalOrIpHost(host)) return host;
+  const parts = host.split('.').filter(Boolean);
+  if (parts.length <= 2) return host;
+  const secondLevel = parts[parts.length - 2] || '';
+  if (secondLevel.length <= 3 && parts.length > 2) {
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+};
+
+const buildScanScope = (rootNode, scanResult = {}) => {
+  try {
+    const seed = scanResult.scanScope?.seed || rootNode?.url;
+    const parsed = new URL(seed);
+    const baseHost = normalizeScanHost(scanResult.scanScope?.baseHost || parsed.hostname);
+    const rootDomain = scanResult.scanScope?.rootDomain || getRootDomain(baseHost);
+    return {
+      baseHost,
+      rootDomain,
+      allowSubdomains: Boolean(scanResult.scanScope?.allowSubdomains),
+      exactOnly: Boolean(scanResult.scanScope?.exactOnly) || isLocalOrIpHost(baseHost),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const isUrlInScanScope = (url, scanScope) => {
+  if (!scanScope || !url) return true;
+  try {
+    const host = normalizeScanHost(new URL(url).hostname);
+    if (host === scanScope.baseHost) return true;
+    return Boolean(
+      scanScope.allowSubdomains
+        && !scanScope.exactOnly
+        && getRootDomain(host) === scanScope.rootDomain
+    );
+  } catch {
+    return false;
+  }
+};
+
 const buildRootUrlSet = (rootNode) => {
   const set = new Set();
+  const addUrl = (url) => {
+    if (url) set.add(normalizeUrlForCompare(url));
+  };
   const walk = (node) => {
     if (!node?.url) return;
-    set.add(normalizeUrlForCompare(node.url));
+    addUrl(node.url);
+    addUrl(node.finalUrl);
+    addUrl(node.canonicalUrl);
     node.children?.forEach(walk);
   };
   walk(rootNode);
   return set;
-};
-
-const isTopLevelOrphanRoot = (nodeMeta) => {
-  if (!nodeMeta) return false;
-  if (nodeMeta.depth !== 0) return false;
-  return Boolean(nodeMeta.orphanType && nodeMeta.orphanType !== 'subdomain');
-};
-
-const getNodePlacement = (nodeMeta) => {
-  if (!nodeMeta) return 'primary';
-  if (nodeMeta.isSubdomainTree || nodeMeta.orphanType === 'subdomain') return 'subdomain';
-  if (nodeMeta.orphanType && nodeMeta.orphanType !== 'subdomain') return 'orphan';
-  return 'primary';
-};
-
-const getNodeType = (node, nodeMeta) => {
-  if (node?.isFile || nodeMeta?.orphanType === 'file') return 'file';
-  return 'page';
-};
-
-const getNodeStatusFlags = (node, nodeMeta) => {
-  const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
-  return {
-    broken: !isOrphanRoot && (node?.isBroken || nodeMeta?.orphanType === 'broken'),
-    error: Boolean(node?.isError),
-    inactive: Boolean(node?.isInactive || nodeMeta?.orphanType === 'inactive'),
-    auth: Boolean(node?.authRequired),
-    duplicate: Boolean(node?.isDuplicate),
-  };
-};
-
-const isNodeGhosted = (node, nodeMeta, visibility) => {
-  if (!visibility) return false;
-  const placement = getNodePlacement(nodeMeta);
-  const type = getNodeType(node, nodeMeta);
-  const status = getNodeStatusFlags(node, nodeMeta);
-
-  if (placement === 'primary' && !visibility.placementPrimary) return true;
-  if (placement === 'subdomain' && !visibility.placementSubdomain) return true;
-  if (placement === 'orphan' && !visibility.placementOrphan) return true;
-  if (type === 'page' && !visibility.typePages) return true;
-  if (type === 'file' && !visibility.typeFiles) return true;
-  if (status.broken && !visibility.statusBroken) return true;
-  if (status.error && !visibility.statusError) return true;
-  if (status.inactive && !visibility.statusInactive) return true;
-  if (status.auth && !visibility.statusAuth) return true;
-  if (status.duplicate && !visibility.statusDuplicate) return true;
-  return false;
 };
 
 const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
@@ -529,6 +2544,8 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     ...orphan,
     orphanType: orphan.orphanType || 'orphan',
   }));
+  const scanScope = buildScanScope(rootNode, scanResult);
+  const isArtifactInScope = (url) => isUrlInScanScope(url, scanScope);
   const rootUrlSet = buildRootUrlSet(rootNode);
   const urlNodeMap = buildUrlNodeMap(rootNode, mergedOrphans);
   const normalizedUrlNodeMap = new Map();
@@ -552,7 +2569,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     if (!node?.url) return null;
     if (urlNodeMap.has(node.url)) {
       const existing = urlNodeMap.get(node.url);
-      if (!rootUrlSet.has(node.url)) {
+      if (!rootUrlSet.has(normalizeUrlForCompare(node.url))) {
         if (orphanType === 'subdomain') existing.subdomainRoot = true;
         if (orphanType && !existing.orphanType) existing.orphanType = orphanType;
         if (existing.isMissing && !node.isMissing) {
@@ -562,7 +2579,30 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             referrerUrl: node.referrerUrl || existing.referrerUrl,
             authRequired: node.authRequired ?? existing.authRequired,
             thumbnailUrl: node.thumbnailUrl || existing.thumbnailUrl,
+            thumbnailFullUrl: node.thumbnailFullUrl || existing.thumbnailFullUrl,
+            fullScreenshotUrl: node.fullScreenshotUrl || existing.fullScreenshotUrl,
+            thumbnailCaptureFailed: node.thumbnailCaptureFailed ?? existing.thumbnailCaptureFailed,
+            thumbnailCaptureError: node.thumbnailCaptureError || existing.thumbnailCaptureError,
+            thumbnailCaptureFailedAt: node.thumbnailCaptureFailedAt || existing.thumbnailCaptureFailedAt,
+            description: node.description || existing.description,
+            metaTags: node.metaTags || existing.metaTags,
+            canonicalUrl: node.canonicalUrl || existing.canonicalUrl,
+            seoMetadata: node.seoMetadata || existing.seoMetadata,
+            titleSource: node.titleSource || existing.titleSource,
+            blockedReason: node.blockedReason || existing.blockedReason,
+            httpStatus: node.httpStatus ?? existing.httpStatus,
+            statusCode: node.statusCode ?? existing.statusCode,
+            errorStatus: node.errorStatus ?? existing.errorStatus,
+            httpErrorType: node.httpErrorType || existing.httpErrorType,
+            httpErrorLabel: node.httpErrorLabel || existing.httpErrorLabel,
+            isViewableError: node.isViewableError ?? existing.isViewableError,
+            isError: node.isError ?? existing.isError,
+            isChallengePage: false,
+            isBlocked: false,
+            scanStatus: node.scanStatus || existing.scanStatus,
+            metadataAvailable: node.metadataAvailable ?? existing.metadataAvailable,
             isMissing: false,
+            isVirtualMissing: false,
           });
         }
         if (node.children?.length) {
@@ -584,26 +2624,47 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     return normalized;
   };
 
+  indexNodeUrls(rootNode);
+  mergedOrphans.forEach(indexNodeUrls);
+
   (scanResult.subdomains || []).forEach((node) => {
+    if (!isArtifactInScope(node?.url)) return;
     addOrphanNode({ ...node, subdomainRoot: true }, 'subdomain');
   });
 
   (scanResult.files || []).forEach((file) => {
     if (!file?.url) return;
+    if (!isArtifactInScope(file.url)) return;
     const existing = urlNodeMap.get(file.url);
     if (existing) {
       existing.isFile = true;
+      existing.contentType = file.contentType || existing.contentType || null;
+      existing.fileType = file.fileType || existing.fileType || null;
+      existing.extension = file.extension || existing.extension || null;
+      existing.isInactive = false;
+      existing.isError = false;
+      existing.errorStatus = null;
+      existing.httpErrorType = null;
+      existing.httpErrorLabel = null;
+      existing.isViewableError = false;
+      existing.isMissing = false;
+      existing.isVirtualMissing = false;
+      if (existing.scanStatus === 'inactive') existing.scanStatus = null;
+      if (existing.orphanType === 'inactive') existing.orphanType = 'file';
       return;
     }
 
-          const newNode = {
-            id: makeNodeIdFromUrl(file.url),
-            url: file.url,
-            title: getUrlLabel(file.url),
-            children: [],
-            isFile: true,
-            parentUrl: file.sourceUrl || null,
-          };
+    const newNode = {
+      id: makeNodeIdFromUrl(file.url),
+      url: file.url,
+      title: getUrlLabel(file.url),
+      children: [],
+      isFile: true,
+      contentType: file.contentType || null,
+      fileType: file.fileType || null,
+      extension: file.extension || null,
+      parentUrl: file.sourceUrl || null,
+    };
     if (file.sourceUrl && urlNodeMap.has(file.sourceUrl)) {
       const parent = urlNodeMap.get(file.sourceUrl);
       parent.children = parent.children || [];
@@ -617,15 +2678,31 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
 
   (scanResult.errors || []).forEach((error) => {
     if (!error?.url) return;
-    const node = urlNodeMap.get(error.url);
+    if (!isArtifactInScope(error.url)) return;
+    let node = urlNodeMap.get(error.url);
+    if (!node) {
+      node = normalizedUrlNodeMap.get(normalizeUrlForCompare(error.url));
+    }
     if (!node) return;
+    if (node.isFile || node.orphanType === 'file') return;
+    if (node.scanStatus === 'scan_limited') return;
     node.isError = true;
     node.errorStatus = error.status;
+    node.httpStatus = node.httpStatus ?? error.status ?? null;
+    node.statusCode = node.statusCode ?? error.status ?? null;
+    node.httpErrorType = error.httpErrorType || node.httpErrorType || null;
+    node.httpErrorLabel = error.httpErrorLabel || node.httpErrorLabel || getNodeHttpErrorLabel(node) || null;
+    node.isViewableError = Boolean(error.isViewableError || node.isViewableError);
+    node.blockedReason = error.blockedReason || node.blockedReason || null;
+    node.scanStatus = 'error';
+    node.isMissing = false;
+    node.isVirtualMissing = false;
     if (error.authRequired) node.authRequired = true;
   });
 
   (scanResult.brokenLinks || []).forEach((link) => {
     if (!link?.url) return;
+    if (!isArtifactInScope(link.url)) return;
     let existing = urlNodeMap.get(link.url);
     if (!existing) {
       const normalized = normalizeUrlForCompare(link.url);
@@ -637,9 +2714,17 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
 
   (scanResult.inactivePages || []).forEach((inactive) => {
     if (!inactive?.url) return;
+    if (!isArtifactInScope(inactive.url)) return;
+    const inactiveStatus = Number(inactive.status || 0);
+    if (inactiveStatus >= 400) return;
     const existing = urlNodeMap.get(inactive.url);
     if (existing) {
+      if (existing.scanStatus === 'scan_limited' || isRealHttpErrorNode(existing) || existing.authRequired) return;
+      if (existing.isFile || existing.orphanType === 'file') return;
       existing.isInactive = true;
+      existing.scanStatus = 'inactive';
+      existing.isMissing = false;
+      existing.isVirtualMissing = false;
       return;
     }
     addOrphanNode({
@@ -648,10 +2733,11 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
       title: getUrlLabel(inactive.url),
       children: [],
       isInactive: true,
+      isVirtualMissing: false,
     }, 'inactive');
   });
 
-  // Seed normalized map for existing nodes in case we missed any
+  // Refresh normalized map with any artifact nodes added above.
   indexNodeUrls(rootNode);
   mergedOrphans.forEach(indexNodeUrls);
 
@@ -675,54 +2761,356 @@ const normalizeOrphans = (list) => (list || [])
     orphanType: orphan.orphanType || 'orphan',
   }));
 
-export default function App() {
+const normalizeScanConfig = ({ url, options }) => ({
+  url: normalizeUrlForCompare(url || ''),
+  options: Object.keys(options || {})
+    .sort()
+    .reduce((acc, key) => {
+      acc[key] = Boolean(options[key]);
+      return acc;
+    }, {}),
+});
+
+const scanConfigsHaveOptionChanges = (nextConfig, previousConfig) => {
+  if (!nextConfig || !previousConfig) return false;
+  const keys = new Set([
+    ...Object.keys(nextConfig.options || {}),
+    ...Object.keys(previousConfig.options || {}),
+  ]);
+  return Array.from(keys).some((key) => Boolean(nextConfig.options?.[key]) !== Boolean(previousConfig.options?.[key]));
+};
+
+const collectNodesDeep = (rootNode, orphanNodes = []) => {
+  const result = [];
+  const walk = (node) => {
+    if (!node) return;
+    result.push(node);
+    (node.children || []).forEach(walk);
+  };
+  walk(rootNode);
+  (orphanNodes || []).forEach(walk);
+  return result;
+};
+
+const getShareRefreshVersionKey = (share = {}) => {
+  const mapId = share?.mapId || '';
+  const updatedAt = share?.mapUpdatedAt || share?.updatedAt || '';
+  const createdAt = share?.shareCreatedAt || share?.createdAt || '';
+  if (!mapId && !updatedAt && !createdAt) return '';
+  return [mapId, updatedAt, createdAt].join(':');
+};
+
+const LIVE_RESTORE_NODE_SKIP_FIELDS = new Set([
+  'id',
+  'children',
+  'parentId',
+  'afterNodeId',
+  'subdomainRoot',
+  'orphanType',
+  'comments',
+]);
+
+const normalizeUndoSnapshot = (snapshot = {}) => {
+  if (snapshot?.root !== undefined) {
+    return {
+      root: snapshot.root,
+      orphans: Array.isArray(snapshot.orphans) ? snapshot.orphans : [],
+      connections: Array.isArray(snapshot.connections) ? snapshot.connections : [],
+      colors: Array.isArray(snapshot.colors) ? snapshot.colors : DEFAULT_COLORS,
+      connectionColors: snapshot.connectionColors || DEFAULT_CONNECTION_COLORS,
+    };
+  }
+
+  return {
+    root: snapshot || null,
+    orphans: [],
+    connections: [],
+    colors: DEFAULT_COLORS,
+    connectionColors: DEFAULT_CONNECTION_COLORS,
+  };
+};
+
+const indexNodesById = (rootNode, orphanNodes = []) => {
+  const nodesById = new Map();
+  collectNodesDeep(rootNode, orphanNodes).forEach((node) => {
+    if (node?.id) nodesById.set(node.id, node);
+  });
+  return nodesById;
+};
+
+const valuesAreEqual = (left, right) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+
+const buildLiveRestoreDrafts = ({ currentState, targetState } = {}) => {
+  const current = normalizeUndoSnapshot(currentState);
+  const target = normalizeUndoSnapshot(targetState);
+  const drafts = [];
+  const currentNodes = indexNodesById(current.root, current.orphans);
+  const targetNodes = indexNodesById(target.root, target.orphans);
+
+  if (currentNodes.size !== targetNodes.size) {
+    return {
+      ok: false,
+      reason: 'Undo for live add/delete/move changes is not supported yet.',
+      drafts: [],
+    };
+  }
+
+  for (const nodeId of currentNodes.keys()) {
+    if (!targetNodes.has(nodeId)) {
+      return {
+        ok: false,
+        reason: 'Undo for live add/delete/move changes is not supported yet.',
+        drafts: [],
+      };
+    }
+  }
+
+  targetNodes.forEach((targetNode, nodeId) => {
+    const currentNode = currentNodes.get(nodeId);
+    const changes = {};
+    Object.keys(targetNode || {}).forEach((field) => {
+      if (LIVE_RESTORE_NODE_SKIP_FIELDS.has(field)) return;
+      if (!valuesAreEqual(currentNode?.[field], targetNode?.[field])) {
+        changes[field] = targetNode[field];
+      }
+    });
+    if (Object.keys(changes).length > 0) {
+      drafts.push({
+        type: 'node.update',
+        payload: { nodeId, changes },
+      });
+    }
+  });
+
+  const currentConnections = new Map((current.connections || []).map((connection) => [connection.id, connection]));
+  const targetConnections = new Map((target.connections || []).map((connection) => [connection.id, connection]));
+  currentConnections.forEach((connection, connectionId) => {
+    if (!targetConnections.has(connectionId)) {
+      drafts.push({
+        type: 'link.delete',
+        payload: { linkId: connectionId },
+      });
+    }
+  });
+  targetConnections.forEach((targetConnection, connectionId) => {
+    const currentConnection = currentConnections.get(connectionId);
+    if (!currentConnection) {
+      drafts.push({
+        type: 'link.add',
+        payload: {
+          linkId: targetConnection.id,
+          sourceId: targetConnection.sourceNodeId,
+          targetId: targetConnection.targetNodeId,
+          link: targetConnection,
+        },
+      });
+      return;
+    }
+    if (!valuesAreEqual(currentConnection, targetConnection)) {
+      drafts.push({
+        type: 'link.update',
+        payload: {
+          linkId: connectionId,
+          changes: targetConnection,
+        },
+      });
+    }
+  });
+
+  const metadataChanges = {};
+  if (!valuesAreEqual(current.colors, target.colors)) {
+    metadataChanges.colors = target.colors;
+  }
+  if (!valuesAreEqual(current.connectionColors, target.connectionColors)) {
+    metadataChanges.connectionColors = target.connectionColors;
+  }
+  if (Object.keys(metadataChanges).length > 0) {
+    drafts.push({
+      type: 'metadata.update',
+      payload: { changes: metadataChanges },
+    });
+  }
+
+  return { ok: true, drafts };
+};
+
+const nodeKey = (node) => {
+  if (!node) return '';
+  if (node.url) return `url:${normalizeUrlForCompare(node.url)}`;
+  return node.id ? `id:${node.id}` : '';
+};
+
+const hasUserPreservedNodeState = (node, manualNodeIds = new Set()) => {
+  if (!node) return false;
+  const annotations = node.annotations || {};
+  return manualNodeIds.has(node.id)
+    || Boolean(node.comments?.length)
+    || Boolean(annotations.status && annotations.status !== 'none')
+    || Boolean(String(annotations.note || '').trim())
+    || Boolean(annotations.tags?.length)
+    || Boolean(node.thumbnailUrl || node.thumbnailFullUrl || node.fullScreenshotUrl)
+    || Boolean(node.thumbnailCaptureFailed);
+};
+
+const mergeRescanResults = ({
+  existingRoot,
+  existingOrphans,
+  nextRoot,
+  nextOrphans,
+  manualConnections = [],
+}) => {
+  const existingByKey = new Map();
+  collectNodesDeep(existingRoot, existingOrphans).forEach((node) => {
+    const key = nodeKey(node);
+    if (key && !existingByKey.has(key)) existingByKey.set(key, node);
+    if (node?.id && !existingByKey.has(`id:${node.id}`)) existingByKey.set(`id:${node.id}`, node);
+  });
+
+  const hydratedKeys = new Set();
+  const preserveFields = [
+    'id',
+    'title',
+    'pageType',
+    'annotations',
+    'comments',
+    'thumbnailUrl',
+    'thumbnailFullUrl',
+    'fullScreenshotUrl',
+    'thumbnailCaptureFailed',
+    'thumbnailCaptureError',
+    'thumbnailCaptureFailedAt',
+    'description',
+    'metaTags',
+    'canonicalUrl',
+    'seoMetadata',
+  ];
+
+  const hydrateNode = (node) => {
+    if (!node) return node;
+    const key = nodeKey(node);
+    const existing = existingByKey.get(key) || existingByKey.get(`id:${node.id}`);
+    const next = {
+      ...node,
+      children: (node.children || []).map(hydrateNode),
+    };
+    if (existing) {
+      if (key) hydratedKeys.add(key);
+      if (existing.id) hydratedKeys.add(`id:${existing.id}`);
+      preserveFields.forEach((field) => {
+        const value = existing[field];
+        if (value !== undefined && value !== null && value !== '') {
+          next[field] = value;
+        }
+      });
+    }
+    return next;
+  };
+
+  const manualNodeIds = new Set();
+  manualConnections.forEach((connection) => {
+    if (connection?.sourceNodeId) manualNodeIds.add(connection.sourceNodeId);
+    if (connection?.targetNodeId) manualNodeIds.add(connection.targetNodeId);
+  });
+
+  const nextRootHydrated = hydrateNode(nextRoot);
+  const nextOrphansHydrated = (nextOrphans || []).map(hydrateNode);
+  const nextKeys = new Set(collectNodesDeep(nextRootHydrated, nextOrphansHydrated).map(nodeKey).filter(Boolean));
+  const preservedMissing = collectNodesDeep(existingRoot, existingOrphans)
+    .filter((node) => {
+      const key = nodeKey(node);
+      if (!key || hydratedKeys.has(key) || nextKeys.has(key)) return false;
+      return hasUserPreservedNodeState(node, manualNodeIds);
+    })
+    .map((node) => ({
+      ...node,
+      children: [],
+      orphanType: node.orphanType || 'orphan',
+    }));
+
+  return {
+    root: nextRootHydrated,
+    orphans: normalizeOrphans([...nextOrphansHydrated, ...preservedMissing]),
+  };
+};
+
+export const __testing = {
+  normalizeScanConfig,
+  normalizeScanEntitlementPreview,
+  hasScanEntitlementSessionMismatch,
+  scanConfigsHaveOptionChanges,
+  addScanLimitGhosts,
+  getScanLimitGhostCounts,
+  getScanLimitProgressNote,
+  getScanLimitPromptSubtitle,
+  getScanLimitPromptBody,
+  getGuestScanPromptSubtitle,
+  getGuestScanPromptBody,
+  limitImportedMapToPageCount,
+  shouldShowScanLimitPreview,
+  canRescanEntitlementLimitedMap,
+  getVisibleScanAllowanceForEntitlements,
+  getDisplayScanLayerAvailability,
+  applyScanArtifacts,
+  mergeRescanResults,
+  buildMapSavePayload,
+  serializeMapAutosaveSnapshot,
+  getPersistedScanMetaFromRoot,
+  hydratePersistedScanLimitMap,
+  getShareRefreshVersionKey,
+  normalizeUndoSnapshot,
+  buildLiveRestoreDrafts,
+  getDuplicateNodeDefaultParentId,
+  applyNodeAssetUpdatesToMap,
+  isStoredScreenshotAsset,
+  getImageCaptureStats,
+  getLargeMapAutoCenterKey,
+  getNextExpandedStackState,
+  getMapLayoutRefreshTransformOptions,
+  getInitialLargeMapHomeTransform,
+  queueNormalMapInitialCenter,
+  mergeLargeMapNodeSnapshot,
+  mergeLargeMapDocumentNodesIntoCache,
+  getLargeMapStackSelectionIdsFromNode,
+  getLargeMapEditParentId,
+  buildLargeMapEditModalNode,
+  getPanToRevealLayoutNode,
+  normalizeCanvasWorldBounds,
+  getCommentPopoverPosition,
+  getCommentPopoverDrawerPosition,
+  getCommentDrawerNodeFocusTarget,
+  formatBillingUpgradeSuccessMessage,
+};
+
+export default function App({ currentRoute, navigateToRoute }) {
+  const { consent, openSettings: openPrivacySettings } = useConsent();
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [thumbnailScopeIds, setThumbnailScopeIds] = useState(null);
   const [scanOptions, setScanOptions] = useState({
-    inactivePages: false,
+    inactivePages: true,
     subdomains: false,
     authenticatedPages: false,
     orphanPages: false,
-    errorPages: false,
+    errorPages: true,
     brokenLinks: false,
-    duplicates: false,
+    duplicates: true,
     files: false,
     crosslinks: false,
   });
   const [showScanOptions, setShowScanOptions] = useState(false);
-  const [scanDepth, setScanDepth] = useState('4');
+  const [lastCompletedScanConfig, setLastCompletedScanConfig] = useState(null);
   const [scanMeta, setScanMeta] = useState({
     brokenLinks: [],
   });
-  const [scanLayerAvailability, setScanLayerAvailability] = useState({
-    placementPrimary: false,
-    placementSubdomain: false,
-    placementOrphan: false,
-    typePages: false,
-    typeFiles: false,
-    statusBroken: false,
-    statusError: false,
-    statusInactive: false,
-    statusAuth: false,
-    statusDuplicate: false,
-  });
-  const [scanLayerVisibility, setScanLayerVisibility] = useState({
-    placementPrimary: true,
-    placementSubdomain: true,
-    placementOrphan: true,
-    typePages: true,
-    typeFiles: true,
-    statusBroken: true,
-    statusError: true,
-    statusInactive: true,
-    statusAuth: true,
-    statusDuplicate: true,
-  });
+  const scanMetaRef = useRef(scanMeta);
+  const [scanLayerAvailability, setScanLayerAvailability] = useState({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
+  const [scanLayerVisibility, setScanLayerVisibility] = useState({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
   const [mapName, setMapName] = useState('');
   const [isEditingMapName, setIsEditingMapName] = useState(false);
   const [root, setRoot] = useState(null);
   const [orphans, setOrphans] = useState([]); // Pages with no parent (numbered 0.x)
+  const rootRef = useRef(root);
+  const orphansRef = useRef(orphans);
   const [customPageTypes, setCustomPageTypes] = useState([]); // User-added page types
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -731,8 +3119,15 @@ export default function App() {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const disableCanvasCulling = false;
   const scaleRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
+  const transformCommitRef = useRef({ raf: null, timer: null });
+  const canvasPerformanceRef = useRef({
+    fullImageRequests: 0,
+    longTasks: 0,
+    longTaskMs: 0,
+  });
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [connectionColors, setConnectionColors] = useState(DEFAULT_CONNECTION_COLORS);
   const [showColorKey, setShowColorKey] = useState(false);
@@ -747,29 +3142,37 @@ export default function App() {
   const [isImportedMap, setIsImportedMap] = useState(false); // Whether current map is from import
   const [accessLevel, setAccessLevel] = useState(ACCESS_LEVELS.EDIT); // Permission level
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showCollaborationModal, setShowCollaborationModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showCreateMapModal, setShowCreateMapModal] = useState(false);
   const [showSaveMapModal, setShowSaveMapModal] = useState(false);
+  const [isSavingMap, setIsSavingMap] = useState(false);
   const [showVersionHistoryDrawer, setShowVersionHistoryDrawer] = useState(false);
-  const [showSaveVersionModal, setShowSaveVersionModal] = useState(false);
+  const [welcomeModalDismissedForSession, setWelcomeModalDismissedForSession] = useState(false);
+  const [welcomeModalHidden, setWelcomeModalHidden] = useState(() => readWelcomeModalHidden());
+  const [welcomeDontShowAgain, setWelcomeDontShowAgain] = useState(false);
   const [mapVersions, setMapVersions] = useState([]);
+  const [mapActivity, setMapActivity] = useState([]);
   const [draftVersions, setDraftVersions] = useState([]);
   const [draftLatestVersionId, setDraftLatestVersionId] = useState(null);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [latestVersionId, setLatestVersionId] = useState(null);
   const [showVersionEditPrompt, setShowVersionEditPrompt] = useState(false);
-  const [saveVersionMeta, setSaveVersionMeta] = useState({ number: 1, timestamp: '' });
   const [duplicateMapConfig, setDuplicateMapConfig] = useState(null);
   const [pendingLoadMap, setPendingLoadMap] = useState(null);
   const [createMapMode, setCreateMapMode] = useState(false);
+  const [createMapDefaults, setCreateMapDefaults] = useState(null);
   const [pendingMapCreation, setPendingMapCreation] = useState(null);
-  const [pendingCreateAfterSave, setPendingCreateAfterSave] = useState(false);
+  const [pendingCreateAfterSave, setPendingCreateAfterSave] = useState(null);
   const [pendingLogoutAfterSave, setPendingLogoutAfterSave] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState({});
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editingProjectName, setEditingProjectName] = useState('');
+  const [editingMapId, setEditingMapId] = useState(null);
+  const [editingMapName, setEditingMapName] = useState('');
   const [shareEmails, setShareEmails] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [sharePermission, setSharePermission] = useState(ACCESS_LEVELS.VIEW); // Permission for shared link
@@ -778,48 +3181,215 @@ export default function App() {
   const [collaborationError, setCollaborationError] = useState('');
   const [collaborationMemberships, setCollaborationMemberships] = useState([]);
   const [collaborationInvites, setCollaborationInvites] = useState([]);
+  const [collaborationSettings, setCollaborationSettings] = useState(null);
+  const [collaborationAccessRequests, setCollaborationAccessRequests] = useState([]);
   const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
   const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
+  const [showInviteInboxModal, setShowInviteInboxModal] = useState(false);
+  const [showAccessRequestsInboxModal, setShowAccessRequestsInboxModal] = useState(false);
+  const [pendingMapInvites, setPendingMapInvites] = useState([]);
+  const [pendingMapInvitesLoading, setPendingMapInvitesLoading] = useState(false);
+  const [pendingMapInvitesError, setPendingMapInvitesError] = useState('');
+  const [pendingAccessRequests, setPendingAccessRequests] = useState([]);
+  const [pendingAccessRequestsLoading, setPendingAccessRequestsLoading] = useState(false);
+  const [pendingAccessRequestsError, setPendingAccessRequestsError] = useState('');
+  const [routeMapGateState, setRouteMapGateState] = useState(null);
+  const [routeAccessRequestMessage, setRouteAccessRequestMessage] = useState('');
+  const [inviteAcceptState, setInviteAcceptState] = useState(null);
   const [presenceSessions, setPresenceSessions] = useState([]);
   const [mapPermissions, setMapPermissions] = useState(null);
   const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return !!params.get('share');
+    return currentRoute?.surface === ROUTE_SURFACES.SHARE;
   });
   const [currentShareAccess, setCurrentShareAccess] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    const access = params.get('access');
+    const access = currentRoute?.surface === ROUTE_SURFACES.SHARE ? currentRoute?.accessLevel : null;
     return Object.values(ACCESS_LEVELS).includes(access) ? access : null;
   });
+  useEffect(() => {
+    const prefillUrl = getValidScanPrefillUrl(currentRoute);
+    if (!prefillUrl) return;
+    const prefillOptions = getValidScanPrefillOptions(currentRoute);
+    const prefillKey = `${currentRoute?.pathname || ''}|${prefillUrl}|${JSON.stringify(prefillOptions)}`;
+    if (scanPrefillAppliedRef.current === prefillKey) return;
+    scanPrefillAppliedRef.current = prefillKey;
+    setUrlInput((current) => current.trim() ? current : prefillUrl);
+    if (Object.keys(prefillOptions).length) {
+      setScanOptions((current) => ({ ...current, ...prefillOptions }));
+    }
+  }, [currentRoute]);
   const [scanMessage, setScanMessage] = useState('');
   const [scanElapsed, setScanElapsed] = useState(0);
-  const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
+  const [scanProgress, setScanProgress] = useState({ scanned: 0, mapped: 0, queued: 0 });
+  const [scanLimitProgressNote, setScanLimitProgressNote] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
+  const [isStoppingScan, setIsStoppingScan] = useState(false);
+  const [scanErrorMessage, setScanErrorMessage] = useState('');
   const [scanHistory, setScanHistory] = useState([]);
   const [lastHistoryId, setLastHistoryId] = useState(null);
   const [lastScanUrl, setLastScanUrl] = useState('');
+  const [autosaveCheckpointRequest, setAutosaveCheckpointRequest] = useState(null);
   const autosaveTimerRef = useRef(null);
   const lastAutosaveSnapshotRef = useRef('');
   const autosavePendingRef = useRef(null);
   const autosaveInFlightRef = useRef(false);
   const autosaveRetryTimerRef = useRef(null);
   const autosaveRetryDelayRef = useRef(1000);
+  const lastAutosaveVersionAtRef = useRef(0);
+  const autosaveCheckpointInFlightRef = useRef(new Set());
+  const lastAutosaveCheckpointKeyRef = useRef('');
+  const assetAutosaveSuppressionUntilRef = useRef(0);
   const versionBaselineRef = useRef(null);
   const lastVersionSnapshotRef = useRef('');
+  const clearLoadedMapViewRef = useRef(null);
+  const loadSavedMapByIdRef = useRef(null);
   const versionInfoToastRef = useRef(false);
+  const seenActivityIdsRef = useRef(new Set());
+  const primedActivityMapIdRef = useRef(null);
   const presenceSessionIdRef = useRef('');
   const mapNameEditStartRef = useRef('');
+  const scheduleResetViewRef = useRef(null);
+  const scheduleResetViewTokenRef = useRef(0);
+  const centerHomeRef = useRef(null);
+  const centerKnownLargeMapHomeRef = useRef(null);
+  const pendingInitialCenterRef = useRef(false);
+  const loadedShareRouteKeyRef = useRef('');
+  const loadedShareVersionKeyRef = useRef('');
+  const shareRefreshInFlightRef = useRef(false);
+  const pendingInitialLargeMapCenterRef = useRef(false);
+  const pendingUnsavedRoutePromptRef = useRef('');
+  const largeMapHomeSceneKeyRef = useRef('');
+  const largeMapHomeNodeRef = useRef(null);
+  const largeMapVisibleNodesRef = useRef([]);
+  const largeMapNodeCacheRef = useRef(new Map());
+  const largeMapEditFetchTokenRef = useRef(0);
+  const largeMapThumbnailInfoToastKeyRef = useRef('');
+  const [largeMapNodeCacheVersion, setLargeMapNodeCacheVersion] = useState(0);
+  const [largeMapSceneRefreshKey, setLargeMapSceneRefreshKey] = useState(0);
+  const [largeMapSceneBounds, setLargeMapSceneBounds] = useState(null);
+  const [largeMapDisplaySummary, setLargeMapDisplaySummary] = useState(null);
+  const [largeMapMinimapOverview, setLargeMapMinimapOverview] = useState(null);
+  const handledAuthRedirectKeyRef = useRef('');
+  const handledBillingRedirectKeyRef = useRef('');
+  const handledBillingStorageReturnKeyRef = useRef('');
+  const handledBillingWindowReturnKeyRef = useRef('');
+  const handledBillingIntentKeyRef = useRef('');
+  const handledTrialIntentKeyRef = useRef('');
+  const handledSignupIntentKeyRef = useRef('');
+  const appliedFigmaCaptureStateRef = useRef('');
+  const isLocalFigmaCaptureHost = FIGMA_CAPTURE_TOOLS_ENABLED && typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1'
+    || window.location.hostname === '0.0.0.0'
+    || window.location.hostname === '[::1]'
+    || window.location.hostname === '::1'
+  );
+  const figmaCaptureState = isLocalFigmaCaptureHost
+    ? String(currentRoute?.searchParams?.get('figmaState') || '').trim().toLowerCase()
+    : '';
+  const figmaCaptureTheme = isLocalFigmaCaptureHost
+    ? normalizeFigmaCaptureTheme(currentRoute?.searchParams?.get('figmaTheme'))
+    : '';
+  const figmaCaptureKey = isLocalFigmaCaptureHost
+    ? `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}|${figmaCaptureState}`
+    : '';
+
+  useEffect(() => {
+    largeMapNodeCacheRef.current = new Map();
+    largeMapVisibleNodesRef.current = [];
+    largeMapThumbnailInfoToastKeyRef.current = '';
+    setLargeMapSceneBounds(null);
+    setLargeMapMinimapOverview(null);
+    setLargeMapNodeCacheVersion((version) => version + 1);
+  }, [currentMap?.id]);
+
+  useEffect(() => {
+    const authSuccess = currentRoute?.searchParams?.get('auth_success') || '';
+    const authError = currentRoute?.searchParams?.get('auth_error') || '';
+    const authProvider = currentRoute?.searchParams?.get('auth_provider') || '';
+    const isGoogleAuthPopup = window.opener || window.name === 'vellic_google_auth';
+
+    if (!isGoogleAuthPopup || (!authSuccess && !authError)) return;
+
+    const payload = {
+      type: GOOGLE_AUTH_MESSAGE_TYPE,
+      success: authSuccess === 'google',
+      error: authError || null,
+      provider: authProvider || 'google',
+      redirectUrl: window.location.href,
+      timestamp: Date.now(),
+    };
+
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(payload, window.location.origin);
+    }
+
+    try {
+      window.localStorage.setItem(GOOGLE_AUTH_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage failures; postMessage above is still the primary path.
+    }
+
+    window.close();
+  }, [
+    currentRoute?.searchParams,
+  ]);
+
+  const resetAutosaveTracking = useCallback(({ snapshot = '' } = {}) => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    if (autosaveRetryTimerRef.current) {
+      clearTimeout(autosaveRetryTimerRef.current);
+      autosaveRetryTimerRef.current = null;
+    }
+    autosavePendingRef.current = null;
+    autosaveRetryDelayRef.current = 1000;
+    lastAutosaveSnapshotRef.current = snapshot;
+  }, []);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authContextMessage, setAuthContextMessage] = useState('');
+  const [authInitialView, setAuthInitialView] = useState('login');
+  const [pendingAuthPostSuccessAction, setPendingAuthPostSuccessAction] = useState(null);
+  const [guestScanPrompt, setGuestScanPrompt] = useState(null);
+  const [scanLimitPrompt, setScanLimitPrompt] = useState(null);
+  const [scanAuthPrompt, setScanAuthPrompt] = useState(null);
+  const [screenshotDownloadUpsell, setScreenshotDownloadUpsell] = useState(null);
+  const [entitlementLockModal, setEntitlementLockModal] = useState(null);
+  const [plansModal, setPlansModal] = useState(null);
+  const [billingCatalog, setBillingCatalog] = useState(null);
+  const [billingCatalogLoading, setBillingCatalogLoading] = useState(false);
+  const [billingCatalogError, setBillingCatalogError] = useState('');
+  const [billingActionKey, setBillingActionKey] = useState('');
+  const [billingCycle, setBillingCycle] = useState('monthly');
+  const [billingModalTab, setBillingModalTab] = useState(BILLING_MODAL_TABS.PLANS);
+  const [billingSelectedPlanKey, setBillingSelectedPlanKey] = useState('');
+  const [selectedAddOnKeys, setSelectedAddOnKeys] = useState({});
+  const [addOnQuantities, setAddOnQuantities] = useState({});
+  const billingRouteResult = String(currentRoute?.searchParams?.get('billing') || '');
+  const billingRouteSessionId = String(currentRoute?.searchParams?.get('billingSessionId') || '');
+  const isBillingReturnRoute = billingRouteResult === 'success'
+    || billingRouteResult === 'portal_return'
+    || billingRouteResult === 'cancelled';
+  const isBillingReturnFromBillingWindow = isBillingReturnRoute && isBillingFlowWindow();
+  const currentBillingPlan = currentUser?.entitlements?.plan || null;
+  const currentBillingPlanKey = currentBillingPlan?.key || (isLoggedIn ? 'free' : 'guest');
+  const isPrimaryBillingOwner = !currentUser?.entitlements?.account?.ownerUserId
+    || currentUser.entitlements.account.ownerUserId === currentUser?.id;
+  const screenshotCreditMeter = currentUser?.entitlements?.meters?.screenshotCredits || null;
+  const screenshotCreditsLabel = screenshotCreditMeter?.unlimited
+    ? '∞'
+    : formatEntitlementCount(Math.max(0, Number(screenshotCreditMeter?.remaining || 0)));
+  const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
-  const [, setAuthLoading] = useState(true);
-  const [showLanding, setShowLanding] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return !params.get('share');
-  });
+  const [authLoading, setAuthLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importPageLimitModal, setImportPageLimitModal] = useState(null);
+  const [blankUploadDragActive, setBlankUploadDragActive] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
@@ -830,6 +3400,45 @@ export default function App() {
 
   // Generic prompt modal
   const [promptModal, setPromptModal] = useState(null);
+
+  useEffect(() => {
+    const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
+    if (!sessionId) return undefined;
+    let active = true;
+    let lastObjectUrl = '';
+    const loadScreenshot = async () => {
+      try {
+        const blob = await api.getScanAuthScreenshot(sessionId, Date.now());
+        if (!active) return;
+        const objectUrl = URL.createObjectURL(blob);
+        if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
+        lastObjectUrl = objectUrl;
+        setScanAuthPrompt((current) => {
+          if (!current?.authBrowser || current.authBrowser.sessionId !== sessionId) return current;
+          return {
+            ...current,
+            authBrowser: {
+              ...current.authBrowser,
+              screenshotUrl: objectUrl,
+            },
+          };
+        });
+      } catch (err) {
+        if (!active) return;
+        setScanAuthPrompt((current) => current ? {
+          ...current,
+          error: err?.message || 'Failed to load the login browser.',
+        } : current);
+      }
+    };
+    loadScreenshot();
+    const interval = window.setInterval(loadScreenshot, 1500);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
+    };
+  }, [scanAuthPrompt?.authBrowser?.sessionId]);
   // Shape: { title, message, onConfirm, onCancel, placeholder, defaultValue }
 
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
@@ -837,22 +3446,39 @@ export default function App() {
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [showReportDrawer, setShowReportDrawer] = useState(false);
+  const [showImageReportDrawer, setShowImageReportDrawer] = useState(false);
+
+  useEffect(() => {
+    rootRef.current = root;
+  }, [root]);
+
+  useEffect(() => {
+    orphansRef.current = orphans;
+  }, [orphans]);
+
+  useEffect(() => {
+    scanMetaRef.current = scanMeta;
+  }, [scanMeta]);
   const [lastScanAt, setLastScanAt] = useState(null);
   const [expandedStacks, setExpandedStacks] = useState({});
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
   const [commentingNodeSnapshot, setCommentingNodeSnapshot] = useState(null);
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
+  const [commentPopoverAnchor, setCommentPopoverAnchor] = useState({ mode: 'node' });
+  const [selectedCommentId, setSelectedCommentId] = useState(null);
+  const [savedMapCommentsByNode, setSavedMapCommentsByNode] = useState({});
+  const [figmaCaptureCommentsByNode, setFigmaCaptureCommentsByNode] = useState(null);
+  const [figmaCaptureExpandedCommentIds, setFigmaCaptureExpandedCommentIds] = useState(null);
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
+  const [readMentionCommentIds, setReadMentionCommentIds] = useState(() => new Set());
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
   const [showImageMenu, setShowImageMenu] = useState(false);
-  const [layers, setLayers] = useState({
-    userFlows: true,    // User journey connections
-    crossLinks: true,   // Non-hierarchical links
-    brokenLinks: true,  // Broken link connections
-    pageNumbers: true,
-  });
+  const [mapOrientation, setMapOrientation] = useState(() => (
+    currentRoute?.orientation || normalizeMapOrientation(currentRoute?.searchParams?.get('orientation'))
+  ));
+  const [layers, setLayers] = useState(() => ({ ...DEFAULT_CAPTURE_LAYERS }));
   const [changeFilters, setChangeFilters] = useState(() => ({
     statuses: ANNOTATION_STATUS_OPTIONS.reduce((acc, option) => {
       acc[option.value] = true;
@@ -872,7 +3498,7 @@ export default function App() {
   const [nodeMenu, setNodeMenu] = useState(null); // { nodeId, x, y, targetIds }
 
   // Theme: 'light', 'dark', or 'auto'
-  const [theme, setTheme] = useState('auto');
+  const [theme, setTheme] = useState(() => readInitialFigmaCaptureTheme(currentRoute) || 'auto');
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -881,10 +3507,26 @@ export default function App() {
   const [activeDropZone, setActiveDropZone] = useState(null);
   const [dropZones, setDropZones] = useState([]);
   const [dragCursor, setDragCursor] = useState({ x: 0, y: 0 }); // Track cursor for proximity filtering
+  const activeBranchNodeIds = useMemo(
+    () => (activeNode ? collectBranchNodeIds(activeNode) : new Set()),
+    [activeNode]
+  );
+
+  useEffect(() => {
+    if (currentRoute?.orientation) {
+      setMapOrientation(currentRoute.orientation);
+    }
+  }, [currentRoute?.orientation]);
 
   const canvasRef = useRef(null);
   const scanJobIdRef = useRef(null);
+  const scanJobAccessTokenRef = useRef(null);
+  const ignoredScanJobIdsRef = useRef(new Set());
   const eventSourceRef = useRef(null);
+  const pendingAuthScanRef = useRef(null);
+  const pendingPlanScanRef = useRef(null);
+  const handledScanIntentKeyRef = useRef('');
+  const scanRef = useRef(null);
   const scanTimerRef = useRef(null);
   const messageTimerRef = useRef(null);
   const contentRef = useRef(null);
@@ -900,11 +3542,17 @@ export default function App() {
   const selectionStartNodeRef = useRef(null);
   const selectionStartedOnNodeRef = useRef(false);
   const suppressNodeClickRef = useRef(false);
+  const duplicateSourceNodeIdRef = useRef(null);
+  const pendingCreatedNodeViewRef = useRef(null);
   const viewDropdownRef = useRef(null);
+  const colorKeyRef = useRef(null);
+  const drawingConnectionRef = useRef(null);
+  const draggingEndpointRef = useRef(null);
+  const handleEndpointDragMoveDoc = useRef(null);
+  const handleEndpointDragEndDoc = useRef(null);
   const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
-  const thumbnailQueueRef = useRef([]);
-  const thumbnailQueuedRef = useRef(new Set());
+  const blankUploadInputRef = useRef(null);
   const thumbnailInFlightRef = useRef(new Set());
   const thumbnailAbortControllersRef = useRef(new Map());
   const thumbnailActiveRef = useRef(0);
@@ -913,31 +3561,113 @@ export default function App() {
   const thumbnailAttemptsRef = useRef(new Map());
   const thumbnailExpectedRef = useRef(new Set());
   const thumbnailLoadedRef = useRef(new Set());
+  const thumbnailFinishedRef = useRef(new Set());
   const thumbnailErrorRef = useRef(new Set());
+  const imageCaptureSavedRef = useRef(new Set());
+  const imageCaptureAppliedRef = useRef(new Set());
+  const imageCaptureAssetCursorRef = useRef(0);
+  const captureIssuesRef = useRef(new Map());
+  const thumbnailBatchIndexRef = useRef(0);
+  const thumbnailBatchTotalRef = useRef(0);
   const thumbnailCompletedRef = useRef(false);
   const thumbnailStopRequestedRef = useRef(false);
+  const screenshotStopRequestedRef = useRef(false);
   const thumbnailSessionRef = useRef(0);
+  const scanPrefillAppliedRef = useRef('');
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
-  const MAX_THUMBNAIL_CONCURRENCY = 4;
+  const thumbnailAutosaveTimerRef = useRef(null);
+  const pendingNodeAssetUpdatesRef = useRef(new Map());
+  const nodeAssetSaveInFlightRef = useRef(false);
+  const nodeAssetSaveRetryTimerRef = useRef(null);
+  const imageCaptureJobRef = useRef(null);
+  const imageCaptureAppliedUpdateKeysRef = useRef(new Set());
+  const imageCaptureReattachMapRef = useRef(null);
+  const screenshotAssetValidationSignatureRef = useRef('');
+  const thumbnailDisplayRetryRef = useRef(new Map());
+  const thumbnailAuthToastShownRef = useRef(false);
+  const thumbnailFailureToastShownRef = useRef(false);
+  const MAX_THUMBNAIL_CONCURRENCY = 3;
+  const FULL_SCREENSHOT_CONCURRENCY = 2;
+  const MAX_THUMBNAIL_ATTEMPTS = 3;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
   const [thumbnailSessionId, setThumbnailSessionId] = useState(0);
   const [, setThumbnailQueueSize] = useState(0);
   const [, setThumbnailActiveCount] = useState(0);
   const [thumbnailReloadMap, setThumbnailReloadMap] = useState({});
+  const [invalidThumbnailAssetIds, setInvalidThumbnailAssetIds] = useState(() => new Set());
+  const [invalidFullScreenshotAssetIds, setInvalidFullScreenshotAssetIds] = useState(() => new Set());
   const [thumbnailElapsedMs, setThumbnailElapsedMs] = useState(0);
+  const [activeImageCaptureJob, setActiveImageCaptureJob] = useState(null);
   const [thumbnailStats, setThumbnailStats] = useState({
+    mode: null,
     total: 0,
+    saved: 0,
+    verified: 0,
     loaded: 0,
+    completed: 0,
     failed: 0,
+    skipped: 0,
     avgMs: 0,
     cached: 0,
+    unavailable: 0,
+    phase: null,
+    recoveryPass: 0,
+    retrying: 0,
+    scaleTier: null,
+    stageIndex: 0,
+    stageTotal: 0,
+    paused: false,
+    finalizing: false,
     stopped: false,
   });
+  const [captureIssues, setCaptureIssues] = useState([]);
+
+  useEffect(() => {
+    drawingConnectionRef.current = drawingConnection;
+  }, [drawingConnection]);
+
+  useEffect(() => {
+    draggingEndpointRef.current = draggingEndpoint;
+  }, [draggingEndpoint]);
+
+  const resetConnectionInteractionStyles = useCallback(() => {
+    document.body.style.userSelect = '';
+    document.body.style.webkitUserSelect = '';
+    document.body.style.cursor = '';
+  }, []);
+
+  const detachEndpointDragListeners = useCallback(() => {
+    if (handleEndpointDragMoveDoc.current) {
+      document.removeEventListener('mousemove', handleEndpointDragMoveDoc.current);
+    }
+    if (handleEndpointDragEndDoc.current) {
+      document.removeEventListener('mouseup', handleEndpointDragEndDoc.current);
+    }
+    handleEndpointDragMoveDoc.current = null;
+    handleEndpointDragEndDoc.current = null;
+  }, []);
+
+  const cancelActiveConnectionInteraction = useCallback((options = {}) => {
+    const { clearTool = false } = options;
+    if (!drawingConnectionRef.current && !draggingEndpointRef.current && !clearTool) return;
+    detachEndpointDragListeners();
+    resetConnectionInteractionStyles();
+    drawingConnectionRef.current = null;
+    draggingEndpointRef.current = null;
+    setDrawingConnection(null);
+    setDraggingEndpoint(null);
+    if (clearTool) {
+      setConnectionTool(null);
+    }
+  }, [detachEndpointDragListeners, resetConnectionInteractionStyles]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      setCanvasSize({ width: 0, height: 0 });
+      return undefined;
+    }
     const updateSize = () => {
       setCanvasSize({
         width: canvas.clientWidth,
@@ -945,10 +3675,14 @@ export default function App() {
       });
     };
     updateSize();
+    const frame = requestAnimationFrame(updateSize);
     const observer = new ResizeObserver(updateSize);
     observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [showLanding]);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [root]);
 
   // Close view dropdown when clicking outside
   useEffect(() => {
@@ -962,6 +3696,18 @@ export default function App() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showViewDropdown]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (colorKeyRef.current && !colorKeyRef.current.contains(e.target)) {
+        setShowColorKey(false);
+      }
+    };
+    if (showColorKey) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showColorKey]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1005,6 +3751,12 @@ export default function App() {
     }
   }, [showScanOptions]);
 
+  useEffect(() => {
+    if (!isLocalFigmaCaptureHost || !figmaCaptureState) return;
+    const nextTheme = figmaCaptureTheme || 'auto';
+    setTheme((current) => (current === nextTheme ? current : nextTheme));
+  }, [figmaCaptureState, figmaCaptureTheme, isLocalFigmaCaptureHost]);
+
   // Apply theme to document and listen for system changes
   useEffect(() => {
     const root = document.documentElement;
@@ -1032,60 +3784,133 @@ export default function App() {
 
     // Only save to localStorage if user explicitly changed it
     if (theme !== 'auto') {
-      localStorage.setItem('mapmat-theme', theme);
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+      localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
     } else {
-      localStorage.removeItem('mapmat-theme');
+      localStorage.removeItem(THEME_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
     }
 
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
   const hasMap = !!root;
+  const isUnsavedScannedMap = hasMap && !currentMap?.id && !isImportedMap;
+  const currentScanConfig = useMemo(() => normalizeScanConfig({
+    url: urlInput,
+    options: scanOptions,
+  }), [urlInput, scanOptions]);
+  const hasTopbarRescanChanges = isUnsavedScannedMap
+    && scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig);
+  const hasEntitlementRescanUpgrade = isUnsavedScannedMap
+    && canRescanEntitlementLimitedMap({
+      scanMeta,
+      entitlements: currentUser?.entitlements,
+      isLoggedIn,
+      requestedPages: DEFAULT_SCAN_REQUESTED_PAGES,
+    });
+  const canTopbarRescan = hasTopbarRescanChanges || hasEntitlementRescanUpgrade;
   useEffect(() => {
     if (!hasMap) {
       setSelectedNodeIds(new Set());
       setSelectionBox(null);
       setThumbnailScopeIds(null);
       setShowImageMenu(false);
+      setShowImageReportDrawer(false);
     }
   }, [hasMap]);
+
+  useEffect(() => {
+    setInvalidThumbnailAssetIds(new Set());
+    setInvalidFullScreenshotAssetIds(new Set());
+    thumbnailDisplayRetryRef.current = new Map();
+    screenshotAssetValidationSignatureRef.current = '';
+  }, [currentMap?.id]);
 
   const hasAnyThumbnails = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => !!node.thumbnailUrl);
-  }, [root, orphans]);
+    return nodes.some((node) => isStoredScreenshotAsset(node.thumbnailUrl) && !invalidThumbnailAssetIds.has(node.id));
+  }, [root, orphans, invalidThumbnailAssetIds]);
 
-  const allThumbnailsCaptured = useMemo(() => {
+  const hasStoredImageAsset = useCallback(isStoredScreenshotAsset, []);
+
+  const hasTerminalThumbnailFailure = useCallback(() => false, []);
+
+  const hasAnyDownloadableThumbnails = useMemo(() => {
     if (!root) return false;
-    const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
-    if (nodes.length === 0) return false;
-    return nodes.every((node) => node.thumbnailUrl?.includes('/screenshots/'));
-  }, [root, orphans]);
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => hasStoredImageAsset(node.thumbnailUrl) && !invalidThumbnailAssetIds.has(node.id));
+  }, [root, orphans, hasStoredImageAsset, invalidThumbnailAssetIds]);
 
-  const maxDepth = useMemo(() => {
-    const orphanDepth = (orphans || []).reduce((max, orphan) => {
-      return Math.max(max, getMaxDepth(orphan));
-    }, 0);
-    return Math.max(getMaxDepth(root), orphanDepth);
-  }, [root, orphans]);
-  const totalNodes = useMemo(() => countNodes(root), [root]);
+  const hasAnyFullScreenshotAssets = useMemo(() => {
+    if (!root) return false;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => hasStoredImageAsset(node.fullScreenshotUrl) && !invalidFullScreenshotAssetIds.has(node.id));
+  }, [root, orphans, hasStoredImageAsset, invalidFullScreenshotAssetIds]);
+
+  const hasSelectedDownloadableThumbnails = useMemo(() => {
+    if (!root || selectedNodeIds.size === 0) return false;
+    const selectedIds = selectedNodeIds;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.thumbnailUrl) && !invalidThumbnailAssetIds.has(node.id));
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidThumbnailAssetIds]);
+
+  const hasSelectedFullScreenshotAssets = useMemo(() => {
+    if (!root || selectedNodeIds.size === 0) return false;
+    const selectedIds = selectedNodeIds;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.fullScreenshotUrl) && !invalidFullScreenshotAssetIds.has(node.id));
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidFullScreenshotAssetIds]);
+
+  const hasAnyDownloadableImages = hasAnyDownloadableThumbnails || hasAnyFullScreenshotAssets;
+  const hasSelectedDownloadableImages = hasSelectedDownloadableThumbnails || hasSelectedFullScreenshotAssets;
+
+  const thumbnailCaptureStats = useMemo(() => {
+    return getImageCaptureStats({
+      rootNode: root,
+      orphanNodes: orphans,
+      assetKey: 'thumbnailUrl',
+      invalidAssetIds: invalidThumbnailAssetIds,
+      isUnavailable: hasTerminalThumbnailFailure,
+    });
+  }, [root, orphans, invalidThumbnailAssetIds, hasTerminalThumbnailFailure]);
+  const allThumbnailsCaptured = thumbnailCaptureStats.allCaptured;
+
+  const fullScreenshotCaptureStats = useMemo(() => {
+    return getImageCaptureStats({
+      rootNode: root,
+      orphanNodes: orphans,
+      assetKey: 'fullScreenshotUrl',
+      invalidAssetIds: invalidFullScreenshotAssetIds,
+    });
+  }, [root, orphans, invalidFullScreenshotAssetIds]);
+
+  const fullMapDisplaySummary = useMemo(() => {
+    if (currentMap?.largeMapShell) {
+      return normalizeMapDisplaySummary(largeMapDisplaySummary || currentMap?.displaySummary);
+    }
+    return buildMapDisplaySummary(root, orphans);
+  }, [currentMap?.displaySummary, currentMap?.largeMapShell, largeMapDisplaySummary, root, orphans]);
+  const maxDepth = fullMapDisplaySummary.maxDepth;
+  const effectiveScanLayerAvailability = fullMapDisplaySummary.scanLayerAvailability || scanLayerAvailability;
   const layerVisibility = useMemo(() => ({
-    placementPrimary: scanLayerAvailability.placementPrimary ? scanLayerVisibility.placementPrimary : true,
-    placementSubdomain: scanLayerAvailability.placementSubdomain ? scanLayerVisibility.placementSubdomain : true,
-    placementOrphan: scanLayerAvailability.placementOrphan ? scanLayerVisibility.placementOrphan : true,
-    typePages: scanLayerAvailability.typePages ? scanLayerVisibility.typePages : true,
-    typeFiles: scanLayerAvailability.typeFiles ? scanLayerVisibility.typeFiles : true,
-    statusBroken: scanLayerAvailability.statusBroken ? scanLayerVisibility.statusBroken : true,
-    statusError: scanLayerAvailability.statusError ? scanLayerVisibility.statusError : true,
-    statusInactive: scanLayerAvailability.statusInactive ? scanLayerVisibility.statusInactive : true,
-    statusAuth: scanLayerAvailability.statusAuth ? scanLayerVisibility.statusAuth : true,
-    statusDuplicate: scanLayerAvailability.statusDuplicate ? scanLayerVisibility.statusDuplicate : true,
-  }), [scanLayerAvailability, scanLayerVisibility]);
+    placementPrimary: effectiveScanLayerAvailability.placementPrimary ? scanLayerVisibility.placementPrimary : true,
+    placementSubdomain: effectiveScanLayerAvailability.placementSubdomain ? scanLayerVisibility.placementSubdomain : true,
+    placementOrphan: effectiveScanLayerAvailability.placementOrphan ? scanLayerVisibility.placementOrphan : true,
+    typePages: effectiveScanLayerAvailability.typePages ? scanLayerVisibility.typePages : true,
+    typeFiles: effectiveScanLayerAvailability.typeFiles ? scanLayerVisibility.typeFiles : true,
+    statusMissing: effectiveScanLayerAvailability.statusMissing ? scanLayerVisibility.statusMissing : true,
+    statusBroken: effectiveScanLayerAvailability.statusBroken ? scanLayerVisibility.statusBroken : true,
+    statusError: effectiveScanLayerAvailability.statusError ? scanLayerVisibility.statusError : true,
+    statusInactive: effectiveScanLayerAvailability.statusInactive ? scanLayerVisibility.statusInactive : true,
+    statusAuth: effectiveScanLayerAvailability.statusAuth ? scanLayerVisibility.statusAuth : true,
+    statusDuplicate: effectiveScanLayerAvailability.statusDuplicate ? scanLayerVisibility.statusDuplicate : true,
+  }), [effectiveScanLayerAvailability, scanLayerVisibility]);
 
   const badgeVisibility = useMemo(() => ({
-    subdomains: true,
-    orphanPages: true,
+    subdomains: false,
+    orphanPages: false,
     files: true,
     brokenLinks: true,
     inactivePages: true,
@@ -1093,6 +3918,19 @@ export default function App() {
     errorPages: true,
     duplicates: true,
   }), []);
+
+  const hasScannedNodeData = useMemo(() => {
+    if (!hasMap) return false;
+    return collectAllNodesWithOrphans(root, orphans).some((node) => (
+      node?.statusCode != null
+      || node?.httpStatus != null
+      || node?.responseTime != null
+      || !!node?.scanStatus
+      || !!node?.titleSource
+    ));
+  }, [hasMap, root, orphans]);
+  const isScanOrImportMap = hasMap && (isImportedMap || !!lastScanAt || hasScannedNodeData);
+  const showDirectNodeDeleteAction = !isScanOrImportMap;
 
   const reportLayout = useMemo(() => {
     if (!root) return null;
@@ -1112,7 +3950,54 @@ export default function App() {
     return map;
   }, [reportLayout]);
 
+  const visibleCaptureIssues = useMemo(() => {
+    const issueMap = new Map(captureIssues.map((issue) => [issue.id, issue]));
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    nodes.forEach((node) => {
+      if (!node?.id) return;
+      if (node.thumbnailCaptureFailed) {
+        const issue = normalizeCaptureIssue({
+          nodeId: node.id,
+          pageNumber: reportNumberMap.get(node.id) || node.number || node.pageNumber || '',
+          title: node.title,
+          url: node.url,
+          status: 'failed',
+          error: node.thumbnailCaptureError || 'Preview unavailable',
+          detail: node.thumbnailCaptureError || 'Preview unavailable',
+          node,
+        });
+        issueMap.set(issue.id, issue);
+      }
+      if (invalidThumbnailAssetIds.has(node.id) && node.thumbnailUrl) {
+        const issue = normalizeCaptureIssue({
+          nodeId: node.id,
+          pageNumber: reportNumberMap.get(node.id) || node.number || node.pageNumber || '',
+          title: node.title,
+          url: node.url,
+          status: 'image_load',
+          error: 'Image failed to load',
+          node,
+        });
+        issueMap.set(issue.id, issue);
+      }
+      if (invalidFullScreenshotAssetIds.has(node.id) && node.fullScreenshotUrl) {
+        const issue = normalizeCaptureIssue({
+          nodeId: node.id,
+          pageNumber: reportNumberMap.get(node.id) || node.number || node.pageNumber || '',
+          title: node.title,
+          url: node.url,
+          status: 'missing_asset',
+          error: 'Missing saved asset',
+          node,
+        });
+        issueMap.set(issue.id, issue);
+      }
+    });
+    return Array.from(issueMap.values());
+  }, [captureIssues, invalidFullScreenshotAssetIds, invalidThumbnailAssetIds, orphans, reportNumberMap, root]);
+
   const parentOptions = useMemo(() => {
+    if (currentMap?.largeMapShell) return [];
     if (!root) return [];
     const result = [];
     const seen = new Set();
@@ -1125,6 +4010,7 @@ export default function App() {
         id: node.id,
         title: node.title,
         url: node.url,
+        pageType: node.pageType,
         pageNumber,
         depth,
       });
@@ -1133,7 +4019,7 @@ export default function App() {
     walk(root);
     (orphans || []).forEach(walk);
     return result;
-  }, [root, orphans, reportNumberMap, reportLayout]);
+  }, [currentMap?.largeMapShell, root, orphans, reportNumberMap, reportLayout]);
 
   const specialParentOptions = useMemo(() => {
     const showHomeOption = editModalMode === 'add' && !root;
@@ -1148,36 +4034,11 @@ export default function App() {
 
   useEffect(() => {
     if (!root) return;
-    const nodesForCounts = collectAllNodesWithOrphans(root, orphans);
-    const forestIndexForCounts = buildForestIndex(root, orphans);
-    const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
-    const hasInactive = nodesForCounts.some((node) => !!node.isInactive || node.orphanType === 'inactive');
-    const hasAuth = nodesForCounts.some((node) => !!node.authRequired);
-    const hasErrors = nodesForCounts.some((node) => !!node.isError);
-    const hasBroken = nodesForCounts.some((node) => {
-      const meta = forestIndexForCounts.nodes.get(node.id);
-      if (isTopLevelOrphanRootMeta(meta)) return false;
-      return !!node.isBroken || node.orphanType === 'broken';
-    });
-    const hasDuplicates = nodesForCounts.some((node) => !!node.isDuplicate);
-    const hasSubdomains = (orphans || []).some((orphan) => !!orphan.subdomainRoot);
-    const hasOrphans = (orphans || []).some((orphan) => !orphan.subdomainRoot);
-
     setScanLayerAvailability((prev) => ({
       ...prev,
-      placementPrimary: !!root,
-      placementSubdomain: hasSubdomains,
-      placementOrphan: hasOrphans,
-      // Type layers hidden for now (until scan can classify templates)
-      typePages: false,
-      typeFiles: false,
-      statusBroken: hasBroken,
-      statusError: hasErrors,
-      statusInactive: hasInactive,
-      statusAuth: hasAuth,
-      statusDuplicate: hasDuplicates,
+      ...fullMapDisplaySummary.scanLayerAvailability,
     }));
-  }, [root, orphans]);
+  }, [fullMapDisplaySummary, root]);
 
   const reportEntries = useMemo(() => {
     if (!root) return [];
@@ -1199,26 +4060,28 @@ export default function App() {
     [reportEntries]
   );
 
-  const reportStats = useMemo(() => {
-    const stats = { total: reportEntries.length };
-    REPORT_TYPE_OPTIONS.forEach((option) => {
-      stats[option.key] = 0;
-    });
-    reportEntries.forEach((entry) => {
-      entry.types.forEach((type) => {
-        stats[type] = (stats[type] || 0) + 1;
-      });
-    });
-    return stats;
-  }, [reportEntries]);
+  const reportStats = useMemo(
+    () => buildReportStats(reportEntries, REPORT_TYPE_OPTIONS, scanMeta),
+    [reportEntries, scanMeta]
+  );
 
-  const getVersionSnapshot = useCallback(() => ({
-    root,
-    orphans,
-    connections,
-    colors,
-    connectionColors,
-  }), [root, orphans, connections, colors, connectionColors]);
+  const getVersionSnapshot = useCallback(() => {
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    const latestScanMeta = scanMetaRef.current || scanMeta;
+    const tree = prepareMapTreeForSave({
+      root: latestRoot,
+      orphans: latestOrphans,
+      scanMeta: latestScanMeta,
+    });
+    return {
+      root: tree.root,
+      orphans: tree.orphans,
+      connections,
+      colors,
+      connectionColors,
+    };
+  }, [root, orphans, scanMeta, connections, colors, connectionColors]);
 
   const serializeVersionSnapshot = useCallback((snapshot) => {
     try {
@@ -1228,13 +4091,56 @@ export default function App() {
     }
   }, []);
 
+  const syncLargeMapDocumentNodeCache = useCallback((rootNode, orphanNodes = []) => {
+    const normalizedOrphans = normalizeOrphans(orphanNodes);
+    const nodeCount = currentMap?.largeMapShell
+      ? Number(currentMap.nodeCount || 0)
+      : countLargeMapNodes(rootNode, normalizedOrphans);
+    const shouldSync = shouldUseLargeMapSurface({
+      nodeCount,
+      hasSavedMap: !!currentMap?.id,
+    }) || largeMapNodeCacheRef.current.size > 0 || largeMapVisibleNodesRef.current.length > 0;
+
+    if (!shouldSync) return false;
+    const changed = mergeLargeMapDocumentNodesIntoCache(
+      largeMapNodeCacheRef.current,
+      rootNode,
+      normalizedOrphans,
+      { preserveExistingAssetsOnEmpty: true },
+    );
+    if (changed) {
+      setLargeMapNodeCacheVersion((version) => version + 1);
+    }
+    return changed;
+  }, [currentMap?.id, currentMap?.largeMapShell, currentMap?.nodeCount]);
+
+  const applyCanvasSnapshot = useCallback((snapshot) => {
+    const normalized = normalizeUndoSnapshot(snapshot);
+    const nextRoot = normalized.root || null;
+    const nextOrphans = normalizeOrphans(normalized.orphans);
+
+    rootRef.current = nextRoot;
+    orphansRef.current = nextOrphans;
+    setRoot(nextRoot);
+    setOrphans(nextOrphans);
+    setConnections(normalized.connections || []);
+    setColors(normalized.colors || DEFAULT_COLORS);
+    setConnectionColors(normalized.connectionColors || DEFAULT_CONNECTION_COLORS);
+    syncLargeMapDocumentNodeCache(nextRoot, nextOrphans);
+  }, [syncLargeMapDocumentNodeCache]);
+
   const applyLiveDocumentToCanvas = useCallback((document) => {
     if (!document) return;
-    setRoot(document.root || null);
-    setOrphans(normalizeOrphans(document.orphans));
+    const nextRoot = document.root || null;
+    const nextOrphans = normalizeOrphans(document.orphans);
+    rootRef.current = nextRoot;
+    orphansRef.current = nextOrphans;
+    setRoot(nextRoot);
+    setOrphans(nextOrphans);
     setConnections(document.connections || []);
     setColors(document.colors || DEFAULT_COLORS);
     setConnectionColors(document.connectionColors || DEFAULT_CONNECTION_COLORS);
+    syncLargeMapDocumentNodeCache(nextRoot, nextOrphans);
     setMapName(document.name || 'Untitled Map');
     setProjects((prev) => prev.map((project) => ({
       ...project,
@@ -1260,7 +4166,7 @@ export default function App() {
         }
         : prev
     ));
-  }, []);
+  }, [syncLargeMapDocumentNodeCache]);
 
   const getLocalLiveDocument = useCallback(() => ({
     mapId: currentMap?.id || null,
@@ -1295,6 +4201,7 @@ export default function App() {
     setDraftVersions([{
       id,
       version_number: 1,
+      created_at: new Date().toISOString(),
       name: (label || 'Updated').trim() || 'Updated',
       notes: '',
       root: snapshot.root,
@@ -1352,8 +4259,28 @@ export default function App() {
     && !isViewingHistoricalVersion
   );
 
+  const isLiveRealtimeModeActive = !!(
+    COEDITING_EXPERIMENT_UI_ENABLED
+    && isLoggedIn
+    && currentMap?.id
+    && root
+    && resolvedCoeditingMode !== 'disabled'
+    && !isImportedMap
+    && !isViewingHistoricalVersion
+  );
+  const areMapPermissionsPending = !!(
+    featureGatesEnabled
+    && isLoggedIn
+    && currentMap?.id
+    && !mapPermissions
+  );
+
   const isMapUpdateConflictError = useCallback((error) => {
     return error?.status === 409 && error?.code === 'MAP_UPDATE_CONFLICT';
+  }, []);
+
+  const isMapNameConflictError = useCallback((error) => {
+    return error?.status === 409 && error?.code === 'MAP_NAME_CONFLICT';
   }, []);
 
   const registerMapConflict = useCallback(({ error, mapId, source }) => {
@@ -1365,6 +4292,24 @@ export default function App() {
       actualUpdatedAt: error?.payload?.conflict?.actual_updated_at || null,
     });
   }, []);
+
+  const getMapConflictActualUpdatedAt = useCallback((error) => (
+    error?.payload?.conflict?.actual_updated_at
+    || error?.payload?.latest?.updated_at
+    || null
+  ), []);
+
+  const updateMapWithLatestTimestamp = useCallback(async (mapId, payload, { expectedUpdatedAt } = {}) => {
+    try {
+      return await api.updateMap(mapId, payload, { expectedUpdatedAt });
+    } catch (error) {
+      const actualUpdatedAt = getMapConflictActualUpdatedAt(error);
+      if (!isMapUpdateConflictError(error) || !actualUpdatedAt || actualUpdatedAt === expectedUpdatedAt) {
+        throw error;
+      }
+      return api.updateMap(mapId, payload, { expectedUpdatedAt: actualUpdatedAt });
+    }
+  }, [getMapConflictActualUpdatedAt, isMapUpdateConflictError]);
 
   const flushAutosave = useCallback(() => {
     if (isCoeditingReadOnlyMode) {
@@ -1380,7 +4325,7 @@ export default function App() {
     if (!pending) return;
 
     autosaveInFlightRef.current = true;
-    api.updateMap(pending.mapId, pending.payload, {
+    updateMapWithLatestTimestamp(pending.mapId, pending.payload, {
       expectedUpdatedAt: pending.expectedUpdatedAt,
     })
       .then(({ map }) => {
@@ -1393,6 +4338,19 @@ export default function App() {
           ...p,
           maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
         })));
+        setAutosaveCheckpointRequest({
+          mapId: map.id,
+          changedAt: Date.now(),
+          skipVersionCheckpoint: Boolean(pending.skipVersionCheckpoint),
+          force: Boolean(pending.forceVersionCheckpoint),
+          snapshot: {
+            root: pending.payload.root,
+            orphans: pending.payload.orphans,
+            connections: pending.payload.connections,
+            colors: pending.payload.colors,
+            connectionColors: pending.payload.connectionColors,
+          },
+        });
 
         if (autosavePendingRef.current?.snapshot === pending.snapshot) {
           autosavePendingRef.current = null;
@@ -1408,11 +4366,23 @@ export default function App() {
           if (autosavePendingRef.current?.snapshot === pending.snapshot) {
             autosavePendingRef.current = null;
           }
-          registerMapConflict({
-            error,
-            mapId: pending.mapId,
-            source: 'autosave',
-          });
+          const actualUpdatedAt = getMapConflictActualUpdatedAt(error);
+          if (actualUpdatedAt) {
+            setCurrentMap((current) => (
+              current?.id === pending.mapId
+                ? { ...current, updated_at: actualUpdatedAt }
+                : current
+            ));
+            setProjects((prev) => prev.map((project) => ({
+              ...project,
+              maps: (project.maps || []).map((map) => (
+                map.id === pending.mapId ? { ...map, updated_at: actualUpdatedAt } : map
+              )),
+            })));
+            setMapSaveConflict(null);
+            return;
+          }
+          registerMapConflict({ error, mapId: pending.mapId, source: 'autosave' });
           return;
         }
         if (autosaveRetryTimerRef.current) return;
@@ -1423,7 +4393,7 @@ export default function App() {
           flushAutosave();
         }, delay);
       });
-  }, [isCoeditingReadOnlyMode, isMapUpdateConflictError, registerMapConflict]);
+  }, [getMapConflictActualUpdatedAt, isCoeditingReadOnlyMode, isMapUpdateConflictError, registerMapConflict, updateMapWithLatestTimestamp]);
 
   useEffect(() => {
     const handleOnline = () => flushAutosave();
@@ -1457,55 +4427,10 @@ export default function App() {
       if (messageTimerRef.current) clearInterval(messageTimerRef.current);
       if (eventSourceRef.current) eventSourceRef.current.close();
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      if (thumbnailAutosaveTimerRef.current) clearTimeout(thumbnailAutosaveTimerRef.current);
+      if (nodeAssetSaveRetryTimerRef.current) clearTimeout(nodeAssetSaveRetryTimerRef.current);
     };
   }, []);
-
-  // Autosave for existing maps (debounced)
-  useEffect(() => {
-    if (
-      !currentMap?.id
-      || !root
-      || isImportedMap
-      || isViewingHistoricalVersion
-      || isLiveEditingModeActive
-      || isCoeditingReadOnlyMode
-    ) return;
-
-    const snapshot = JSON.stringify({
-      name: currentMap?.name || mapName,
-      root,
-      orphans,
-      connections,
-      colors,
-      connectionColors,
-      project_id: currentMap?.project_id || null,
-    });
-
-    if (snapshot === lastAutosaveSnapshotRef.current) return;
-
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
-      autosavePendingRef.current = {
-        mapId: currentMap.id,
-        expectedUpdatedAt: currentMap?.updated_at || null,
-        payload: {
-          name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
-          root,
-          orphans,
-          connections,
-          colors,
-          connectionColors,
-          project_id: currentMap?.project_id || null,
-        },
-        snapshot,
-      };
-      flushAutosave();
-    }, 800);
-
-    return () => {
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCoeditingReadOnlyMode]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -1538,8 +4463,9 @@ export default function App() {
   }, [currentMap?.id, root, isViewingHistoricalVersion, getVersionSnapshot, serializeVersionSnapshot, isLiveEditingModeActive, isCoeditingReadOnlyMode]);
 
   const reportTitle = useMemo(() => {
-    return root?.title || getHostname(root?.url) || 'Website';
-  }, [root]);
+    const title = currentMap?.name || mapName || 'Untitled Map';
+    return title.trim() || 'Untitled Map';
+  }, [currentMap?.name, mapName]);
 
   const otherPresenceSessions = useMemo(() => {
     const currentSessionId = presenceSessionIdRef.current;
@@ -1548,33 +4474,545 @@ export default function App() {
     );
   }, [presenceSessions]);
 
-  const presenceBannerText = useMemo(() => {
-    const count = otherPresenceSessions.length;
-    if (!count) return '';
-
-    const labels = [...new Set(
-      otherPresenceSessions
-        .map((session) => String(session.displayName || session.userEmail || '').trim())
-        .filter(Boolean)
-    )];
-
-    if (count === 1) {
-      return labels[0] ? `${labels[0]} is active on this map` : '1 other session is active on this map';
-    }
-
-    if (labels.length > 0) {
-      const preview = labels.slice(0, 2).join(', ');
-      const suffix = labels.length > 2 ? ', ...' : '';
-      return `${count} other sessions active (${preview}${suffix})`;
-    }
-
-    return `${count} other sessions are active on this map`;
-  }, [otherPresenceSessions]);
+  const presenceCollaborators = useMemo(
+    () => buildPresenceCollaborators(otherPresenceSessions, { excludeActorId: currentUser?.id || null }),
+    [currentUser?.id, otherPresenceSessions],
+  );
 
   const reportTimestamp = useMemo(() => {
     if (!lastScanAt) return '';
     return new Date(lastScanAt).toLocaleString();
   }, [lastScanAt]);
+
+  const toastTimeoutRef = useRef(null);
+
+  const showToast = useCallback((msg, type = 'info', persistent = false) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToast({ message: msg, type, persistent });
+    if (!persistent) {
+      toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
+    }
+  }, []);
+
+  const dismissToast = () => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToast(null);
+  };
+
+  const refreshCurrentUser = useCallback(async ({ force = false } = {}) => {
+    if (!force && !isLoggedIn) return null;
+    try {
+      const { user } = await api.getMe();
+      if (user) {
+        setCurrentUser(user);
+      }
+      return user || null;
+    } catch (error) {
+      console.warn('Failed to refresh account entitlements', error);
+      return null;
+    }
+  }, [isLoggedIn]);
+
+  const startPendingPlanScan = useCallback((user = null) => {
+    const pendingScan = pendingPlanScanRef.current;
+    if (!pendingScan?.url) return false;
+    pendingPlanScanRef.current = null;
+    setPlansModal(null);
+    window.setTimeout(() => {
+      scanRef.current?.(
+        pendingScan.url,
+        pendingScan.preserveName,
+        {
+          ...(pendingScan.authFlow || {}),
+          ...(user ? { currentUser: user } : {}),
+          skipGuestScanPrompt: true,
+        }
+      );
+    }, 0);
+    return true;
+  }, []);
+
+  const handleBillingReturnResult = useCallback(async ({ billingResult, checkoutSessionId } = {}) => {
+    if (!billingResult) return;
+    if (billingResult === 'success' || billingResult === 'portal_return') {
+      let refreshedUser = null;
+      let refreshResult = null;
+      if (isLoggedIn) {
+        try {
+          refreshResult = await api.refreshBillingAccount({
+            checkoutSessionId: checkoutSessionId || undefined,
+          });
+        } catch (error) {
+          console.warn('Failed to refresh billing account from Stripe', error);
+          showToast('Checkout completed, but your account update is still syncing. Try refreshing in a moment.', 'warning');
+          return;
+        }
+        if (billingResult === 'success' && !refreshResult?.refreshed) {
+          showToast('Checkout is still processing. Vellic will apply it as soon as Stripe confirms payment.', 'warning');
+          return;
+        }
+        if (refreshResult?.entitlements) {
+          setCurrentUser((current) => current ? ({
+            ...current,
+            account: refreshResult.entitlements.account || current.account || null,
+            entitlements: refreshResult.entitlements,
+          }) : current);
+        }
+        try {
+          refreshedUser = await refreshCurrentUser();
+        } catch (error) {
+          console.warn('Failed to refresh current user after billing update', error);
+        }
+      }
+      setPlansModal(null);
+      const resumedScan = billingResult === 'success'
+        ? startPendingPlanScan(refreshedUser)
+        : false;
+      showToast(
+        billingResult === 'portal_return'
+          ? 'Billing settings updated'
+          : resumedScan ? 'Upgrade successful and applied to your account. Starting scan...' : formatBillingUpgradeSuccessMessage(refreshResult),
+        'success'
+      );
+    } else if (billingResult === 'cancelled') {
+      pendingPlanScanRef.current = null;
+      showToast('Checkout cancelled', 'info');
+    }
+  }, [isLoggedIn, refreshCurrentUser, showToast, startPendingPlanScan]);
+
+  useLayoutEffect(() => {
+    if (!isBillingReturnFromBillingWindow) return;
+    const returnKey = `${billingRouteResult}:${billingRouteSessionId}:${currentRoute?.pathname || ''}:${currentRoute?.search || ''}`;
+    if (handledBillingWindowReturnKeyRef.current === returnKey) return;
+    handledBillingWindowReturnKeyRef.current = returnKey;
+    publishBillingReturnEvent({
+      billingResult: billingRouteResult,
+      checkoutSessionId: billingRouteSessionId || undefined,
+      returnUrl: window.location.href,
+    });
+    window.close();
+  }, [
+    billingRouteResult,
+    billingRouteSessionId,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    isBillingReturnFromBillingWindow,
+  ]);
+
+  useEffect(() => {
+    const handleBillingStorageReturn = (event) => {
+      if (event.key !== BILLING_RETURN_EVENT_KEY || !event.newValue) return;
+      let payload = null;
+      try {
+        payload = JSON.parse(event.newValue);
+      } catch {
+        return;
+      }
+      const returnKey = [
+        payload?.billingResult || '',
+        payload?.checkoutSessionId || '',
+        payload?.timestamp || '',
+      ].join(':');
+      if (!payload?.billingResult || handledBillingStorageReturnKeyRef.current === returnKey) return;
+      handledBillingStorageReturnKeyRef.current = returnKey;
+      handleBillingReturnResult({
+        billingResult: payload.billingResult,
+        checkoutSessionId: payload.checkoutSessionId || '',
+      });
+    };
+
+    window.addEventListener('storage', handleBillingStorageReturn);
+    return () => window.removeEventListener('storage', handleBillingStorageReturn);
+  }, [handleBillingReturnResult]);
+
+  const syncEntitlementsFromError = useCallback((error) => {
+    const entitlements = error?.payload?.entitlements;
+    if (!entitlements) return;
+    setCurrentUser((current) => current ? ({
+      ...current,
+      account: entitlements.account || current.account || null,
+      entitlements,
+    }) : current);
+  }, []);
+
+  const openPlansModal = useCallback((context = 'upgrade', options = {}) => {
+    setPlansModal({ context, ...options });
+  }, []);
+
+  const dismissPlansModal = useCallback(() => {
+    if (plansModal?.resumeScanAfterPlan) {
+      pendingPlanScanRef.current = null;
+    }
+    setPlansModal(null);
+  }, [plansModal]);
+
+  useEffect(() => {
+    if (!plansModal) return undefined;
+    let active = true;
+    setBillingCatalogLoading(true);
+    setBillingCatalogError('');
+
+    api.getBillingConfig()
+      .then((catalog) => {
+        if (active) setBillingCatalog(catalog || null);
+      })
+      .catch((error) => {
+        if (active) setBillingCatalogError(error.message || 'Billing options are not available yet.');
+      })
+      .finally(() => {
+        if (active) setBillingCatalogLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [plansModal]);
+
+  const billingPlanCatalogByKey = useMemo(() => new Map(
+    (billingCatalog?.plans || []).map((entry) => [entry.key, entry])
+  ), [billingCatalog]);
+
+  const planOptionCards = useMemo(() => buildPlanCardsFromBillingCatalog(billingCatalog, {
+    billingCycle,
+    includeFree: true,
+    paidOnly: false,
+  }), [billingCatalog, billingCycle]);
+
+  const screenshotCreditPacks = useMemo(
+    () => buildScreenshotCreditPackCards(billingCatalog),
+    [billingCatalog]
+  );
+  const pageCreditPacks = useMemo(
+    () => buildPageCreditPackCards(billingCatalog),
+    [billingCatalog]
+  );
+  const creditPackOptions = useMemo(
+    () => [...pageCreditPacks, ...screenshotCreditPacks],
+    [pageCreditPacks, screenshotCreditPacks]
+  );
+
+  useEffect(() => {
+    if (!plansModal) {
+      setBillingModalTab(BILLING_MODAL_TABS.PLANS);
+      setBillingSelectedPlanKey('');
+      setSelectedAddOnKeys({});
+      return;
+    }
+    const opensUpgradesTab = ['page-credits', 'import-page-limit', 'screenshot-credits', 'screenshot-download'].includes(plansModal.context);
+    setBillingModalTab(opensUpgradesTab ? BILLING_MODAL_TABS.UPGRADES : BILLING_MODAL_TABS.PLANS);
+    if (plansModal.context === 'page-credits' || plansModal.context === 'import-page-limit') {
+      const firstPagePack = pageCreditPacks[0];
+      if (firstPagePack) {
+        setSelectedAddOnKeys((current) => ({ ...current, [firstPagePack.key]: true }));
+      }
+    }
+    if (plansModal.context === 'screenshot-credits') {
+      const firstScreenshotPack = screenshotCreditPacks[0];
+      if (firstScreenshotPack) {
+        setSelectedAddOnKeys((current) => ({ ...current, [firstScreenshotPack.key]: true }));
+      }
+    }
+  }, [pageCreditPacks, plansModal, screenshotCreditPacks]);
+
+  const getAddOnQuantity = useCallback((packKey) => (
+    normalizeAddOnQuantity(addOnQuantities[packKey])
+  ), [addOnQuantities]);
+
+  const updateAddOnQuantity = useCallback((packKey, value) => {
+    setAddOnQuantities((current) => ({
+      ...current,
+      [packKey]: normalizeAddOnQuantity(value),
+    }));
+  }, []);
+
+  const toggleAddOnSelection = useCallback((packKey, forceSelected = null) => {
+    setSelectedAddOnKeys((current) => {
+      const selected = forceSelected === null ? !current[packKey] : Boolean(forceSelected);
+      const next = { ...current };
+      if (selected) {
+        next[packKey] = true;
+      } else {
+        delete next[packKey];
+      }
+      return next;
+    });
+  }, []);
+
+  const handlePlanSelection = useCallback((planKey) => {
+    if (planKey === currentBillingPlanKey) {
+      setBillingSelectedPlanKey('');
+      return;
+    }
+    setBillingSelectedPlanKey((current) => (current === planKey ? '' : planKey));
+  }, [currentBillingPlanKey]);
+
+  const getBillingCheckoutUnavailableReason = useCallback((entry, cycle = billingCycle) => {
+    if (isLoggedIn && !isPrimaryBillingOwner) return 'Primary owner only';
+    if (!billingCatalog) return '';
+    if (!billingCatalog.enabled) return 'Checkout unavailable';
+    const planPrice = entry?.prices ? entry.prices[normalizeBillingCycle(cycle)] : entry;
+    if (!planPrice?.configured) return 'Checkout not configured';
+    return '';
+  }, [billingCatalog, billingCycle, isLoggedIn, isPrimaryBillingOwner]);
+
+  const selectedBillingPurchase = useMemo(() => {
+    const selectedPlan = billingSelectedPlanKey
+      ? planOptionCards.find((entry) => entry.key === billingSelectedPlanKey)
+      : null;
+    const selectedPlanCatalogEntry = selectedPlan ? billingPlanCatalogByKey.get(selectedPlan.key) : null;
+    const selectedPlanPrice = selectedPlanCatalogEntry?.prices?.[normalizeBillingCycle(billingCycle)] || null;
+    let unavailableReason = '';
+    const addOns = creditPackOptions
+      .filter((pack) => selectedAddOnKeys[pack.key])
+      .map((pack) => {
+        const quantity = getAddOnQuantity(pack.key);
+        const amount = Number.isFinite(Number(pack.unitAmount))
+          ? Number(pack.unitAmount) * quantity
+          : null;
+        if (!unavailableReason) unavailableReason = getBillingCheckoutUnavailableReason(pack);
+        return {
+          key: pack.key,
+          quantity,
+          label: pack.label || pack.name,
+          amount,
+          currency: pack.currency,
+        };
+      });
+
+    const includePlan = selectedPlan
+      && selectedPlan.key !== currentBillingPlanKey
+      && selectedPlan.key !== 'free';
+    if (includePlan && !unavailableReason) {
+      unavailableReason = getBillingCheckoutUnavailableReason(selectedPlanCatalogEntry, billingCycle);
+    }
+    if (billingSelectedPlanKey === 'free' && currentBillingPlanKey !== 'free') {
+      unavailableReason = 'Use Manage billing';
+    }
+
+    const items = [
+      ...(includePlan ? [{
+        key: selectedPlan.key,
+        label: selectedPlan.name,
+        amount: Number.isFinite(Number(selectedPlanPrice?.unitAmount ?? selectedPlanPrice?.amount))
+          ? Number(selectedPlanPrice?.unitAmount ?? selectedPlanPrice?.amount)
+          : null,
+        currency: selectedPlanPrice?.currency || 'usd',
+      }] : []),
+      ...addOns,
+    ];
+    if (items.length === 0) return null;
+
+    const subtotalAmount = items.some((item) => item.amount === null)
+      ? null
+      : items.reduce((total, item) => total + Number(item.amount || 0), 0);
+    const currency = items.find((item) => item.currency)?.currency || 'usd';
+    const label = items.length === 1
+      ? items[0].label
+      : `${items.length} selected`;
+
+    return {
+      type: 'bundle',
+      planKey: includePlan ? selectedPlan.key : null,
+      addOns,
+      label,
+      itemCount: items.length,
+      subtotal: subtotalAmount === null ? '--' : formatCurrencyMinorAmount(subtotalAmount, currency),
+      checkoutLabel: 'Checkout',
+      disabled: !!unavailableReason,
+      unavailableReason,
+      billingCycle,
+    };
+  }, [
+    billingCycle,
+	    billingPlanCatalogByKey,
+    billingSelectedPlanKey,
+    creditPackOptions,
+	    currentBillingPlanKey,
+    getAddOnQuantity,
+	    getBillingCheckoutUnavailableReason,
+	    planOptionCards,
+    selectedAddOnKeys,
+  ]);
+
+  const renderBillingPackCard = (pack, unitLabel) => {
+    const unavailableReason = getBillingCheckoutUnavailableReason(pack);
+    const packQuantity = getAddOnQuantity(pack.key);
+    const totalQuantity = Math.max(0, pack.quantity * packQuantity);
+    const isSelected = Boolean(selectedAddOnKeys[pack.key]);
+    const displayUnit = totalQuantity === 1 ? unitLabel.singular : unitLabel.plural;
+
+    return (
+      <div
+        className={classNames('plans-modal-pack-card', isSelected && 'is-selected')}
+        key={pack.key}
+        aria-disabled={!!billingActionKey}
+        onClick={() => toggleAddOnSelection(pack.key)}
+      >
+        <input
+          type="checkbox"
+          className="plans-modal-pack-checkbox"
+          checked={isSelected}
+          disabled={!!billingActionKey}
+          aria-label={`Select ${formatEntitlementCount(pack.quantity)} ${unitLabel.plural}`}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => toggleAddOnSelection(pack.key, event.target.checked)}
+        />
+        <div className="plans-modal-pack-main">
+          <div className="plans-modal-pack-title-row">
+            <strong>{formatEntitlementCount(pack.quantity)} {unitLabel.plural}</strong>
+          </div>
+        </div>
+        {pack.configured && pack.priceLabel ? <small className="plans-modal-pack-price">{pack.priceLabel}</small> : null}
+        <span className="plans-modal-pack-multiplier" aria-hidden="true">✕</span>
+        <div className="plans-modal-pack-quantity">
+          <TextInput
+            type="number"
+            min="1"
+            max={ADD_ON_QUANTITY_MAX}
+            step="1"
+            size="sm"
+            label="Quantity"
+            labelHidden
+            value={packQuantity}
+            disabled={!!billingActionKey || !!unavailableReason}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              updateAddOnQuantity(pack.key, event.target.value);
+              toggleAddOnSelection(pack.key, true);
+            }}
+          />
+        </div>
+        <small className="plans-modal-pack-total">= {formatEntitlementCount(totalQuantity)} {displayUnit}</small>
+      </div>
+    );
+  };
+
+  const showEntitlementLock = useCallback(({
+    title = 'Plan limit reached',
+    message = 'Your current account does not allow this action.',
+    actionLabel = 'View plan options',
+    actionContext = 'entitlement-lock',
+  } = {}) => {
+    setEntitlementLockModal({ title, message, actionLabel, actionContext });
+  }, []);
+
+  const handleEntitlementError = useCallback((error, fallbackMessage = 'Your current account does not allow this action.') => {
+    if (!isEntitlementError(error)) return false;
+    syncEntitlementsFromError(error);
+    const code = getEntitlementErrorCode(error);
+    const entitlements = error?.payload?.entitlements || currentUser?.entitlements || null;
+    if (code === 'ACCOUNT_ARCHIVED' || entitlements?.archived) {
+      showEntitlementLock({
+        title: 'Account archived',
+        message: 'This account is archived. Existing work can still be viewed, but new scans, screenshots, downloads, invites, and shares are locked.',
+      });
+      return true;
+    }
+    showEntitlementLock({
+      title: 'Plan limit reached',
+      message: error?.message || error?.payload?.error || fallbackMessage,
+    });
+    return true;
+  }, [currentUser?.entitlements, showEntitlementLock, syncEntitlementsFromError]);
+
+  const guardAccountCanCreateWork = useCallback((label = 'This action') => {
+    const entitlements = currentUser?.entitlements || null;
+    if (!entitlements?.archived) return true;
+    showEntitlementLock({
+      title: 'Account archived',
+      message: `${label} is locked while this account is archived. Existing work can still be viewed from the account.`,
+    });
+    return false;
+  }, [currentUser?.entitlements, showEntitlementLock]);
+
+  const getClientScanEntitlementPreview = useCallback((requestedPages = DEFAULT_SCAN_REQUESTED_PAGES, context = {}) => {
+    const effectiveUser = context.user || currentUser || null;
+    const effectiveIsLoggedIn = context.isLoggedIn ?? isLoggedIn;
+    const entitlements = context.entitlements || effectiveUser?.entitlements || null;
+    if (!effectiveIsLoggedIn) {
+      return {
+        mode: 'guest',
+        planName: 'Guest',
+        requestedPages,
+        allowedPages: Math.min(requestedPages, GUEST_SCAN_PAGE_LIMIT),
+        remaining: GUEST_SCAN_PAGE_LIMIT,
+        capped: requestedPages > GUEST_SCAN_PAGE_LIMIT,
+        capReason: 'guest_limit',
+      };
+    }
+    if (entitlements?.archived) {
+      return {
+        blocked: true,
+        title: 'Account archived',
+        message: 'New scans are locked while this account is archived.',
+      };
+    }
+    const meter = entitlements?.meters?.crawlPages;
+    if (!meter || meter.unlimited) {
+      return { requestedPages, allowedPages: requestedPages, capped: false };
+    }
+    const remaining = Math.max(0, Math.floor(Number(meter.remaining || 0)));
+    if (remaining <= 0) {
+      return {
+        blocked: true,
+        title: 'No active pages remaining',
+        message: 'This account has no active pages left.',
+        requestedPages,
+        remaining,
+      };
+    }
+    const perScanLimit = entitlements?.limits?.scanPagesPerRun;
+    const perScanAllowed = perScanLimit?.unlimited
+      ? requestedPages
+      : Math.max(1, Math.floor(Number(perScanLimit?.limit || requestedPages)));
+    const allowedPages = Math.min(requestedPages, remaining, perScanAllowed);
+    let capReason = null;
+    if (allowedPages < requestedPages) {
+      capReason = remaining <= perScanAllowed ? 'monthly_remaining' : 'per_scan_limit';
+    }
+    return {
+      mode: 'account',
+      planName: entitlements?.plan?.name || 'Free',
+      requestedPages,
+      allowedPages,
+      remaining,
+      capped: allowedPages < requestedPages,
+      capReason,
+      meter,
+    };
+  }, [currentUser, isLoggedIn]);
+
+  const getScreenshotCreditCostForType = useCallback((captureType) => {
+    const costs = currentUser?.entitlements?.screenshotCreditCosts || {};
+    if (captureType === 'full') {
+      return Math.max(1, Number(costs.desktop_full_page || 1));
+    }
+    return Math.max(1, Number(costs.desktop_viewport || 1));
+  }, [currentUser?.entitlements]);
+
+  const getScreenshotCreditPreview = useCallback(({ captureType = 'thumb', count = 1 } = {}) => {
+    const entitlements = currentUser?.entitlements || null;
+    const meter = entitlements?.meters?.screenshotCredits || null;
+    const unitCost = getScreenshotCreditCostForType(captureType);
+    const quantity = Math.max(0, Math.floor(Number(count || 0)));
+    const credits = unitCost * quantity;
+    const remaining = meter?.unlimited ? null : Math.max(0, Number(meter?.remaining || 0));
+    return {
+      unitCost,
+      quantity,
+      credits,
+      remaining,
+      unlimited: Boolean(meter?.unlimited),
+      insufficient: !!meter && !meter.unlimited && remaining < credits,
+    };
+  }, [currentUser?.entitlements, getScreenshotCreditCostForType]);
+
 
   const versionsForDrawer = currentMap?.id ? mapVersions : (root ? draftVersions : []);
   const latestVersionForDrawer = currentMap?.id
@@ -1582,28 +5020,287 @@ export default function App() {
     : (draftLatestVersionId || draftVersions[0]?.id || null);
   const activeVersionForDrawer = currentMap?.id ? activeVersionId : latestVersionForDrawer;
   const isVersionLoading = currentMap?.id ? isLoadingVersions : false;
+  const activityForDrawer = currentMap?.id ? mapActivity : [];
+  const isActivityDrawerLoading = currentMap?.id ? isLoadingActivity : false;
+  const hasFigmaCaptureComments = !!figmaCaptureCommentsByNode;
+  const useBackendComments = !!(isLoggedIn && currentMap?.id) && !hasFigmaCaptureComments;
+  const effectiveCommentsByNode = hasFigmaCaptureComments
+    ? figmaCaptureCommentsByNode
+    : savedMapCommentsByNode;
+  const effectiveVisibleCommentsByNode = useMemo(
+    () => filterVisibleCommentsByNode(effectiveCommentsByNode),
+    [effectiveCommentsByNode]
+  );
+  const shouldAttachComments = useBackendComments || hasFigmaCaptureComments;
 
+  const loadSavedMapComments = useCallback(async (mapId = currentMap?.id) => {
+    if (!mapId || !isLoggedIn) {
+      setSavedMapCommentsByNode({});
+      return;
+    }
+    try {
+      const response = await api.getMapComments(mapId);
+      setSavedMapCommentsByNode(response.commentsByNode || {});
+    } catch (error) {
+      console.error('Load map comments error:', error);
+      if (error?.status === 404) {
+        setSavedMapCommentsByNode({});
+      }
+    }
+  }, [currentMap?.id, isLoggedIn]);
 
-  const visibleOrphans = useMemo(() => (orphans || []).filter(Boolean), [orphans]);
+  const loadMapActivity = useCallback(async (
+    mapId = currentMap?.id,
+    { silent = false, allowToast = false } = {}
+  ) => {
+    if (!mapId || !isLoggedIn || !currentUser) {
+      setMapActivity([]);
+      seenActivityIdsRef.current = new Set();
+      primedActivityMapIdRef.current = null;
+      return;
+    }
 
-  const renderRoot = useMemo(() => root, [root]);
+    if (!silent) {
+      setIsLoadingActivity(true);
+    }
+
+    try {
+      const response = await api.getMapActivity(mapId, { limit: 30, offset: 0 });
+      const activity = Array.isArray(response.activity) ? response.activity : [];
+      const previousIds = seenActivityIdsRef.current;
+      const isPrimed = primedActivityMapIdRef.current === mapId;
+
+      if (allowToast && isPrimed) {
+        const nextToastEvent = activity.find((event) => (
+          event?.id
+          && !previousIds.has(event.id)
+          && event?.actor?.userId
+          && event.actor.userId !== currentUser.id
+          && event.eventScope !== 'content'
+        ));
+        const toastMessage = buildActivityToastMessage(nextToastEvent);
+        if (toastMessage) {
+          showToast(toastMessage, 'info');
+        }
+      }
+
+      seenActivityIdsRef.current = new Set(
+        activity.slice(0, MAX_TRACKED_ACTIVITY_IDS).map((event) => event.id).filter(Boolean)
+      );
+      primedActivityMapIdRef.current = mapId;
+      setMapActivity(activity);
+    } catch (error) {
+      console.error('Load map activity error:', error);
+      if (error?.status === 404) {
+        setMapActivity([]);
+      }
+    } finally {
+      if (!silent) {
+        setIsLoadingActivity(false);
+      }
+    }
+  }, [currentMap?.id, currentUser, isLoggedIn, showToast]);
+
+  useEffect(() => {
+    if (!useBackendComments) {
+      setSavedMapCommentsByNode({});
+      return;
+    }
+    loadSavedMapComments(currentMap?.id);
+  }, [currentMap?.id, loadSavedMapComments, useBackendComments]);
+
+  useEffect(() => {
+    if (!useBackendComments || !currentMap?.id) return undefined;
+
+    const refreshComments = () => {
+      loadSavedMapComments(currentMap.id);
+    };
+
+    const intervalId = window.setInterval(refreshComments, 4000);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshComments();
+      }
+    };
+
+    window.addEventListener('focus', refreshComments);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshComments);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentMap?.id, loadSavedMapComments, useBackendComments]);
+
+  const visibleOrphans = useMemo(() => {
+    const nextOrphans = (orphans || []).filter(Boolean);
+    if (!shouldAttachComments) return nextOrphans.map(filterVisibleCommentsInNodeTree);
+    return nextOrphans.map((orphan) => attachCommentsToNodeTree(orphan, effectiveVisibleCommentsByNode));
+  }, [effectiveVisibleCommentsByNode, orphans, shouldAttachComments]);
+
+  const renderRoot = useMemo(() => {
+    if (!shouldAttachComments) return filterVisibleCommentsInNodeTree(root);
+    return attachCommentsToNodeTree(root, effectiveVisibleCommentsByNode);
+  }, [effectiveVisibleCommentsByNode, root, shouldAttachComments]);
+
+  const commentsPanelOrphans = useMemo(() => {
+    const nextOrphans = (orphans || []).filter(Boolean);
+    if (!shouldAttachComments) return nextOrphans;
+    return nextOrphans.map((orphan) => attachCommentsToNodeTree(orphan, effectiveCommentsByNode));
+  }, [effectiveCommentsByNode, orphans, shouldAttachComments]);
+
+  const commentsPanelRoot = useMemo(() => {
+    if (!shouldAttachComments) return root;
+    return attachCommentsToNodeTree(root, effectiveCommentsByNode);
+  }, [effectiveCommentsByNode, root, shouldAttachComments]);
+
+  const largeMapNodeCount = useMemo(() => (
+    currentMap?.largeMapShell
+      ? Number(currentMap.nodeCount || 0)
+      : countLargeMapNodes(root, orphans)
+  ), [currentMap?.largeMapShell, currentMap?.nodeCount, orphans, root]);
+
+  const useLargeMapSurface = shouldUseLargeMapSurface({
+    nodeCount: largeMapNodeCount,
+    hasSavedMap: !!currentMap?.id,
+  });
+
+  const requestLargeMapSceneRefresh = useCallback(() => {
+    if (!useLargeMapSurface || !currentMap?.id) return false;
+    setLargeMapSceneRefreshKey((key) => key + 1);
+    return true;
+  }, [currentMap?.id, useLargeMapSurface]);
+
+  const cancelScheduledResetView = useCallback(() => {
+    scheduleResetViewTokenRef.current += 1;
+    pendingInitialCenterRef.current = false;
+    pendingInitialLargeMapCenterRef.current = false;
+  }, []);
+
+  const toggleExpandedStack = useCallback((nodeId) => {
+    const id = String(nodeId || '').trim();
+    if (!id) return;
+    cancelScheduledResetView();
+    setExpandedStacks((prev) => getNextExpandedStackState(prev, id));
+  }, [cancelScheduledResetView]);
 
   // Build a unified index for root + orphan + subdomain trees
-  const forestIndex = useMemo(() => buildForestIndex(root, orphans), [root, orphans]);
+  const forestIndex = useMemo(() => (
+    useLargeMapSurface ? { nodes: new Map(), trees: new Map() } : buildForestIndex(root, orphans)
+  ), [root, orphans, useLargeMapSurface]);
 
   const mapLayout = useMemo(() => {
+    if (useLargeMapSurface) return null;
     if (!renderRoot) return null;
     return computeLayout(renderRoot, visibleOrphans, showThumbnails, expandedStacks, {
       mode: 'after-root',
       renderOrphanChildren: true,
+      orientation: mapOrientation,
     });
-  }, [renderRoot, visibleOrphans, showThumbnails, expandedStacks]);
+  }, [expandedStacks, mapOrientation, renderRoot, showThumbnails, useLargeMapSurface, visibleOrphans]);
 
-  useEffect(() => {
+  const layoutConnectorEndpointReservations = useMemo(() => {
+    const reservations = new Map();
+    if (!mapLayout?.nodes || !Array.isArray(mapLayout.connectors)) return reservations;
+
+    const addReservation = (nodeId, reservation, connectorIndex, endpoint) => {
+      const key = getAnchorReservationKey(nodeId, reservation.anchor);
+      const list = reservations.get(key) || [];
+      list.push({
+        id: `layout-${connectorIndex}-${endpoint}`,
+        kind: 'layout',
+        offset: reservation.offset,
+      });
+      reservations.set(key, list);
+    };
+
+    mapLayout.connectors.forEach((connector, connectorIndex) => {
+      [
+        { endpoint: 'source', x: connector.x1, y: connector.y1 },
+        { endpoint: 'target', x: connector.x2, y: connector.y2 },
+      ].forEach((point) => {
+        mapLayout.nodes.forEach((nodeData, nodeId) => {
+          const reservation = getLayoutConnectorEndpointAnchorReservation(nodeData, point);
+          if (reservation) addReservation(nodeId, reservation, connectorIndex, point.endpoint);
+        });
+      });
+    });
+
+    return reservations;
+  }, [mapLayout]);
+
+  useLayoutEffect(() => {
     layoutRef.current = mapLayout;
   }, [mapLayout]);
 
+  const mergeLargeMapNodeCache = useCallback((
+    incomingNodes,
+    { preserveExistingAssetsOnEmpty = true } = {},
+  ) => {
+    const nodes = Array.isArray(incomingNodes) ? incomingNodes : [incomingNodes].filter(Boolean);
+    if (!nodes.length) return false;
+
+    let changed = false;
+    nodes.forEach((node) => {
+      const id = String(node?.id || '').trim();
+      if (!id) return;
+      const existing = largeMapNodeCacheRef.current.get(id);
+      const merged = mergeLargeMapNodeSnapshot(existing, node, { preserveExistingAssetsOnEmpty });
+      if (JSON.stringify(existing || null) !== JSON.stringify(merged || null)) {
+        largeMapNodeCacheRef.current.set(id, merged);
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      setLargeMapNodeCacheVersion((version) => version + 1);
+    }
+    return changed;
+  }, []);
+
+  const mergeLargeMapNodeAssetCache = useCallback((nodeId, assets) => {
+    const id = String(nodeId || '').trim();
+    if (!id || !assets || typeof assets !== 'object') return false;
+    return mergeLargeMapNodeCache({
+      id,
+      ...assets,
+      hasThumbnail: Boolean(assets.thumbnailUrl),
+    }, { preserveExistingAssetsOnEmpty: true });
+  }, [mergeLargeMapNodeCache]);
+
+  const getLargeMapNodeSnapshot = useCallback((nodeId) => (
+    largeMapNodeCacheRef.current.get(String(nodeId || '').trim()) || null
+  ), []);
+
+  const getNodeStackSelectionIds = useCallback((nodeId) => {
+    if (!nodeId) return [];
+    const fallbackIds = [nodeId];
+    if (useLargeMapSurface) {
+      const id = String(nodeId || '').trim();
+      const cachedNode = largeMapNodeCacheRef.current.get(id);
+      const visibleNode = largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, id));
+      return getLargeMapStackSelectionIdsFromNode(cachedNode || visibleNode, id);
+    }
+    const layoutNode = layoutRef.current?.nodes?.get(nodeId);
+    const stackInfo = layoutNode?.stackInfo;
+    if (!stackInfo?.collapsed || !stackInfo.parentId) {
+      return fallbackIds;
+    }
+
+    const stackParent = collectAllNodesWithOrphans(root, orphans)
+      .find((node) => sameId(node.id, stackInfo.parentId));
+    const stackChildren = Array.isArray(stackParent?.children) ? stackParent.children : [];
+    const stackIds = stackChildren.reduce((ids, child) => collectNodeAndDescendantIds(child, ids), []);
+    return stackIds.length ? stackIds : fallbackIds;
+  }, [root, orphans, useLargeMapSurface]);
+
+  const addNodeAndStackSelection = useCallback((targetSet, nodeId) => {
+    getNodeStackSelectionIds(nodeId).forEach((id) => targetSet.add(id));
+  }, [getNodeStackSelectionIds]);
+
   const brokenConnections = useMemo(() => {
+    if (useLargeMapSurface) return [];
     const visibleNodes = collectAllNodesWithOrphans(renderRoot, visibleOrphans);
     const nodeById = new Map(visibleNodes.map((node) => [node.id, node]));
     const urlToId = new Map();
@@ -1663,7 +5360,7 @@ export default function App() {
         return { id: `broken-${sourceId}-${targetId}-${index}`, sourceId, targetId };
       })
       .filter(Boolean);
-  }, [scanMeta.brokenLinks, renderRoot, visibleOrphans, forestIndex]);
+  }, [scanMeta.brokenLinks, renderRoot, visibleOrphans, forestIndex, useLargeMapSurface]);
 
   const autoCrosslinkConnections = useMemo(
     () => connections.filter((conn) => conn.type === 'crosslink' && conn.autoRoute),
@@ -1702,31 +5399,98 @@ export default function App() {
     return isPlacementHidden(sourceMeta) || isPlacementHidden(targetMeta);
   }, [forestIndex, layerVisibility]);
 
-  // Check if there are any comments in the map (for notification dot)
-  const hasAnyComments = useMemo(() => {
-    const checkComments = (node) => {
-      if (!node) return false;
-      if (node.comments?.length > 0) return true;
-      return node.children?.some(checkComments) || false;
-    };
-    const rootHasComments = root ? checkComments(root) : false;
-    const orphansHaveComments = orphans.some(o => o.comments?.length > 0);
-    return rootHasComments || orphansHaveComments;
-  }, [root, orphans]);
+  const currentCommentMentionMapKey = useMemo(() => {
+    if (currentMap?.id) return currentMap.id;
+    return root?.url || currentMap?.name || 'draft';
+  }, [currentMap?.id, currentMap?.name, root?.url]);
+
+  const currentCommentMentionStorageKey = useMemo(
+    () => getCommentMentionReadStorageKey(currentUser, currentCommentMentionMapKey),
+    [currentCommentMentionMapKey, currentUser],
+  );
+  const legacyCommentMentionStorageKey = useMemo(
+    () => getLegacyCommentMentionReadStorageKey(currentUser, currentCommentMentionMapKey),
+    [currentCommentMentionMapKey, currentUser],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      let raw = window.localStorage.getItem(currentCommentMentionStorageKey);
+      if (!raw) {
+        raw = window.localStorage.getItem(legacyCommentMentionStorageKey);
+        if (raw) {
+          window.localStorage.setItem(currentCommentMentionStorageKey, raw);
+          window.localStorage.removeItem(legacyCommentMentionStorageKey);
+        }
+      }
+      if (!raw) {
+        setReadMentionCommentIds(new Set());
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const nextIds = Array.isArray(parsed?.commentIds) ? parsed.commentIds : [];
+      setReadMentionCommentIds(new Set(nextIds.map((id) => String(id))));
+    } catch (error) {
+      console.warn('Failed to load comment mention read state', error);
+      setReadMentionCommentIds(new Set());
+    }
+  }, [currentCommentMentionStorageKey, legacyCommentMentionStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        currentCommentMentionStorageKey,
+        JSON.stringify({ commentIds: Array.from(readMentionCommentIds) }),
+      );
+      window.localStorage.removeItem(legacyCommentMentionStorageKey);
+    } catch (error) {
+      console.warn('Failed to persist comment mention read state', error);
+    }
+  }, [currentCommentMentionStorageKey, legacyCommentMentionStorageKey, readMentionCommentIds]);
+
+  const commentEntries = useMemo(() => {
+    const entries = [];
+    if (renderRoot) {
+      collectCommentEntriesFromTree(renderRoot, entries);
+    }
+    visibleOrphans.forEach((orphan) => collectCommentEntriesFromTree(orphan, entries));
+    return entries;
+  }, [renderRoot, visibleOrphans]);
+
+  const unreadMentionCommentIds = useMemo(() => {
+    const mentionKeys = buildUserMentionKeys(currentUser);
+    if (!mentionKeys.size) return [];
+    return commentEntries
+      .filter(({ comment }) => (comment.mentions || []).some((mention) => mentionKeys.has(String(mention || '').trim().toLowerCase())))
+      .map(({ comment }) => String(comment.id));
+  }, [commentEntries, currentUser]);
+
+  const hasUnreadCommentMentions = useMemo(
+    () => unreadMentionCommentIds.some((commentId) => !readMentionCommentIds.has(commentId)),
+    [readMentionCommentIds, unreadMentionCommentIds],
+  );
+
+  const markMentionCommentsRead = useCallback((filterFn = null) => {
+    if (!unreadMentionCommentIds.length) return;
+    const idsToRead = unreadMentionCommentIds.filter((commentId) => {
+      if (!filterFn) return true;
+      const entry = commentEntries.find(({ comment }) => String(comment.id) === commentId);
+      return entry ? filterFn(entry) : false;
+    });
+    if (!idsToRead.length) return;
+    setReadMentionCommentIds((prev) => {
+      const next = new Set(prev);
+      idsToRead.forEach((commentId) => next.add(String(commentId)));
+      return next;
+    });
+  }, [commentEntries, unreadMentionCommentIds]);
 
   const markerStatusUsage = useMemo(() => {
-    const usedStatuses = new Set();
-    const nodes = collectAllNodesWithOrphans(root, orphans);
-    nodes.forEach((node) => {
-      const annotations = node?.annotations;
-      if (!annotations) return;
-      const status = annotations.status || 'none';
-      if (status !== 'none') {
-        usedStatuses.add(status);
-      }
-    });
+    const usedStatuses = new Set(fullMapDisplaySummary.markerStatusValues || []);
     return { usedStatuses, hasAnyMarker: usedStatuses.size > 0 };
-  }, [root, orphans]);
+  }, [fullMapDisplaySummary.markerStatusValues]);
 
   const shouldAutoMarkMoved = useMemo(() => {
     if (!root || isImportedMap) return false;
@@ -1761,27 +5525,30 @@ export default function App() {
     return changeFilters?.statuses?.[status] !== false;
   }, [changeFilters]);
 
-  // Read access level from URL on load
+  // Read access level from the current share route.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const shareId = params.get('share');
-    const access = params.get('access');
-
-    if (shareId) {
+    const access = currentRoute?.surface === ROUTE_SURFACES.SHARE ? currentRoute?.accessLevel : null;
+    if (currentRoute?.surface === ROUTE_SURFACES.SHARE) {
       setHasCreatedShareLink(true);
     }
     if (access && Object.values(ACCESS_LEVELS).includes(access)) {
       setAccessLevel(access);
       setSharePermission(access);
       setCurrentShareAccess(access);
+      return;
     }
-  }, []);
+    if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
+      setAccessLevel(ACCESS_LEVELS.EDIT);
+      setCurrentShareAccess(null);
+    }
+  }, [currentRoute?.accessLevel, currentRoute?.surface]);
 
   const legacyFeatureGates = useMemo(() => {
     const isEdit = accessLevel === ACCESS_LEVELS.EDIT;
     const isComment = accessLevel === ACCESS_LEVELS.COMMENT;
     return {
       mapView: true,
+      activityView: isEdit,
       mapComment: isEdit || isComment,
       mapEdit: isEdit,
       versionSave: isEdit,
@@ -1790,6 +5557,9 @@ export default function App() {
       discoveryRun: isEdit,
       collabPanelView: isEdit,
       collabInviteSend: isEdit,
+      collabSettingsManage: isEdit,
+      accessRequestsView: isEdit,
+      accessRequestsCreate: false,
       presenceView: isEdit || isComment,
     };
   }, [accessLevel]);
@@ -1807,39 +5577,189 @@ export default function App() {
   }, [currentMap?.id, featureGatesEnabled, isLoggedIn, legacyFeatureGates, mapPermissions?.features]);
 
   const canEditValue = !!effectiveFeatureGates.mapEdit && !isCoeditingReadOnlyMode;
-  const canCommentValue = !isCoeditingReadOnlyMode && (canEditValue || !!effectiveFeatureGates.mapComment);
+  const canCommentValue = canEditValue || !!effectiveFeatureGates.mapComment;
+  const canViewCommentsValue = (!!currentMap?.id && !!effectiveFeatureGates.mapView) || canCommentValue;
+  const canViewVersionHistoryValue = currentMap?.id
+    ? !!effectiveFeatureGates.activityView
+    : (!!root && canEditValue);
+  const canSaveVersionValue = !!effectiveFeatureGates.versionSave && !isCoeditingReadOnlyMode;
+  const canViewActivityValue = !!currentMap?.id && !!effectiveFeatureGates.activityView;
   const canManageSharesValue = !!effectiveFeatureGates.shareManage;
   const canViewCollaborationPanelValue = !!effectiveFeatureGates.collabPanelView;
   const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
+  const collaborationCapabilities = mapPermissions?.collaboration || null;
+  const collaborationInviteRoleOptionsValue = useMemo(() => {
+    const planKey = String(currentUser?.entitlements?.plan?.key || '').trim().toLowerCase();
+    const editorGrantExtra = Number(currentUser?.entitlements?.limits?.editors?.grantExtra || 0);
+    const isTeamTrial = currentUser?.entitlements?.trial?.active
+      && String(currentUser?.entitlements?.trial?.kind || '').trim().toLowerCase() === 'team';
+    const canInviteEditor = isTeamTrial || editorGrantExtra > 0 || !['free', 'pro'].includes(planKey);
+    const roles = Array.isArray(collaborationCapabilities?.inviteRoles)
+      ? collaborationCapabilities.inviteRoles
+      : [];
+    return roles
+      .map((role) => String(role || '').trim().toLowerCase())
+      .filter((role) => (
+        role === 'viewer'
+        || role === 'commenter'
+        || (role === 'editor' && canInviteEditor)
+      ));
+  }, [
+    collaborationCapabilities?.inviteRoles,
+    currentUser?.entitlements?.limits?.editors?.grantExtra,
+    currentUser?.entitlements?.plan?.key,
+    currentUser?.entitlements?.trial?.active,
+    currentUser?.entitlements?.trial?.kind,
+  ]);
+  const canSelfServeCollaborationInviteValue = collaborationInviteRoleOptionsValue.length > 0;
+  const canSelfServeCollaborationValue = canSelfServeCollaborationInviteValue || !!collaborationCapabilities?.canRequestAccess;
+  const canManageCollaborationSettingsValue = !!effectiveFeatureGates.collabSettingsManage;
+  const canViewAccessRequestsValue = !!effectiveFeatureGates.accessRequestsView;
   const canViewPresenceValue = !!effectiveFeatureGates.presenceView;
+  const inferredCollaborationRole = useMemo(() => {
+    if (!currentUser?.id) return 'viewer';
+    if (currentMap?.user_id && sameId(currentMap.user_id, currentUser.id)) return 'owner';
+    return collaborationMemberships.find((member) => sameId(member.userId, currentUser.id))?.role || 'viewer';
+  }, [collaborationMemberships, currentMap?.user_id, currentUser?.id]);
+  const currentCollaborationRole = useMemo(
+    () => String(mapPermissions?.role || inferredCollaborationRole || 'viewer').trim().toLowerCase() || 'viewer',
+    [inferredCollaborationRole, mapPermissions?.role],
+  );
+  const pendingInviteForCurrentRoute = useMemo(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'map' || !currentRoute?.mapId) {
+      return null;
+    }
+    return (pendingMapInvites || []).find((invite) => sameId(invite.mapId, currentRoute.mapId)) || null;
+  }, [currentRoute?.mapId, currentRoute?.section, currentRoute?.surface, pendingMapInvites]);
+  const canManageCollaborationMembersValue = (
+    ['owner', 'editor'].includes(currentCollaborationRole)
+    || (canManageSharesValue && canViewCollaborationPanelValue)
+  );
+  const canSendCollaborationInvitesResolvedValue = (
+    canSendCollaborationInvitesValue
+    || canManageCollaborationMembersValue
+    || canSelfServeCollaborationInviteValue
+  );
+  const canManageCollaborationSettingsResolvedValue = canManageCollaborationSettingsValue || currentCollaborationRole === 'owner';
+  const canViewAccessRequestsResolvedValue = canViewAccessRequestsValue || currentCollaborationRole === 'owner';
+  const isReaderOnlyMapRoleValue = !!currentMap?.id && ['viewer', 'commenter'].includes(currentCollaborationRole);
+  const canSelfServeReaderShareLinksValue = isReaderOnlyMapRoleValue
+    && collaborationCapabilities?.accessPolicy === 'viewer_invites_open';
+  const canOpenShareModalValue = canManageSharesValue || canSelfServeReaderShareLinksValue;
+  const clientShareLinksPlanAllowedValue = currentUser?.entitlements?.features?.clientShareLinks !== false;
+  const canUseShareLinksValue = canOpenShareModalValue;
+  const shareLinksDisabledReasonValue = canSelfServeReaderShareLinksValue
+    ? ''
+    : 'Your account does not have permission to create share links for this map.';
+  const canOpenCollaborationModalValue = COLLABORATION_UI_ENABLED && isLoggedIn && (
+    canViewCollaborationPanelValue
+    || canSelfServeCollaborationValue
+    || canSendCollaborationInvitesResolvedValue
+  );
+
+  useEffect(() => {
+    if (showVersionHistoryDrawer && !canViewVersionHistoryValue) {
+      setShowVersionHistoryDrawer(false);
+    }
+  }, [canViewVersionHistoryValue, showVersionHistoryDrawer]);
+
+  const maxGrantableSharePermissionValue = canEditValue
+    ? ACCESS_LEVELS.EDIT
+    : canCommentValue
+      ? ACCESS_LEVELS.COMMENT
+      : ACCESS_LEVELS.VIEW;
+  const allowedSharePermissionsValue = useMemo(() => {
+    if (!canOpenShareModalValue) return [];
+    const maxRank = SHARE_ACCESS_RANK[maxGrantableSharePermissionValue] || SHARE_ACCESS_RANK[ACCESS_LEVELS.VIEW];
+    return Object.values(ACCESS_LEVELS).filter((permission) => (
+      (SHARE_ACCESS_RANK[permission] || 0) <= maxRank
+      && (clientShareLinksPlanAllowedValue || permission !== ACCESS_LEVELS.EDIT)
+    ));
+  }, [canOpenShareModalValue, clientShareLinksPlanAllowedValue, maxGrantableSharePermissionValue]);
+
+  useEffect(() => {
+    if (!allowedSharePermissionsValue.length) return;
+    if (allowedSharePermissionsValue.includes(sharePermission)) return;
+    setSharePermission(allowedSharePermissionsValue[0]);
+  }, [allowedSharePermissionsValue, sharePermission]);
+
+  const sharePermissionDisabledReasonValue = clientShareLinksPlanAllowedValue
+    ? 'Your account does not have permission to grant others that level on this map.'
+    : 'Can edit share links require a paid plan.';
+  const activeProjectsLimitValue = currentUser?.entitlements?.limits?.activeProjects || null;
+  const projectLimitReachedValue = useMemo(() => {
+    if (!activeProjectsLimitValue || activeProjectsLimitValue.unlimited) return false;
+    const remaining = Number(activeProjectsLimitValue.remaining);
+    if (Number.isFinite(remaining)) return remaining <= 0;
+    const used = Number(activeProjectsLimitValue.used);
+    const limit = Number(activeProjectsLimitValue.limit);
+    return Number.isFinite(used) && Number.isFinite(limit) && used >= limit;
+  }, [activeProjectsLimitValue]);
+  const projectCreateDisabledReasonValue = projectLimitReachedValue ? 'project limit reached' : '';
 
   // Permission helper functions
-  const canEdit = () => canEditValue;
-  const canComment = () => canCommentValue;
-  const canManageShares = () => canManageSharesValue;
-  const canViewCollaborationPanel = () => canViewCollaborationPanelValue;
-  const canSendCollaborationInvites = () => canSendCollaborationInvitesValue;
-  const canViewPresence = () => canViewPresenceValue;
+  const canEdit = useCallback(() => canEditValue, [canEditValue]);
+  const canComment = useCallback(() => canCommentValue, [canCommentValue]);
+  const canViewComments = useCallback(() => canViewCommentsValue, [canViewCommentsValue]);
+  const canViewVersionHistory = useCallback(() => canViewVersionHistoryValue, [canViewVersionHistoryValue]);
+  const canSaveVersion = useCallback(() => canSaveVersionValue, [canSaveVersionValue]);
+  const canViewActivity = useCallback(() => canViewActivityValue, [canViewActivityValue]);
+  const canViewCollaborationPanel = useCallback(() => canViewCollaborationPanelValue, [canViewCollaborationPanelValue]);
+  const canSendCollaborationInvites = useCallback(
+    () => canSendCollaborationInvitesResolvedValue,
+    [canSendCollaborationInvitesResolvedValue],
+  );
+  const canManageCollaborationSettings = useCallback(
+    () => canManageCollaborationSettingsResolvedValue,
+    [canManageCollaborationSettingsResolvedValue],
+  );
+  const canViewAccessRequests = useCallback(
+    () => canViewAccessRequestsResolvedValue,
+    [canViewAccessRequestsResolvedValue],
+  );
 
-  // Theme toggle functions
-  const toggleTheme = () => {
-    setTheme(prev => {
-      if (prev === 'auto') {
-        // Check current actual appearance
-        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        return isDark ? 'light' : 'dark';
-      }
-      return prev === 'dark' ? 'light' : 'dark';
-    });
-  };
+  useEffect(() => {
+    if (!collaborationInviteRoleOptionsValue.length) return;
+    if (collaborationInviteRoleOptionsValue.includes(collaborationInviteRole)) return;
+    setCollaborationInviteRole(collaborationInviteRoleOptionsValue[0]);
+  }, [collaborationInviteRole, collaborationInviteRoleOptionsValue]);
 
-  // Helper to get current visual theme
-  const getCurrentTheme = () => {
-    if (theme === 'auto') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  useEffect(() => {
+    seenActivityIdsRef.current = new Set();
+    primedActivityMapIdRef.current = null;
+    if (!currentMap?.id || !isLoggedIn || !currentUser || !canViewActivityValue) {
+      setIsLoadingActivity(false);
+      setMapActivity([]);
+      return;
     }
-    return theme;
-  };
+    loadMapActivity(currentMap.id, { silent: false, allowToast: false });
+  }, [canViewActivityValue, currentMap?.id, currentUser, isLoggedIn, loadMapActivity]);
+
+  useEffect(() => {
+    if (!currentMap?.id || !isLoggedIn || !currentUser || !canViewActivityValue || showVersionHistoryDrawer) {
+      return undefined;
+    }
+
+    const refreshActivity = () => {
+      loadMapActivity(currentMap.id, { silent: true, allowToast: true });
+    };
+
+    const intervalId = window.setInterval(refreshActivity, ACTIVITY_POLL_INTERVAL_MS);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshActivity();
+      }
+    };
+
+    window.addEventListener('focus', refreshActivity);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshActivity);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [canViewActivityValue, currentMap?.id, currentUser, isLoggedIn, loadMapActivity, showVersionHistoryDrawer]);
 
   // Show confirmation modal and return promise
   const showConfirm = useCallback(({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) => {
@@ -1856,40 +5776,51 @@ export default function App() {
     });
   }, []);
 
+  const confirmScreenshotCreditUsage = useCallback(async ({
+    mode = 'thumbnail',
+    captureType = 'thumb',
+    count = 1,
+    scope = 'all',
+  } = {}) => {
+    if (!guardAccountCanCreateWork(mode === 'screenshot' ? 'Full screenshot capture' : 'Screenshot capture')) {
+      return false;
+    }
+    const preview = getScreenshotCreditPreview({ captureType, count });
+    if (preview.quantity <= 0 || preview.credits <= 0) return true;
+    const label = mode === 'screenshot' ? 'full screenshot' : 'thumbnail';
+    if (preview.insufficient) {
+      showEntitlementLock({
+        title: 'Not enough screenshot credits',
+        message: `This capture can use up to ${formatEntitlementCount(preview.credits)} credit${preview.credits === 1 ? '' : 's'}, but this account has ${formatEntitlementCount(preview.remaining)} remaining. Select only the images you want with Shift+click or Shift+drag, buy credits, or change plans to capture and download all visible area or full page screenshots.`,
+        actionLabel: 'Upgrade',
+        actionContext: 'screenshot-credits',
+      });
+      return false;
+    }
+    const stageTotal = getImageCaptureStageTotalForCount(mode, preview.quantity);
+    const stageCopy = getImageCaptureScaleTierForCount(mode, preview.quantity) === IMAGE_CAPTURE_SCALE_TIERS.large
+      ? ` It will run in ${stageTotal} automatic stages.`
+      : '';
+    return showConfirm({
+      title: 'Use screenshot credits?',
+      message: `This will capture ${formatEntitlementCount(preview.quantity)} ${label}${preview.quantity === 1 ? '' : 's'} from ${scope === 'selected' ? 'selected pages' : 'this map'} and can use up to ${formatEntitlementCount(preview.credits)} credit${preview.credits === 1 ? '' : 's'}.${stageCopy} Successful new captures are charged; failed or skipped captures are not.`,
+      confirmText: 'Start capture',
+      cancelText: 'Cancel',
+    });
+  }, [getScreenshotCreditPreview, guardAccountCanCreateWork, showConfirm, showEntitlementLock]);
+
   const resetScanLayers = useCallback(() => {
     setScanMeta({ brokenLinks: [] });
-    setScanLayerAvailability({
-      placementPrimary: false,
-      placementSubdomain: false,
-      placementOrphan: false,
-      typePages: false,
-      typeFiles: false,
-      statusBroken: false,
-      statusError: false,
-      statusInactive: false,
-      statusAuth: false,
-      statusDuplicate: false,
-    });
-    setScanLayerVisibility({
-      placementPrimary: true,
-      placementSubdomain: true,
-      placementOrphan: true,
-      typePages: true,
-      typeFiles: true,
-      statusBroken: true,
-      statusError: true,
-      statusInactive: true,
-      statusAuth: true,
-      statusDuplicate: true,
-    });
+    setScanLayerAvailability({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
+    setScanLayerVisibility({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
   }, []);
 
   const clearCanvas = async () => {
     if (hasMap && !currentMap?.id) {
       const wantsSave = await showConfirm({
-        title: 'Save Map?',
+        title: 'Save map?',
         message: 'You have an unsaved map. Save it before clearing?',
-        confirmText: 'Save Map',
+        confirmText: 'Save map',
         cancelText: 'Clear',
       });
       if (wantsSave) {
@@ -1900,6 +5831,7 @@ export default function App() {
       setRoot(null);
       setOrphans([]);
       setCurrentMap(null);
+      navigateToRoute(createAppHomeRoute());
       setIsImportedMap(false);
       setShowThumbnails(false);
       setHasCreatedShareLink(false);
@@ -1911,7 +5843,7 @@ export default function App() {
       return true;
     }
     const confirmed = await showConfirm({
-      title: 'Clear Canvas',
+      title: 'Clear canvas',
       message: 'Clear the canvas? This cannot be undone.',
       confirmText: 'Clear',
       danger: true
@@ -1927,6 +5859,7 @@ export default function App() {
     setRoot(null);
     setOrphans([]);
     setCurrentMap(null);
+    navigateToRoute(createAppHomeRoute());
     setIsImportedMap(false);
     setShowThumbnails(false);
     setHasCreatedShareLink(false);
@@ -1936,6 +5869,64 @@ export default function App() {
     setUrlInput('');
     resetScanLayers();
     return true;
+  };
+
+  const openCreateMapFlow = async ({ defaultProjectId = null } = {}) => {
+    const normalizedProjectId = normalizeProjectSelection(defaultProjectId);
+
+    if (!currentUser) {
+      showToast('Please sign in to create a new map', 'warning');
+      openAuthModal();
+      return;
+    }
+    if (!guardAccountCanCreateWork('Map creation')) return;
+
+    const hasUnsavedMap = hasMap && !currentMap?.id;
+    if (hasUnsavedMap) {
+      const wantsSave = await showConfirm({
+        title: 'Save current map?',
+        message: 'You have an unsaved map. Save it before creating a new one?',
+        confirmText: 'Save',
+        cancelText: "Don't Save",
+      });
+
+      if (wantsSave) {
+        setPendingCreateAfterSave({ projectId: normalizedProjectId });
+        setCreateMapMode(false);
+        setCreateMapDefaults(null);
+        setShowProjectsModal(false);
+        setShowSaveMapModal(true);
+        return;
+      }
+      setRoot(null);
+      setOrphans([]);
+      setCurrentMap(null);
+      navigateToRoute(createAppHomeRoute());
+      setIsImportedMap(false);
+      setShowThumbnails(false);
+      setHasCreatedShareLink(false);
+      setCurrentShareAccess(null);
+      resetThumbnailQueue(0);
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+      setUrlInput('');
+      resetScanLayers();
+    } else if (hasMap) {
+      const cleared = await clearCanvas();
+      if (!cleared) return;
+    }
+
+    setDuplicateMapConfig(null);
+    setPendingLoadMap(null);
+    setPendingCreateAfterSave(null);
+    setShowProjectsModal(false);
+    setShowCreateMapModal(false);
+    setCreateMapMode(true);
+    setCreateMapDefaults({
+      projectId: normalizedProjectId,
+      name: '',
+      notes: '',
+    });
+    setShowSaveMapModal(true);
   };
 
   // Show prompt modal and return promise
@@ -1997,9 +5988,125 @@ export default function App() {
     return { minX, minY, maxX, maxY };
   }, [mapLayout]);
 
+  const canvasViewportBounds = useMemo(() => {
+    if (disableCanvasCulling) return null;
+    return getCanvasViewportWorldBounds({
+      pan,
+      scale,
+      canvasSize,
+      overscanPx: CANVAS_NODE_OVERSCAN_PX,
+    });
+  }, [canvasSize, disableCanvasCulling, pan, scale]);
+
+  const visibleCanvasNodeData = useMemo(() => (
+    mapLayout
+      ? filterVisibleLayoutNodes(mapLayout.nodes, canvasViewportBounds, {
+          alwaysIncludeIds: activeBranchNodeIds,
+        })
+      : []
+  ), [activeBranchNodeIds, canvasViewportBounds, mapLayout]);
+
+  const visibleCanvasNodeIds = useMemo(() => (
+    new Set(visibleCanvasNodeData.map((nodeData) => nodeData?.node?.id).filter(Boolean))
+  ), [visibleCanvasNodeData]);
+
+  const visibleAutoCrosslinkConnections = useMemo(() => (
+    autoCrosslinkConnections.filter((conn) => (
+      shouldRenderConnectionForVisibleNodes(conn, visibleCanvasNodeIds)
+    ))
+  ), [autoCrosslinkConnections, visibleCanvasNodeIds]);
+
+  const visibleBrokenConnections = useMemo(() => (
+    brokenConnections.filter((conn) => (
+      shouldRenderConnectionForVisibleNodes(conn, visibleCanvasNodeIds)
+    ))
+  ), [brokenConnections, visibleCanvasNodeIds]);
+
+  const visibleCanvasConnections = useMemo(() => (
+    connections.filter((conn) => (
+      shouldRenderConnectionForVisibleNodes(conn, visibleCanvasNodeIds)
+    ))
+  ), [connections, visibleCanvasNodeIds]);
+
+  const visibleManualCrosslinkConnections = useMemo(() => (
+    visibleCanvasConnections.filter((conn) => conn.type === 'crosslink' && !conn.autoRoute)
+  ), [visibleCanvasConnections]);
+
+  const visibleUserFlowConnections = useMemo(() => (
+    visibleCanvasConnections.filter((conn) => conn.type === 'userflow')
+  ), [visibleCanvasConnections]);
+
+  useEffect(() => {
+    if (typeof PerformanceObserver === 'undefined') return undefined;
+    const observers = [];
+    try {
+      const resourceObserver = new PerformanceObserver((list) => {
+        list.getEntries().forEach((entry) => {
+          const name = String(entry?.name || '');
+          if (entry?.initiatorType === 'img' && /\/screenshots\/[^/?#]+_full_v\d+\.(?:jpe?g|png|webp)/i.test(name)) {
+            canvasPerformanceRef.current.fullImageRequests += 1;
+          }
+        });
+      });
+      resourceObserver.observe({ type: 'resource', buffered: true });
+      observers.push(resourceObserver);
+    } catch {
+      // Resource timing support varies by browser.
+    }
+    try {
+      const longTaskObserver = new PerformanceObserver((list) => {
+        list.getEntries().forEach((entry) => {
+          canvasPerformanceRef.current.longTasks += 1;
+          canvasPerformanceRef.current.longTaskMs += Number(entry.duration || 0);
+        });
+      });
+      longTaskObserver.observe({ type: 'longtask', buffered: true });
+      observers.push(longTaskObserver);
+    } catch {
+      // Long task timing is not supported in all browsers.
+    }
+    return () => observers.forEach((observer) => observer.disconnect());
+  }, []);
+
+  useEffect(() => {
+    if (!mapLayout?.nodes?.size || typeof window === 'undefined') return undefined;
+    const publishSnapshot = () => {
+      const content = contentRef.current;
+      const memory = typeof performance !== 'undefined' && performance?.memory?.usedJSHeapSize
+        ? Math.round(performance.memory.usedJSHeapSize / 1024 / 1024)
+        : null;
+      const renderedNodes = content?.querySelectorAll('[data-node-card="1"]').length || 0;
+      const renderedThumbnails = content?.querySelectorAll('img.thumb-img').length || 0;
+      const renderedFullImages = Array.from(content?.querySelectorAll('img') || [])
+        .filter((image) => /\/screenshots\/[^/?#]+_full_v\d+\.(?:jpe?g|png|webp)/i.test(image.currentSrc || image.src || ''))
+        .length;
+      const snapshot = {
+        totalNodes: mapLayout.nodes.size,
+        visibleNodes: visibleCanvasNodeData.length,
+        renderedNodes,
+        visibleThumbnails: countVisibleThumbnails(visibleCanvasNodeData, showThumbnails),
+        renderedThumbnails,
+        renderedFullImages,
+        fullImageRequests: canvasPerformanceRef.current.fullImageRequests,
+        longTasks: canvasPerformanceRef.current.longTasks,
+        longTaskMs: Math.round(canvasPerformanceRef.current.longTaskMs),
+        memoryMb: memory,
+      };
+      window.__vellicCanvasPerf = snapshot;
+      if (window.localStorage?.getItem('vellic:canvas-perf') === 'debug') {
+        console.table(snapshot);
+      }
+    };
+    publishSnapshot();
+    const interval = window.setInterval(publishSnapshot, CANVAS_PERF_PROBE_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [mapLayout, showThumbnails, visibleCanvasNodeData]);
+
   const clampPan = useCallback((newPan, scaleArg = scaleRef.current) => {
-    if (!canvasRef.current || !worldBounds) return newPan;
-    const bounds = worldBounds;
+    const panBounds = normalizeCanvasWorldBounds(useLargeMapSurface ? largeMapSceneBounds : worldBounds)
+      || normalizeCanvasWorldBounds(worldBounds);
+    if (!canvasRef.current || !panBounds) return newPan;
+    const bounds = panBounds;
 
     const viewportWidth = canvasRef.current.clientWidth;
     const viewportHeight = canvasRef.current.clientHeight;
@@ -2009,18 +6116,67 @@ export default function App() {
     const scaledRight = bounds.maxX * scaleArg;
     const scaledBottom = bounds.maxY * scaleArg;
 
-    // Keep map inside viewport with padding on all sides
-    const padding = 400;
-    const minPanX = padding - scaledRight;
-    const maxPanX = viewportWidth - padding - scaledLeft;
-    const minPanY = padding - scaledBottom;
-    const maxPanY = viewportHeight - padding - scaledTop;
+    // Keep the furthest node edge within 400px of the viewport edge when possible.
+    const padding = CANVAS_EDGE_PADDING_MAX;
+    const minPanX = viewportWidth - padding - scaledRight;
+    const maxPanX = padding - scaledLeft;
+    const minPanY = viewportHeight - padding - scaledBottom;
+    const maxPanY = padding - scaledTop;
 
-    const clampedX = Math.max(minPanX, Math.min(maxPanX, newPan.x));
-    const clampedY = Math.max(minPanY, Math.min(maxPanY, newPan.y));
+    const clampedX = clampCanvasPanAxis(newPan.x, minPanX, maxPanX);
+    const clampedY = clampCanvasPanAxis(newPan.y, minPanY, maxPanY);
 
     return { x: clampedX, y: clampedY };
-  }, [worldBounds]);
+  }, [largeMapSceneBounds, useLargeMapSurface, worldBounds]);
+
+  const resetCanvasNativeScroll = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (canvas.scrollLeft !== 0) canvas.scrollLeft = 0;
+    if (canvas.scrollTop !== 0) canvas.scrollTop = 0;
+  }, []);
+
+  const applyCanvasTransformDom = useCallback((nextScale, nextPan) => {
+    const content = contentRef.current;
+    if (content && content.dataset.largeMapSurface !== '1') {
+      content.style.transform = `translate(${nextPan.x}px, ${nextPan.y}px) scale(${nextScale})`;
+    }
+    const canvas = canvasRef.current;
+    if (canvas) {
+      resetCanvasNativeScroll();
+      const grid = getCanvasGridMetrics(nextScale);
+      canvas.style.setProperty('--canvas-pan-x', `${nextPan.x || 0}px`);
+      canvas.style.setProperty('--canvas-pan-y', `${nextPan.y || 0}px`);
+      canvas.style.setProperty('--canvas-grid-size', `${grid.size}px`);
+      canvas.style.setProperty('--canvas-grid-dot-radius', `${grid.dotRadius}px`);
+    }
+  }, [resetCanvasNativeScroll]);
+
+  const scheduleTransformStateCommit = useCallback(() => {
+    if (transformCommitRef.current.timer) {
+      clearTimeout(transformCommitRef.current.timer);
+    }
+    transformCommitRef.current.timer = setTimeout(() => {
+      transformCommitRef.current.timer = null;
+      if (transformCommitRef.current.raf) return;
+      transformCommitRef.current.raf = requestAnimationFrame(() => {
+        transformCommitRef.current.raf = null;
+        setScale(scaleRef.current);
+        setPan(panRef.current);
+      });
+    }, CANVAS_TRANSFORM_COMMIT_IDLE_MS);
+  }, []);
+
+  useEffect(() => () => {
+    if (transformCommitRef.current.timer) {
+      clearTimeout(transformCommitRef.current.timer);
+      transformCommitRef.current.timer = null;
+    }
+    if (transformCommitRef.current.raf) {
+      cancelAnimationFrame(transformCommitRef.current.raf);
+      transformCommitRef.current.raf = null;
+    }
+  }, []);
 
   const applyTransform = useCallback((next, { skipPanClamp = false } = {}) => {
     const rawScale = next?.scale ?? scaleRef.current;
@@ -2038,23 +6194,183 @@ export default function App() {
 
     scaleRef.current = nextScale;
     panRef.current = clampedPan;
-    setScale(nextScale);
-    setPan(clampedPan);
+    applyCanvasTransformDom(nextScale, clampedPan);
+    scheduleTransformStateCommit();
     return { scale: nextScale, pan: clampedPan };
-  }, [clampPan]);
+  }, [applyCanvasTransformDom, clampPan, scheduleTransformStateCommit]);
 
-  const panBy = useCallback((dx, dy, opts) => {
-    const nextPan = {
-      x: panRef.current.x + dx,
-      y: panRef.current.y + dy,
+  const getLayoutNodeScreenCenterSnapshot = useCallback((nodeId) => {
+    if (!nodeId) return null;
+    const nodeData = layoutRef.current?.nodes?.get(nodeId);
+    if (!nodeData) return null;
+    const currentScale = scaleRef.current || 1;
+    const currentPan = panRef.current || { x: 0, y: 0 };
+    return {
+      nodeId,
+      x: (nodeData.x + nodeData.w / 2) * currentScale + currentPan.x,
+      y: (nodeData.y + nodeData.h / 2) * currentScale + currentPan.y,
     };
-    return applyTransform({ scale: scaleRef.current, x: nextPan.x, y: nextPan.y }, opts);
-  }, [applyTransform]);
+  }, []);
 
-  const animatePanTo = useCallback((target) => {
+  const queueCreatedNodeViewReveal = useCallback((nodeId, sourceNodeId = null) => {
+    if (!nodeId) return;
+    pendingCreatedNodeViewRef.current = {
+      nodeId,
+      sourceCenter: getLayoutNodeScreenCenterSnapshot(sourceNodeId),
+    };
+  }, [getLayoutNodeScreenCenterSnapshot]);
+
+  useEffect(() => {
+    const pending = pendingCreatedNodeViewRef.current;
+    if (!pending?.nodeId || !mapLayout?.nodes?.size || !canvasRef.current) return;
+
+    const nodeData = mapLayout.nodes.get(pending.nodeId);
+    if (!nodeData) {
+      pendingCreatedNodeViewRef.current = null;
+      return;
+    }
+    pendingCreatedNodeViewRef.current = null;
+
+    const currentScale = scaleRef.current || 1;
+    let nextPan = { ...(panRef.current || { x: 0, y: 0 }) };
+    const sourceCenter = pending.sourceCenter;
+    const sourceNodeData = sourceCenter?.nodeId ? mapLayout.nodes.get(sourceCenter.nodeId) : null;
+    if (sourceCenter && sourceNodeData) {
+      nextPan = {
+        x: sourceCenter.x - (sourceNodeData.x + sourceNodeData.w / 2) * currentScale,
+        y: sourceCenter.y - (sourceNodeData.y + sourceNodeData.h / 2) * currentScale,
+      };
+    }
+
+    const revealPan = getPanToRevealLayoutNode({
+      nodeData,
+      viewportWidth: canvasRef.current.clientWidth,
+      viewportHeight: canvasRef.current.clientHeight,
+      scale: currentScale,
+      pan: nextPan,
+    });
+    if (revealPan) nextPan = revealPan;
+
+    const currentPan = panRef.current || { x: 0, y: 0 };
+    if (Math.abs(nextPan.x - currentPan.x) < 0.5 && Math.abs(nextPan.y - currentPan.y) < 0.5) return;
+    applyTransform({ scale: currentScale, x: nextPan.x, y: nextPan.y });
+  }, [applyTransform, mapLayout]);
+
+  const getLargeMapViewState = useCallback(() => ({
+    pan: panRef.current,
+    scale: scaleRef.current,
+  }), []);
+
+  const getCenteredNodeTransform = useCallback((node, nextScale = scaleRef.current || 1) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !node) return null;
+    return getCenteredCanvasNodeTransform(node, {
+      canvasWidth: canvas.clientWidth,
+      canvasHeight: canvas.clientHeight,
+      scale: nextScale,
+    });
+  }, []);
+
+  const centerKnownLargeMapHome = useCallback((nextScale = 1) => {
+    const nextTransform = getCenteredNodeTransform(largeMapHomeNodeRef.current, nextScale);
+    if (!nextTransform) return false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+    return true;
+  }, [applyTransform, getCenteredNodeTransform]);
+  centerKnownLargeMapHomeRef.current = centerKnownLargeMapHome;
+
+  const handleLargeMapSceneLoaded = useCallback((scene) => {
+    if (!useLargeMapSurface) return;
+    setLargeMapSceneBounds(scene?.bounds || null);
+    if (scene?.displaySummary) {
+      setLargeMapDisplaySummary(normalizeMapDisplaySummary(scene.displaySummary));
+    }
+    if (scene?.minimap) {
+      setLargeMapMinimapOverview(scene.minimap);
+    }
+    const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
+    const sceneNodeCount = Number(scene?.nodeCount || 0);
+    const hasSceneThumbnails = rawNodes.some((node) => node?.hasThumbnail || node?.thumbnailUrl);
+    if (
+      showThumbnails
+      && hasSceneThumbnails
+      && sceneNodeCount >= LARGE_MAP_THUMBNAIL_INFO_NODE_COUNT
+    ) {
+      const toastKey = `${currentMap?.id || 'unsaved'}:${sceneNodeCount}`;
+      if (largeMapThumbnailInfoToastKeyRef.current !== toastKey) {
+        largeMapThumbnailInfoToastKeyRef.current = toastKey;
+        showToast('Large map thumbnails may take a moment to fill in. Zoom or pan if some look blank.', 'info');
+      }
+    }
+    if (rawNodes.length) {
+      mergeLargeMapNodeCache(rawNodes, { preserveExistingAssetsOnEmpty: true });
+    }
+    largeMapVisibleNodesRef.current = rawNodes.map((node) => (
+      mergeLargeMapNodeSnapshot(largeMapNodeCacheRef.current.get(String(node?.id || '').trim()), node, {
+        preserveExistingAssetsOnEmpty: true,
+      }) || node
+    ));
+    if (!scene?.homeNode || !canvasRef.current) return;
+    largeMapHomeNodeRef.current = scene.homeNode;
+    const initialHomeTransform = getInitialLargeMapHomeTransform({
+      pending: pendingInitialLargeMapCenterRef.current,
+      homeNode: scene.homeNode,
+      canvasWidth: canvasRef.current.clientWidth,
+      canvasHeight: canvasRef.current.clientHeight,
+      scale: 1,
+    });
+    if (initialHomeTransform) {
+      pendingInitialLargeMapCenterRef.current = false;
+      applyTransform(initialHomeTransform, { skipPanClamp: true });
+    } else if (pendingInitialLargeMapCenterRef.current) {
+      scheduleResetViewRef.current?.(20);
+    }
+  }, [applyTransform, currentMap?.id, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
+
+  const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
+    let homeNode = largeMapHomeNodeRef.current;
+
+    if (!homeNode && currentMap?.id) {
+      try {
+        const viewScale = scaleRef.current || 1;
+        const panValue = panRef.current || { x: 0, y: 0 };
+        const canvas = canvasRef.current;
+        const response = await api.getMapScene(currentMap.id, {
+          x: (0 - panValue.x) / viewScale,
+          y: (0 - panValue.y) / viewScale,
+          w: (canvas?.clientWidth || 1) / viewScale,
+          h: (canvas?.clientHeight || 1) / viewScale,
+          zoom: viewScale,
+          orientation: mapOrientation,
+          thumbnails: showThumbnails ? '1' : '0',
+          overscan: CANVAS_NODE_OVERSCAN_PX,
+          expandedStacks: getExpandedStackIds(expandedStacks).join(','),
+        });
+        homeNode = response?.scene?.homeNode || null;
+        if (homeNode) largeMapHomeNodeRef.current = homeNode;
+      } catch (error) {
+        console.warn('Large map reset failed', error);
+      }
+    }
+
+    const nextTransform = getCenteredNodeTransform(homeNode, nextScale);
+    if (!nextTransform) return false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+    return true;
+  }, [
+    applyTransform,
+    currentMap?.id,
+    expandedStacks,
+    getCenteredNodeTransform,
+    mapOrientation,
+    showThumbnails,
+  ]);
+
+  const animatePanTo = useCallback((target, options = {}) => {
     const start = { ...panRef.current };
     const startTime = performance.now();
     const duration = 360;
+    const { skipPanClamp = false } = options;
 
     const tick = (now) => {
       const elapsed = Math.min((now - startTime) / duration, 1);
@@ -2063,7 +6379,7 @@ export default function App() {
         x: start.x + (target.x - start.x) * ease,
         y: start.y + (target.y - start.y) * ease,
       };
-      applyTransform({ scale: scaleRef.current, x: next.x, y: next.y });
+      applyTransform({ scale: scaleRef.current, x: next.x, y: next.y }, { skipPanClamp });
       if (elapsed < 1) {
         requestAnimationFrame(tick);
       }
@@ -2090,6 +6406,74 @@ export default function App() {
     applyTransform({ scale: scaleRef.current, x: nextPan.x, y: nextPan.y });
   }, [applyTransform]);
 
+  const focusLargeMapNodeById = useCallback(async (nodeId, options = {}) => {
+    const canvas = canvasRef.current;
+    if (!nodeId || !canvas || !currentMap?.id) return false;
+
+    const scaleValue = scaleRef.current || 1;
+    const panValue = panRef.current || { x: 0, y: 0 };
+    const expandedStackIds = getExpandedStackIds(expandedStacks);
+
+    try {
+      const response = await api.getMapScene(currentMap.id, {
+        x: (0 - panValue.x) / scaleValue,
+        y: (0 - panValue.y) / scaleValue,
+        w: (canvasSize.width || canvas.clientWidth || 1) / scaleValue,
+        h: (canvasSize.height || canvas.clientHeight || 1) / scaleValue,
+        zoom: scaleValue,
+        orientation: mapOrientation,
+        thumbnails: showThumbnails ? '1' : '0',
+        overscan: CANVAS_NODE_OVERSCAN_PX,
+        expandedStacks: expandedStackIds.join(','),
+        targetNodeId: nodeId,
+      });
+
+      const scene = response?.scene || {};
+      const targetNode = scene.targetNode
+        || (scene.nodes || []).find((node) => node?.id === nodeId);
+      if (!targetNode) return false;
+
+      if (Array.isArray(scene.expandedStackIds) && scene.expandedStackIds.length) {
+        setExpandedStacks((prev) => {
+          const next = { ...prev };
+          scene.expandedStackIds.forEach((id) => {
+            if (id) next[id] = true;
+          });
+          return next;
+        });
+      }
+
+      const hasScreenTarget = Number.isFinite(options.screenRight)
+        && (Number.isFinite(options.screenCenterY) || Number.isFinite(options.screenTop));
+      const leftShift = Math.min(240, canvas.clientWidth * 0.25);
+      const nodeCenterX = targetNode.x + targetNode.w / 2;
+      const nodeCenterY = targetNode.y + targetNode.h / 2;
+      applyTransform({
+        scale: scaleValue,
+        x: hasScreenTarget
+          ? options.screenRight - (targetNode.x + targetNode.w) * scaleValue
+          : (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scaleValue,
+        y: hasScreenTarget
+          ? (Number.isFinite(options.screenTop)
+            ? options.screenTop - targetNode.y * scaleValue
+            : options.screenCenterY - nodeCenterY * scaleValue)
+          : canvas.clientHeight / 2 - nodeCenterY * scaleValue,
+      }, { skipPanClamp: true });
+      return true;
+    } catch (error) {
+      console.warn('Large map focus failed', error);
+      return false;
+    }
+  }, [
+    applyTransform,
+    canvasSize.height,
+    canvasSize.width,
+    currentMap?.id,
+    expandedStacks,
+    mapOrientation,
+    showThumbnails,
+  ]);
+
   const findStackParentsForNode = useCallback((node, targetId, depth = 0) => {
     if (!node) return null;
     if (node.id === targetId) return [];
@@ -2105,8 +6489,13 @@ export default function App() {
     return null;
   }, []);
 
-  const focusNodeById = useCallback((nodeId) => {
+  const focusNodeById = useCallback((nodeId, options = {}) => {
     if (!nodeId || !canvasRef.current) return;
+
+    if (useLargeMapSurface) {
+      focusLargeMapNodeById(nodeId, options);
+      return;
+    }
 
     let stackParents = findStackParentsForNode(root, nodeId, 0);
     if (!stackParents) {
@@ -2129,40 +6518,204 @@ export default function App() {
     const moveToNode = (attempt = 0) => {
       const layout = layoutRef.current;
       if (!layout || !canvasRef.current) {
-        if (attempt < 3) {
-          setTimeout(() => moveToNode(attempt + 1), 120);
+        if (attempt < FOCUS_NODE_MAX_ATTEMPTS) {
+          setTimeout(() => moveToNode(attempt + 1), FOCUS_NODE_RETRY_MS);
         }
         return;
       }
       const nodeData = layout.nodes.get(nodeId);
       if (!nodeData) {
-        if (attempt < 3) {
-          setTimeout(() => moveToNode(attempt + 1), 120);
+        if (attempt < FOCUS_NODE_MAX_ATTEMPTS) {
+          setTimeout(() => moveToNode(attempt + 1), FOCUS_NODE_RETRY_MS);
         }
         return;
       }
 
       const canvas = canvasRef.current;
+      const hasScreenTarget = Number.isFinite(options.screenRight)
+        && (Number.isFinite(options.screenCenterY) || Number.isFinite(options.screenTop));
       const leftShift = Math.min(240, canvas.clientWidth * 0.25);
       const scale = scaleRef.current;
       const nodeCenterX = nodeData.x + nodeData.w / 2;
       const nodeCenterY = nodeData.y + nodeData.h / 2;
       const targetPan = {
-        x: (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scale,
-        y: canvas.clientHeight / 2 - nodeCenterY * scale,
+        x: hasScreenTarget
+          ? options.screenRight - (nodeData.x + nodeData.w) * scale
+          : (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scale,
+        y: hasScreenTarget
+          ? (Number.isFinite(options.screenTop)
+            ? options.screenTop - nodeData.y * scale
+            : options.screenCenterY - nodeCenterY * scale)
+          : canvas.clientHeight / 2 - nodeCenterY * scale,
       };
-      animatePanTo(targetPan);
+      animatePanTo(targetPan, { skipPanClamp: true });
     };
 
     requestAnimationFrame(() => {
       setTimeout(() => moveToNode(0), 80);
     });
-  }, [animatePanTo, findStackParentsForNode, orphans, root]);
+  }, [animatePanTo, findStackParentsForNode, focusLargeMapNodeById, orphans, root, useLargeMapSurface]);
+
+  const findNodeByUrlInMap = useCallback((url) => {
+    if (!url) return null;
+    const urlMap = buildUrlNodeMap(root, orphans);
+    let match = urlMap.get(url);
+    if (!match?.id) {
+      const normalized = normalizeUrlForCompare(url);
+      for (const [candidateUrl, node] of urlMap.entries()) {
+        if (normalizeUrlForCompare(candidateUrl) === normalized) {
+          match = node;
+          break;
+        }
+      }
+    }
+    return match?.id ? match : null;
+  }, [orphans, root]);
+
+  const locateUrlOnMap = useCallback((url) => {
+    if (!url || !contentRef.current || !canvasRef.current) return false;
+    const match = findNodeByUrlInMap(url);
+    if (!match?.id) return false;
+    focusNodeById(match.id);
+    return true;
+  }, [findNodeByUrlInMap, focusNodeById]);
+
+  const canLocateUrlOnMap = useCallback((url) => !!findNodeByUrlInMap(url), [findNodeByUrlInMap]);
+
+  const locateReportNodeOnMap = useCallback((nodeId) => {
+    if (!nodeId) return;
+    setSelectedNodeIds(new Set([nodeId]));
+    requestAnimationFrame(() => {
+      focusNodeById(nodeId);
+    });
+  }, [focusNodeById]);
+
+  const locateReportUrlOnMap = useCallback((url) => {
+    if (!url) return false;
+    const match = findNodeByUrlInMap(url);
+    if (!match?.id) return false;
+    locateReportNodeOnMap(match.id);
+    return true;
+  }, [findNodeByUrlInMap, locateReportNodeOnMap]);
+
+  const selectCaptureIssue = useCallback((issue) => {
+    if (!issue?.nodeId) return;
+    setSelectedNodeIds(new Set([issue.nodeId]));
+    setShowImageMenu(false);
+    setShowImageReportDrawer(false);
+    focusNodeById(issue.nodeId);
+  }, [focusNodeById]);
+
+  const openCaptureIssueUrl = useCallback((issue) => {
+    if (!issue?.url) return;
+    window.open(issue.url, '_blank', 'noopener,noreferrer');
+  }, []);
 
   useEffect(() => {
     if (!root) return;
-    applyTransform({ scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y });
+    applyTransform(
+      { scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y },
+      getMapLayoutRefreshTransformOptions()
+    );
   }, [layerVisibility, root, orphans, mapLayout, applyTransform]);
+
+  const loadAuthenticatedWorkspace = useCallback(async () => {
+    const [projectsData, mapsData, historyData] = await Promise.all([
+      api.getProjects(),
+      api.getMaps(),
+      api.getHistory(),
+    ]);
+
+    setProjects(organizeProjectsWithMaps(
+      projectsData.projects || [],
+      mapsData.maps || []
+    ));
+    setScanHistory(historyData.history || []);
+  }, []);
+
+  const loadPendingMapInvites = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setPendingMapInvitesLoading(true);
+    }
+    setPendingMapInvitesError('');
+
+    try {
+      const { invites } = await api.getPendingMapInvites();
+      setPendingMapInvites(invites || []);
+    } catch (error) {
+      setPendingMapInvites([]);
+      setPendingMapInvitesError(error.message || 'Failed to load pending invites.');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, []);
+
+  const loadPendingAccessRequests = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setPendingAccessRequestsLoading(true);
+    }
+    setPendingAccessRequestsError('');
+
+    try {
+      const { accessRequests } = await api.getPendingAccessRequests();
+      setPendingAccessRequests(accessRequests || []);
+    } catch (error) {
+      setPendingAccessRequests([]);
+      setPendingAccessRequestsError(error.message || 'Failed to load pending access requests.');
+    } finally {
+      setPendingAccessRequestsLoading(false);
+    }
+  }, []);
+
+  const applySharedMapPayload = useCallback((share, options = {}) => {
+    if (!share?.root) return;
+    const resetView = options.resetView !== false;
+    const routeAccess = currentRoute?.surface === ROUTE_SURFACES.SHARE
+      && Object.values(ACCESS_LEVELS).includes(currentRoute?.accessLevel)
+      ? currentRoute.accessLevel
+      : null;
+    const payloadAccess = Object.values(ACCESS_LEVELS).includes(share.accessLevel)
+      ? share.accessLevel
+      : null;
+    const nextAccess = routeAccess || payloadAccess || ACCESS_LEVELS.VIEW;
+    const routeOrientation = currentRoute?.surface === ROUTE_SURFACES.SHARE
+      ? currentRoute?.orientation
+      : null;
+    const payloadOrientation = share.orientation ? normalizeMapOrientation(share.orientation) : null;
+    resetScanLayers();
+    setRoot(share.root);
+    setOrphans(normalizeOrphans(share.orphans));
+    setConnections(share.connections || []);
+    if (resetView) {
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    }
+    setColors(share.colors || DEFAULT_COLORS);
+    setConnectionColors(share.connectionColors || DEFAULT_CONNECTION_COLORS);
+    setUrlInput(share.root.url || '');
+    setCurrentMap(null);
+    setMapName(share.mapName || share.name || share.root.title || '');
+    setShowThumbnails(true);
+    setHasCreatedShareLink(true);
+    setAccessLevel(nextAccess);
+    setSharePermission(nextAccess);
+    setCurrentShareAccess(nextAccess);
+    if (routeOrientation || payloadOrientation) {
+      setMapOrientation(routeOrientation || payloadOrientation);
+    }
+    setIsImportedMap(false);
+    if (resetView) {
+      setSelectedNodeIds(new Set());
+      setSelectionBox(null);
+      pendingInitialCenterRef.current = true;
+      scheduleResetViewRef.current?.();
+    }
+  }, [
+    applyTransform,
+    currentRoute?.accessLevel,
+    currentRoute?.orientation,
+    currentRoute?.surface,
+    resetScanLayers,
+  ]);
 
   // Check auth and load data on mount
   React.useEffect(() => {
@@ -2176,133 +6729,177 @@ export default function App() {
 
           // Load user's projects, maps, and history from API
           try {
-            const [projectsData, mapsData, historyData] = await Promise.all([
-              api.getProjects(),
-              api.getMaps(),
-              api.getHistory(),
-            ]);
-
-            // Organize maps into projects
-            const projectsWithMaps = (projectsData.projects || []).map(project => ({
-              ...project,
-              maps: (mapsData.maps || []).filter(m => m.project_id === project.id),
-            }));
-
-            // Add uncategorized maps (those without a project)
-            const uncategorizedMaps = (mapsData.maps || []).filter(m => !m.project_id);
-            if (uncategorizedMaps.length > 0) {
-              const uncategorized = projectsWithMaps.find(p => p.name === 'Uncategorized');
-              if (uncategorized) {
-                uncategorized.maps = [...uncategorized.maps, ...uncategorizedMaps];
-              } else {
-                projectsWithMaps.push({
-                  id: 'uncategorized',
-                  name: 'Uncategorized',
-                  maps: uncategorizedMaps,
-                });
-              }
-            }
-
-            setProjects(projectsWithMaps);
-            setScanHistory(historyData.history || []);
+            await loadAuthenticatedWorkspace();
+            await loadPendingMapInvites({ silent: true });
+            await loadPendingAccessRequests({ silent: true });
           } catch (e) {
             console.error('Failed to load user data:', e);
           }
         }
       } catch (e) {
         // Not logged in or error - that's fine
-        console.log('Not authenticated');
       } finally {
         setAuthLoading(false);
       }
     };
 
     initAuth();
-
-    // Check for shared map in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const shareId = urlParams.get('share');
-    if (shareId) {
-      setShowLanding(false);
-      // Try to load from API first
-      api.getShare(shareId)
-        .then(({ share }) => {
-          if (share?.root) {
-            resetScanLayers();
-            setRoot(share.root);
-            setOrphans(normalizeOrphans(share.orphans));
-            setConnections(share.connections || []);
-            applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-            setColors(share.colors || DEFAULT_COLORS);
-            setConnectionColors(share.connectionColors || DEFAULT_CONNECTION_COLORS);
-            setUrlInput(share.root.url || '');
-            setHasCreatedShareLink(true);
-            showToast('Shared map loaded!', 'success');
-            window.history.replaceState({}, '', window.location.pathname);
-            scheduleResetView();
-          }
-        })
-        .catch((e) => {
-          // Fallback to localStorage for legacy shares
-          const sharedData = localStorage.getItem(shareId);
-          if (sharedData) {
-            try {
-              const {
-                root: sharedRoot,
-                colors: sharedColors,
-                connectionColors: sharedConnectionColors,
-                orphans: sharedOrphans,
-                connections: sharedConnections
-              } = JSON.parse(sharedData);
-              if (sharedRoot) {
-                resetScanLayers();
-                setRoot(sharedRoot);
-                setOrphans(normalizeOrphans(sharedOrphans));
-                setConnections(sharedConnections || []);
-                applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-                setColors(sharedColors || DEFAULT_COLORS);
-                setConnectionColors(sharedConnectionColors || DEFAULT_CONNECTION_COLORS);
-                setUrlInput(sharedRoot.url || '');
-                setHasCreatedShareLink(true);
-                showToast('Shared map loaded!', 'success');
-                window.history.replaceState({}, '', window.location.pathname);
-                scheduleResetView();
-              }
-            } catch (parseError) {
-              console.error('Failed to parse shared map:', parseError);
-              showToast('Failed to load shared map', 'error');
-            }
-          } else {
-            showToast(e.message || 'Shared map not found or expired', 'error');
-          }
-        });
-    }
     // Intentionally run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadAuthenticatedWorkspace, loadPendingAccessRequests, loadPendingMapInvites]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.SHARE || !currentRoute?.shareId) {
+      loadedShareRouteKeyRef.current = '';
+      loadedShareVersionKeyRef.current = '';
+      return undefined;
+    }
+    if (authLoading) return undefined;
+
+    const shareRouteKey = `${currentRoute.shareId}:${currentRoute.search || ''}`;
+    if (loadedShareRouteKeyRef.current === shareRouteKey) return undefined;
+
+    let cancelled = false;
+    api.getShare(currentRoute.shareId)
+      .then(async ({ share }) => {
+        if (cancelled || !share?.root) return;
+        const routeAccess = currentRoute?.surface === ROUTE_SURFACES.SHARE
+          && Object.values(ACCESS_LEVELS).includes(currentRoute?.accessLevel)
+          ? currentRoute.accessLevel
+          : null;
+        const requestedAccess = routeAccess || normalizeShareAccessForApp(share.accessLevel);
+
+        if (share.mapId && isLoggedIn) {
+          const requestedRole = getRequestedRoleForShareAccess(requestedAccess);
+          try {
+            const { permissions } = await api.getMapFeatureGates(share.mapId);
+            if (cancelled) return;
+            if (hasRequiredPermissionForShareAccess(permissions, requestedAccess)) {
+              loadedShareRouteKeyRef.current = shareRouteKey;
+              navigateToRoute(createMapRoute(share.mapId), { replace: true });
+              return;
+            }
+          } catch (error) {
+            if (cancelled) return;
+            if (error?.status !== 403 && error?.status !== 404) {
+              throw error;
+            }
+          }
+
+          loadedShareRouteKeyRef.current = shareRouteKey;
+          setRouteMapGateState({
+            mapId: share.mapId,
+            loading: false,
+            errorStatus: 403,
+            errorMessage: `This link requires ${requestedRole} access to the saved map.`,
+            requestStatus: 'idle',
+            requestError: '',
+            requestedRole,
+            source: 'share',
+          });
+          setRouteAccessRequestMessage('');
+          return;
+        }
+
+        loadedShareRouteKeyRef.current = shareRouteKey;
+        loadedShareVersionKeyRef.current = getShareRefreshVersionKey(share);
+        applySharedMapPayload({
+          ...share,
+          accessLevel: requestedAccess,
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const sharedData = localStorage.getItem(currentRoute.shareId);
+        if (sharedData) {
+          try {
+            const parsed = JSON.parse(sharedData);
+            loadedShareRouteKeyRef.current = shareRouteKey;
+            loadedShareVersionKeyRef.current = getShareRefreshVersionKey(parsed);
+            applySharedMapPayload({
+              ...parsed,
+              name: parsed?.name || null,
+            });
+            return;
+          } catch (parseError) {
+            console.error('Failed to parse shared map:', parseError);
+            showToast('Failed to load shared map', 'error');
+            return;
+          }
+        }
+        showToast(error.message || 'Shared map not found or expired', 'error');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    applySharedMapPayload,
+    authLoading,
+    currentRoute?.accessLevel,
+    currentRoute?.shareId,
+    currentRoute?.search,
+    currentRoute?.surface,
+    isLoggedIn,
+    navigateToRoute,
+    showToast,
+  ]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.SHARE || !currentRoute?.shareId) return undefined;
+    if (authLoading || isLoggedIn) return undefined;
+
+    const shareId = currentRoute.shareId;
+    const shareRouteKey = `${shareId}:${currentRoute.search || ''}`;
+    let cancelled = false;
+
+    const refreshShareIfChanged = async () => {
+      if (cancelled || shareRefreshInFlightRef.current) return;
+      if (loadedShareRouteKeyRef.current !== shareRouteKey) return;
+      shareRefreshInFlightRef.current = true;
+      try {
+        const { share: status } = await api.getShareStatus(shareId);
+        if (cancelled) return;
+        const nextVersionKey = getShareRefreshVersionKey(status);
+        if (!nextVersionKey || nextVersionKey === loadedShareVersionKeyRef.current) return;
+
+        const { share } = await api.getShare(shareId);
+        if (cancelled || !share?.root) return;
+        const routeAccess = currentRoute?.surface === ROUTE_SURFACES.SHARE
+          && Object.values(ACCESS_LEVELS).includes(currentRoute?.accessLevel)
+          ? currentRoute.accessLevel
+          : null;
+        const requestedAccess = routeAccess || normalizeShareAccessForApp(share.accessLevel);
+        loadedShareVersionKeyRef.current = getShareRefreshVersionKey(share) || nextVersionKey;
+        applySharedMapPayload({
+          ...share,
+          accessLevel: requestedAccess,
+        }, { resetView: false });
+      } catch (error) {
+        if (!cancelled && error?.status && ![404, 410].includes(error.status)) {
+          console.warn('Shared map refresh failed:', error);
+        }
+      } finally {
+        shareRefreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshShareIfChanged, SHARE_STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    applySharedMapPayload,
+    authLoading,
+    currentRoute?.accessLevel,
+    currentRoute?.search,
+    currentRoute?.shareId,
+    currentRoute?.surface,
+    isLoggedIn,
+  ]);
 
   // (gesture handlers removed; zoom handled via wheel listener on canvas)
-
-  const toastTimeoutRef = useRef(null);
-
-  const showToast = useCallback((msg, type = 'info', persistent = false) => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = null;
-    }
-    setToast({ message: msg, type, persistent });
-    if (!persistent) {
-      toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
-    }
-  }, []);
-
-  const dismissToast = () => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = null;
-    }
-    setToast(null);
-  };
 
   useEffect(() => {
     if (!mapSaveConflict) return;
@@ -2312,16 +6909,6 @@ export default function App() {
       'warning'
     );
   }, [mapSaveConflict, showToast]);
-
-  const ToastIcon = ({ type }) => {
-    switch (type) {
-      case 'success': return <CheckCircle size={18} />;
-      case 'error': return <XCircle size={18} />;
-      case 'warning': return <AlertTriangle size={18} />;
-      case 'loading': return <Loader2 size={18} className="toast-spinner" />;
-      default: return <Info size={18} />;
-    }
-  };
 
   const warnLiveModeUnsupported = useCallback((message) => {
     showToast(message, 'info');
@@ -2333,6 +6920,14 @@ export default function App() {
     return true;
   }, [coeditingReadOnlyMessage, currentMap?.id, isCoeditingReadOnlyMode, showToast]);
 
+  const handleRemoteCommittedOperation = useCallback((operation, { participant } = {}) => {
+    if (!operation?.type || !currentUser?.id || operation.actorId === currentUser.id) return;
+    const message = buildLiveOperationToastMessage(operation, participant);
+    if (message) {
+      showToast(message, 'info');
+    }
+  }, [currentUser?.id, showToast]);
+
   const {
     liveStatus,
     liveStatusDetail,
@@ -2340,19 +6935,38 @@ export default function App() {
     pendingCount: livePendingCount,
     participants: liveParticipants,
     remoteSelections,
+    sessionId: liveSessionId,
     isLiveActive,
     submitDraft: submitLiveDraft,
     updateSelection: updateLiveSelection,
     resync: resyncLiveDocument,
+    resetToDocument: resetLiveDocumentToSavedMap,
   } = useCoeditingLive({
-    enabled: isLiveEditingModeActive,
+    enabled: isLiveRealtimeModeActive,
     mapId: currentMap?.id || null,
     actorId: currentUser?.id || null,
     canEdit: canEditValue,
+    accessMode: canEditValue ? 'edit' : (canCommentValue ? 'comment' : 'view'),
     getLocalDocument: getLocalLiveDocument,
     applyDocument: applyLiveDocumentToCanvas,
+    onCommittedOperation: handleRemoteCommittedOperation,
     onWarn: warnLiveModeUnsupported,
   });
+  const activeRemoteWriterCount = useMemo(() => {
+    return (liveParticipants || []).filter((participant) => {
+      if (!participant?.sessionId || participant.sessionId === liveSessionId) return false;
+      if (currentUser?.id && sameId(participant.actorId, currentUser.id)) return false;
+      return String(participant.accessMode || '').trim().toLowerCase() === 'edit';
+    }).length;
+  }, [currentUser?.id, liveParticipants, liveSessionId]);
+  const isCollaborativeLiveEditingRestricted = !!(isLiveActive && activeRemoteWriterCount > 0);
+  const liveUndoRedoDisabledReason = isCollaborativeLiveEditingRestricted
+    ? (
+      activeRemoteWriterCount === 1
+        ? 'Undo/redo is unavailable while another owner or editor is actively in this map.'
+        : 'Undo/redo is unavailable while other owners or editors are actively in this map.'
+    )
+    : '';
 
   const liveStatusLabel = useMemo(() => {
     switch (liveStatus) {
@@ -2368,16 +6982,132 @@ export default function App() {
         return 'Live Off';
     }
   }, [liveStatus]);
+  const liveBannerTitle = isCoeditingReadOnlyMode && !canEditValue ? 'Live View' : 'Live Editing';
 
   const liveBannerTone = liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
     ? 'warning'
     : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
+  const liveCollaborators = useMemo(
+    () => buildPresenceCollaborators(liveParticipants, {
+      excludeSessionId: liveSessionId,
+      excludeActorId: currentUser?.id || null,
+    }),
+    [currentUser?.id, liveParticipants, liveSessionId],
+  );
+  const titleCollaborators = useMemo(() => {
+    if (!hasMap || !currentMap?.id || !canViewPresenceValue) return [];
+    return isLiveActive ? liveCollaborators : presenceCollaborators;
+  }, [canViewPresenceValue, currentMap?.id, hasMap, isLiveActive, liveCollaborators, presenceCollaborators]);
+  const showCoeditingReadOnlyBanner = !!(
+    isCoeditingReadOnlyMode
+    && hasMap
+    && currentMap?.id
+    && !isLiveActive
+  );
+  const showLiveStatusBanner = !!(
+    isLiveActive
+    && hasMap
+    && currentMap?.id
+    && liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+  );
+  const commentPopoverReadOnlyMessage = useMemo(() => {
+    if (effectiveFeatureGates.mapComment) return '';
+    if (showCoeditingReadOnlyBanner || canViewCommentsValue) {
+      return 'You can view comments on this map, but you cannot add or edit them.';
+    }
+    return '';
+  }, [canViewCommentsValue, effectiveFeatureGates.mapComment, showCoeditingReadOnlyBanner]);
+
+  // Autosave for existing maps (debounced)
+  useEffect(() => {
+    if (
+      !currentMap?.id
+      || !root
+      || currentMap?.largeMapShell
+      || isImportedMap
+      || isViewingHistoricalVersion
+      || isCollaborativeLiveEditingRestricted
+      || isCoeditingReadOnlyMode
+      || areMapPermissionsPending
+    ) return;
+    const captureAssetSaveIsActive = Boolean(
+      nodeAssetSaveInFlightRef.current
+      || pendingNodeAssetUpdatesRef.current.size > 0
+      || (
+        thumbnailStats.mode
+        && (thumbnailStats.total || 0) > 0
+        && !thumbnailStats.stopped
+        && (
+          activeImageCaptureJob
+          || thumbnailStats.finalizing
+          || (thumbnailStats.completed || 0) < (thumbnailStats.total || 0)
+        )
+      )
+    );
+    if (assetAutosaveSuppressionUntilRef.current > Date.now() || captureAssetSaveIsActive) return;
+
+    const payload = buildMapSavePayload({
+      name: currentMap?.name || mapName,
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      scanMeta,
+      project_id: currentMap?.project_id || null,
+    });
+    const snapshot = serializeMapAutosaveSnapshot(payload);
+
+    if (snapshot === lastAutosaveSnapshotRef.current) return;
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      const checkpointRequest = {
+        mapId: currentMap.id,
+        changedAt: Date.now(),
+        snapshot: {
+          root: payload.root,
+          orphans: payload.orphans,
+          connections: payload.connections,
+          colors: payload.colors,
+          connectionColors: payload.connectionColors,
+        },
+      };
+
+      if (isLiveEditingModeActive) {
+        lastAutosaveSnapshotRef.current = snapshot;
+        setAutosaveCheckpointRequest(checkpointRequest);
+        return;
+      }
+
+      autosavePendingRef.current = {
+        mapId: currentMap.id,
+        expectedUpdatedAt: currentMap?.updated_at || null,
+        payload: buildMapSavePayload({
+          name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
+          root,
+          orphans,
+          connections,
+          colors,
+          connectionColors,
+          scanMeta,
+          project_id: currentMap?.project_id || null,
+        }),
+        snapshot,
+      };
+      flushAutosave();
+    }, 800);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [activeImageCaptureJob, areMapPermissionsPending, currentMap?.id, currentMap?.largeMapShell, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, scanMeta, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
   useEffect(() => {
-    if (!isLiveActive) return;
+    if (!isCollaborativeLiveEditingRestricted) return;
     setUndoStack([]);
     setRedoStack([]);
-  }, [isLiveActive]);
+  }, [isCollaborativeLiveEditingRestricted]);
 
   useEffect(() => {
     if (!isLiveActive) return;
@@ -2391,6 +7121,7 @@ export default function App() {
     remoteSelections.forEach((participant, participantIndex) => {
       const nodeIds = Array.isArray(participant?.selectedNodeIds) ? participant.selectedNodeIds : [];
       const label = String(participant?.displayName || participant?.clientName || 'Collaborator').trim();
+      const tone = Number.isInteger(participant?.tone) ? participant.tone : (participantIndex % 4);
       nodeIds.forEach((nodeId) => {
         const nodeData = mapLayout.nodes.get(nodeId);
         if (!nodeData) return;
@@ -2407,7 +7138,7 @@ export default function App() {
         grouped.get(nodeId).participants.push({
           sessionId: participant.sessionId,
           label,
-          tone: participantIndex % 4,
+          tone,
         });
       });
     });
@@ -2415,8 +7146,27 @@ export default function App() {
     return Array.from(grouped.values());
   }, [mapLayout, remoteSelections]);
 
-  const loadMapVersions = useCallback(async (mapId) => {
-    if (!mapId) return;
+  const resetVersionHistoryState = useCallback(() => {
+    setMapVersions([]);
+    setActiveVersionId(null);
+    setLatestVersionId(null);
+    versionBaselineRef.current = null;
+    lastVersionSnapshotRef.current = '';
+  }, []);
+
+  const loadMapVersions = useCallback(async (mapId, options = {}) => {
+    const { silent = false } = options;
+    if (!mapId) return [];
+    const isCurrentMap = currentMap?.id && sameId(currentMap.id, mapId);
+    const waitingForCurrentMapPermissions = featureGatesEnabled
+      && isLoggedIn
+      && isCurrentMap
+      && !mapPermissions;
+    if (waitingForCurrentMapPermissions || (isCurrentMap && !canViewVersionHistoryValue)) {
+      resetVersionHistoryState();
+      setIsLoadingVersions(false);
+      return [];
+    }
     setIsLoadingVersions(true);
     try {
       const { versions } = await api.getMapVersions(mapId);
@@ -2440,13 +7190,27 @@ export default function App() {
       } else {
         lastVersionSnapshotRef.current = '';
       }
+      return list;
     } catch (error) {
       console.error('Failed to load map versions', error);
-      showToast('Failed to load versions', 'error');
+      if (!silent) {
+        showToast('Failed to load versions', 'error');
+      }
+      return [];
     } finally {
       setIsLoadingVersions(false);
     }
-  }, [activeVersionId, showToast, serializeVersionSnapshot]);
+  }, [
+    activeVersionId,
+    canViewVersionHistoryValue,
+    currentMap?.id,
+    featureGatesEnabled,
+    isLoggedIn,
+    mapPermissions,
+    resetVersionHistoryState,
+    showToast,
+    serializeVersionSnapshot,
+  ]);
 
   const loadMapPermissions = useCallback(async () => {
     if (!featureGatesEnabled || !isLoggedIn || !currentMap?.id) {
@@ -2469,11 +7233,37 @@ export default function App() {
     loadMapPermissions();
   }, [loadMapPermissions]);
 
+  useEffect(() => {
+    if (isLoggedIn) return;
+    setPendingMapInvites([]);
+    setPendingMapInvitesError('');
+    setPendingMapInvitesLoading(false);
+    setPendingAccessRequests([]);
+    setPendingAccessRequestsError('');
+    setPendingAccessRequestsLoading(false);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return undefined;
+
+    const refreshPendingCollaborationItems = () => {
+      loadPendingMapInvites({ silent: true });
+      loadPendingAccessRequests({ silent: true });
+    };
+
+    const intervalId = window.setInterval(refreshPendingCollaborationItems, 30000);
+    window.addEventListener('focus', refreshPendingCollaborationItems);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshPendingCollaborationItems);
+    };
+  }, [isLoggedIn, loadPendingAccessRequests, loadPendingMapInvites]);
+
   const loadCollaborationData = useCallback(async () => {
     if (
       !COLLABORATION_UI_ENABLED
       || !canViewCollaborationPanelValue
-      || !showShareModal
+      || !showCollaborationModal
       || !currentMap?.id
       || !isLoggedIn
     ) return;
@@ -2483,9 +7273,13 @@ export default function App() {
       const { collaboration } = await api.getMapCollaboration(currentMap.id);
       setCollaborationMemberships(collaboration?.memberships || []);
       setCollaborationInvites(collaboration?.invites || []);
+      setCollaborationSettings(collaboration?.settings || null);
+      setCollaborationAccessRequests(collaboration?.accessRequests || []);
     } catch (error) {
       setCollaborationMemberships([]);
       setCollaborationInvites([]);
+      setCollaborationSettings(null);
+      setCollaborationAccessRequests([]);
       if (error?.status === 404) {
         setCollaborationError('Collaboration backend is currently disabled.');
       } else {
@@ -2494,10 +7288,11 @@ export default function App() {
     } finally {
       setCollaborationLoading(false);
     }
-  }, [canViewCollaborationPanelValue, currentMap?.id, isLoggedIn, showShareModal]);
+  }, [canViewCollaborationPanelValue, currentMap?.id, isLoggedIn, showCollaborationModal]);
 
   const sendCollaborationInvite = useCallback(async () => {
-    if (!canSendCollaborationInvitesValue) {
+    if (!guardAccountCanCreateWork('Inviting collaborators')) return;
+    if (!canSendCollaborationInvitesResolvedValue) {
       showToast('You do not have permission to send invites on this map.', 'warning');
       return;
     }
@@ -2510,6 +7305,13 @@ export default function App() {
       showToast('Enter an email address to invite.', 'warning');
       return;
     }
+    if (
+      collaborationInviteRoleOptionsValue.length > 0
+      && !collaborationInviteRoleOptionsValue.includes(collaborationInviteRole)
+    ) {
+      showToast('That invite role is not available for your access level on this map.', 'warning');
+      return;
+    }
 
     setCollaborationLoading(true);
     setCollaborationError('');
@@ -2518,26 +7320,37 @@ export default function App() {
         email,
         role: collaborationInviteRole,
       });
+      trackEvent('invite_sent', {
+        map_id: String(currentMap.id),
+        role: collaborationInviteRole,
+      });
       setCollaborationInviteEmail('');
-      showToast('Invite created', 'success');
+      showToast('Invite sent', 'success');
       await loadCollaborationData();
     } catch (error) {
+      if (handleEntitlementError(error, 'This account has reached its editor limit.')) {
+        setCollaborationError(error.message || 'Plan limit reached.');
+        return;
+      }
       setCollaborationError(error.message || 'Failed to create invite.');
       showToast(error.message || 'Failed to create invite.', 'error');
     } finally {
       setCollaborationLoading(false);
     }
   }, [
-    canSendCollaborationInvitesValue,
+    canSendCollaborationInvitesResolvedValue,
     collaborationInviteEmail,
     collaborationInviteRole,
+    collaborationInviteRoleOptionsValue,
     currentMap?.id,
+    guardAccountCanCreateWork,
+    handleEntitlementError,
     loadCollaborationData,
     showToast,
   ]);
 
   const revokeCollaborationInvite = useCallback(async (inviteId) => {
-    if (!canSendCollaborationInvitesValue) {
+    if (!canSendCollaborationInvitesResolvedValue) {
       showToast('You do not have permission to revoke invites on this map.', 'warning');
       return;
     }
@@ -2554,28 +7367,181 @@ export default function App() {
     } finally {
       setCollaborationLoading(false);
     }
-  }, [canSendCollaborationInvitesValue, currentMap?.id, loadCollaborationData, showToast]);
+  }, [canSendCollaborationInvitesResolvedValue, currentMap?.id, loadCollaborationData, showToast]);
+
+  const updateCollaborationSettings = useCallback(async (patch) => {
+    if (!canManageCollaborationSettingsResolvedValue) {
+      showToast('Only owners can update collaboration settings on this map.', 'warning');
+      return;
+    }
+    if (!currentMap?.id) return;
+    const previousSettings = collaborationSettings || DEFAULT_COLLABORATION_SETTINGS;
+    const nextSettings = mergeCollaborationSettingsPatch(previousSettings, patch);
+    setCollaborationSettings(nextSettings);
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      const { settings } = await api.updateMapCollaborationSettings(currentMap.id, patch);
+      setCollaborationSettings(settings || nextSettings);
+      showToast('Collaboration settings updated', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationSettings(previousSettings);
+      setCollaborationError(error.message || 'Failed to update collaboration settings.');
+      showToast(error.message || 'Failed to update collaboration settings.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [
+    canManageCollaborationSettingsResolvedValue,
+    collaborationSettings,
+    currentMap?.id,
+    loadCollaborationData,
+    showToast,
+  ]);
+
+  const updateCollaborationMemberRole = useCallback(async (userId, role) => {
+    if (!canManageCollaborationMembersValue) {
+      showToast('You do not have permission to manage members on this map.', 'warning');
+      return;
+    }
+    if (!currentMap?.id || !userId || !role) return;
+    if (sameId(userId, currentUser?.id)) {
+      showToast('Manage your own access from another owner account instead.', 'info');
+      return;
+    }
+    const previousMemberships = collaborationMemberships;
+    setCollaborationMemberships((prev) => prev.map((member) => (
+      sameId(member.userId, userId)
+        ? { ...member, role }
+        : member
+    )));
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      const { membership } = await api.updateMapMemberRole(currentMap.id, userId, role);
+      if (membership) {
+        setCollaborationMemberships((prev) => prev.map((member) => (
+          sameId(member.userId, userId)
+            ? { ...member, ...membership }
+            : member
+        )));
+      }
+      showToast('Member role updated', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationMemberships(previousMemberships);
+      setCollaborationError(error.message || 'Failed to update member role.');
+      showToast(error.message || 'Failed to update member role.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [
+    canManageCollaborationMembersValue,
+    collaborationMemberships,
+    currentMap?.id,
+    currentUser?.id,
+    loadCollaborationData,
+    showToast,
+  ]);
+
+  const removeCollaborationMember = useCallback(async (member) => {
+    if (!canManageCollaborationMembersValue) {
+      showToast('You do not have permission to remove members on this map.', 'warning');
+      return;
+    }
+    if (!currentMap?.id || !member?.userId) return;
+    if (sameId(member.userId, currentUser?.id)) {
+      showToast('Manage your own access from another owner account instead.', 'info');
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Remove Access',
+      message: `Remove ${member.userName || member.userEmail || 'this member'} from this map?`,
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    const previousMemberships = collaborationMemberships;
+    setCollaborationMemberships((prev) => prev.filter((entry) => !sameId(entry.userId, member.userId)));
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      await api.removeMapMember(currentMap.id, member.userId);
+      showToast('Member removed', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationMemberships(previousMemberships);
+      setCollaborationError(error.message || 'Failed to remove member.');
+      showToast(error.message || 'Failed to remove member.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [
+    canManageCollaborationMembersValue,
+    collaborationMemberships,
+    currentMap?.id,
+    currentUser?.id,
+    loadCollaborationData,
+    showConfirm,
+    showToast,
+  ]);
+
+  const reviewCollaborationAccessRequest = useCallback(async (requestId, status, role) => {
+    if (!canViewAccessRequestsResolvedValue) {
+      showToast('Only owners can review access requests on this map.', 'warning');
+      return;
+    }
+    if (!currentMap?.id || !requestId || !status) return;
+    const previousRequests = collaborationAccessRequests;
+    setCollaborationAccessRequests((prev) => prev.filter((request) => request.id !== requestId));
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      await api.reviewMapAccessRequest(currentMap.id, requestId, { status, role });
+      showToast(status === 'approved' ? 'Access request approved' : 'Access request denied', 'success');
+      await Promise.all([
+        loadCollaborationData(),
+        loadPendingAccessRequests({ silent: true }),
+      ]);
+    } catch (error) {
+      setCollaborationAccessRequests(previousRequests);
+      setCollaborationError(error.message || 'Failed to review access request.');
+      showToast(error.message || 'Failed to review access request.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [
+    canViewAccessRequestsResolvedValue,
+    collaborationAccessRequests,
+    currentMap?.id,
+    loadCollaborationData,
+    loadPendingAccessRequests,
+    showToast,
+  ]);
 
   useEffect(() => {
-    if (!showShareModal) return;
+    if (!showCollaborationModal) return;
     if (!COLLABORATION_UI_ENABLED) return;
     if (!canViewCollaborationPanelValue) return;
     loadCollaborationData();
-  }, [canViewCollaborationPanelValue, loadCollaborationData, showShareModal]);
+  }, [canViewCollaborationPanelValue, loadCollaborationData, showCollaborationModal]);
 
   useEffect(() => {
-    if (!showShareModal || !COLLABORATION_UI_ENABLED || canViewCollaborationPanelValue) return;
+    if (!showCollaborationModal || !COLLABORATION_UI_ENABLED || canViewCollaborationPanelValue) return;
     setCollaborationError('');
     setCollaborationMemberships([]);
     setCollaborationInvites([]);
-  }, [canViewCollaborationPanelValue, showShareModal]);
+  }, [canViewCollaborationPanelValue, showCollaborationModal]);
 
   useEffect(() => {
-    if (showShareModal) return;
+    if (showCollaborationModal) return;
     setCollaborationError('');
     setCollaborationMemberships([]);
     setCollaborationInvites([]);
-  }, [showShareModal]);
+  }, [showCollaborationModal]);
 
   const resolvePresenceAccessMode = useCallback(() => {
     if (canEditValue) return 'edit';
@@ -2680,12 +7646,28 @@ export default function App() {
       setLatestVersionId(null);
       setShowVersionEditPrompt(false);
       setShowVersionHistoryDrawer(false);
+      setShowImageReportDrawer(false);
       versionBaselineRef.current = null;
       lastVersionSnapshotRef.current = '';
       return;
     }
+    if (currentMap?.largeMapShell) {
+      resetVersionHistoryState();
+      return;
+    }
+    if (!canViewVersionHistoryValue) {
+      resetVersionHistoryState();
+      return;
+    }
     loadMapVersions(currentMap.id);
-  }, [currentMap?.id, loadMapVersions]);
+    lastAutosaveVersionAtRef.current = 0;
+  }, [
+    canViewVersionHistoryValue,
+    currentMap?.id,
+    currentMap?.largeMapShell,
+    loadMapVersions,
+    resetVersionHistoryState,
+  ]);
 
   useEffect(() => {
     if (currentMap?.id) {
@@ -2702,27 +7684,130 @@ export default function App() {
   }, [root, draftVersions.length, draftLatestVersionId]);
 
   useEffect(() => {
-    if (!showVersionHistoryDrawer || !currentMap?.id) return;
-    loadMapVersions(currentMap.id);
-  }, [showVersionHistoryDrawer, currentMap?.id, loadMapVersions]);
+    if (!showVersionHistoryDrawer || !currentMap?.id || !canViewVersionHistoryValue) return;
+    let canceled = false;
+    (async () => {
+      await loadMapVersions(currentMap.id);
+      if (!canceled && canViewActivityValue) {
+        await loadMapActivity(currentMap.id, { silent: false, allowToast: false });
+      }
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [
+    canViewActivityValue,
+    canViewVersionHistoryValue,
+    currentMap?.id,
+    loadMapActivity,
+    loadMapVersions,
+    showVersionHistoryDrawer,
+  ]);
 
-  const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot } = {}) => {
+  const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot, allowDuplicate = false } = {}) => {
     const targetMapId = mapId || currentMap?.id;
     if (!targetMapId || !root) return null;
     if (targetMapId === currentMap?.id && warnCoeditingReadOnly('This map')) return null;
     const payload = snapshot || getVersionSnapshot();
     const serialized = serializeVersionSnapshot(payload);
-    if (serialized && serialized === lastVersionSnapshotRef.current) return null;
+    if (!allowDuplicate && serialized && serialized === lastVersionSnapshotRef.current) return null;
     const { version } = await api.createMapVersion(targetMapId, {
       ...payload,
       name,
       notes,
+    });
+    trackEvent('version_saved', {
+      map_id: String(targetMapId),
+      version_id: String(version?.id || ''),
+      version_name: version?.name || name || '',
+      autosaved: (version?.name || name || '').toLowerCase() === 'autosaved' ? 'true' : 'false',
     });
     lastVersionSnapshotRef.current = serialized;
     setMapVersions((prev) => [version, ...(prev || [])].slice(0, 25));
     setLatestVersionId(version.id);
     return version;
   }, [currentMap?.id, root, getVersionSnapshot, serializeVersionSnapshot, warnCoeditingReadOnly]);
+
+  useEffect(() => {
+    const request = autosaveCheckpointRequest;
+    if (!request?.mapId || !request?.snapshot?.root) return;
+    if (request.skipVersionCheckpoint) return;
+    if (currentMap?.id && !sameId(currentMap.id, request.mapId)) return;
+    if (!request.force && (request.changedAt || 0) - lastAutosaveVersionAtRef.current < AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS) return;
+    const serialized = serializeVersionSnapshot(request.snapshot);
+    if (!serialized || serialized === lastVersionSnapshotRef.current) return;
+    const checkpointKey = `${request.mapId}:${request.changedAt || 0}:${serialized}`;
+    if (
+      checkpointKey === lastAutosaveCheckpointKeyRef.current
+      || autosaveCheckpointInFlightRef.current.has(checkpointKey)
+    ) return;
+    autosaveCheckpointInFlightRef.current.add(checkpointKey);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const version = await createVersionFromSnapshot({
+          mapId: request.mapId,
+          snapshot: request.snapshot,
+          name: 'Autosaved',
+        });
+        if (!cancelled && version) {
+          lastAutosaveVersionAtRef.current = request.changedAt || Date.now();
+          lastAutosaveCheckpointKeyRef.current = checkpointKey;
+          if (showVersionHistoryDrawer && canViewActivityValue) {
+            await loadMapActivity(request.mapId, { silent: true, allowToast: false });
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to create autosave checkpoint', error);
+        }
+      } finally {
+        autosaveCheckpointInFlightRef.current.delete(checkpointKey);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    autosaveCheckpointRequest,
+    canViewActivityValue,
+    createVersionFromSnapshot,
+    currentMap?.id,
+    loadMapActivity,
+    serializeVersionSnapshot,
+    showVersionHistoryDrawer,
+  ]);
+
+  const refreshTimelineAfterImageCapture = useCallback(async () => {
+    if (!currentMap?.id) return;
+    try {
+      const version = await createVersionFromSnapshot({
+        mapId: currentMap.id,
+        name: 'Autosaved',
+      });
+      if (version) {
+        lastAutosaveVersionAtRef.current = Date.now();
+      }
+      if (showVersionHistoryDrawer && canViewVersionHistoryValue) {
+        await loadMapVersions(currentMap.id);
+      }
+      if (canViewActivityValue) {
+        await loadMapActivity(currentMap.id, { silent: true, allowToast: false });
+      }
+    } catch (error) {
+      console.warn('Failed to refresh timeline after image capture', error);
+    }
+  }, [
+    canViewActivityValue,
+    canViewVersionHistoryValue,
+    createVersionFromSnapshot,
+    currentMap?.id,
+    loadMapActivity,
+    loadMapVersions,
+    showVersionHistoryDrawer,
+  ]);
 
   useEffect(() => {
     if (!isViewingHistoricalVersion) return;
@@ -2750,58 +7835,533 @@ export default function App() {
     }
   }, [isViewingHistoricalVersion, toast, showToast]);
 
-  const handleLogin = useCallback(() => {
+  const closeAuthModal = useCallback(() => {
+    setShowAuthModal(false);
+    setAuthContextMessage('');
+    setAuthInitialView('login');
+    setPendingAuthPostSuccessAction(null);
+    pendingAuthScanRef.current = null;
+  }, []);
+
+  const openAuthModal = useCallback(({ contextMessage = '', postSuccessAction = null, initialView = 'login' } = {}) => {
+    setAuthContextMessage(contextMessage);
+    setAuthInitialView(initialView);
+    setPendingAuthPostSuccessAction(postSuccessAction);
     setShowAuthModal(true);
   }, []);
+
+  const continueGuestScan = useCallback(() => {
+    const pendingScan = guestScanPrompt;
+    if (!pendingScan?.url) return;
+    setGuestScanPrompt(null);
+    window.setTimeout(() => {
+      scanRef.current?.(
+        pendingScan.url,
+        pendingScan.preserveName,
+        {
+          ...(pendingScan.authFlow || {}),
+          skipGuestScanPrompt: true,
+        }
+      );
+    }, 0);
+  }, [guestScanPrompt]);
+
+  const continueScanLimitPrompt = useCallback(() => {
+    const pendingScan = scanLimitPrompt;
+    if (!pendingScan?.url) return;
+    setScanLimitPrompt(null);
+    window.setTimeout(() => {
+      scanRef.current?.(
+        pendingScan.url,
+        pendingScan.preserveName,
+        {
+          ...(pendingScan.authFlow || {}),
+          skipScanLimitPrompt: true,
+        }
+      );
+    }, 0);
+  }, [scanLimitPrompt]);
+
+  const openGuestScanAuthFlow = useCallback(({
+    contextMessage,
+    initialView = 'login',
+    postSuccessAction = 'start-scan',
+  } = {}) => {
+    const pendingScan = guestScanPrompt;
+    if (!pendingScan?.url) return;
+    pendingAuthScanRef.current = pendingScan;
+    setGuestScanPrompt(null);
+    openAuthModal({
+      contextMessage,
+      initialView,
+      postSuccessAction,
+    });
+  }, [guestScanPrompt, openAuthModal]);
+
+  const openProjectsPanel = useCallback(({ skipAuth = false } = {}) => {
+    if (!skipAuth && !isLoggedIn) {
+      openAuthModal({
+        contextMessage: MODIFY_AUTH_CONTEXT_MESSAGE,
+        postSuccessAction: 'open-projects',
+      });
+      return;
+    }
+    setShowProjectsModal(true);
+    setShowHistoryModal(false);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
+    setShowVersionHistoryDrawer(false);
+  }, [isLoggedIn, openAuthModal]);
+
+  const handleLogin = useCallback(() => {
+    openAuthModal();
+  }, [openAuthModal]);
+
+  const handleSignup = useCallback(() => {
+    openAuthModal({ initialView: 'signup' });
+  }, [openAuthModal]);
+
+  const getBillingReturnPath = useCallback(() => {
+    if (typeof window === 'undefined') return '/app';
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  }, []);
+
+  const redirectToBillingUrl = useCallback((url) => {
+    openBillingUrlInNewTab(url);
+  }, []);
+
+  const handleBillingPortal = useCallback(async (context = 'portal') => {
+    if (!isLoggedIn) {
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE });
+      return;
+    }
+    if (!isPrimaryBillingOwner) {
+      showToast('Only the primary account owner can manage billing.', 'warning');
+      return;
+    }
+    const actionKey = `portal:${context}`;
+    setBillingActionKey(actionKey);
+    try {
+      const session = await api.createBillingPortalSession({
+        returnPath: getBillingReturnPath(),
+      });
+      redirectToBillingUrl(session.url);
+    } catch (error) {
+      showToast(error.message || 'Billing portal is not available yet.', 'error');
+    } finally {
+      setBillingActionKey((current) => (current === actionKey ? '' : current));
+    }
+  }, [getBillingReturnPath, isLoggedIn, isPrimaryBillingOwner, openAuthModal, redirectToBillingUrl, showToast]);
+
+  const handlePlanCheckout = useCallback(async (planKey, cycle = billingCycle) => {
+    if (!isLoggedIn) {
+      setPlansModal(null);
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    if (!isPrimaryBillingOwner) {
+      showToast('Only the primary account owner can change billing.', 'warning');
+      return;
+    }
+    const normalizedCycle = normalizeBillingCycle(cycle);
+    const actionKey = `plan:${planKey}:${normalizedCycle}`;
+    setBillingActionKey(actionKey);
+    try {
+      const session = await api.createBillingCheckoutSession({
+        type: 'plan',
+        planKey,
+        billingCycle: normalizedCycle,
+        returnPath: getBillingReturnPath(),
+      });
+      redirectToBillingUrl(session.url);
+    } catch (error) {
+      if (error?.code === 'BILLING_PORTAL_REQUIRED') {
+        await handleBillingPortal('plan-change');
+        return;
+      }
+      showToast(error.message || 'Checkout is not available yet.', 'error');
+    } finally {
+      setBillingActionKey((current) => (current === actionKey ? '' : current));
+    }
+  }, [
+    billingCycle,
+    getBillingReturnPath,
+    handleBillingPortal,
+    isLoggedIn,
+    isPrimaryBillingOwner,
+    openAuthModal,
+    redirectToBillingUrl,
+    showToast,
+  ]);
+
+  const handleBillingTrial = useCallback(async (context = 'trial') => {
+    if (!isLoggedIn) {
+      setPlansModal(null);
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    if (!isPrimaryBillingOwner) {
+      showToast('Only the primary account owner can change billing.', 'warning');
+      return;
+    }
+    const actionKey = `trial:${context}`;
+    setBillingActionKey(actionKey);
+    try {
+      const result = await api.startBillingTrial({
+        kind: context === 'team' ? 'team' : 'personal',
+      });
+      if (result?.entitlements) {
+        setCurrentUser((current) => current ? ({
+          ...current,
+          account: result.entitlements.account || current.account || null,
+          entitlements: result.entitlements,
+        }) : current);
+      }
+      await refreshCurrentUser();
+      setPlansModal(null);
+      showToast(result?.trialAlreadyActive ? 'Trial is already active' : 'Trial started', 'success');
+    } catch (error) {
+      showToast(error.message || 'Trial is not available yet.', 'error');
+    } finally {
+      setBillingActionKey((current) => (current === actionKey ? '' : current));
+    }
+  }, [
+    isLoggedIn,
+    isPrimaryBillingOwner,
+    openAuthModal,
+    refreshCurrentUser,
+    showToast,
+  ]);
+
+  const handleSelectedBillingCheckout = useCallback(async () => {
+    if (!selectedBillingPurchase || selectedBillingPurchase.disabled) return;
+    if (!isLoggedIn) {
+      setPlansModal(null);
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    if (!isPrimaryBillingOwner) {
+      showToast('Only the primary account owner can change billing.', 'warning');
+      return;
+    }
+    const actionKey = `bundle:${selectedBillingPurchase.planKey || 'addons'}`;
+    setBillingActionKey(actionKey);
+    try {
+      const session = await api.createBillingCheckoutSession({
+        type: 'bundle',
+        planKey: selectedBillingPurchase.planKey,
+        billingCycle: selectedBillingPurchase.billingCycle || billingCycle,
+        addOns: selectedBillingPurchase.addOns.map((entry) => ({
+          addonKey: entry.key,
+          quantity: entry.quantity,
+        })),
+        returnPath: getBillingReturnPath(),
+      });
+      redirectToBillingUrl(session.url);
+    } catch (error) {
+      if (error?.code === 'BILLING_PORTAL_REQUIRED') {
+        await handleBillingPortal('plan-change');
+        return;
+      }
+      showToast(error.message || 'Checkout is not available yet.', 'error');
+    } finally {
+      setBillingActionKey((current) => (current === actionKey ? '' : current));
+    }
+  }, [
+    billingCycle,
+    getBillingReturnPath,
+    handleBillingPortal,
+    isLoggedIn,
+    isPrimaryBillingOwner,
+    openAuthModal,
+    redirectToBillingUrl,
+    selectedBillingPurchase,
+    showToast,
+  ]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const intent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
+    if (intent !== 'signup') {
+      handledSignupIntentKeyRef.current = '';
+      return;
+    }
+
+    const intentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+
+    if (!isLoggedIn) {
+      const anonymousIntentKey = `${intentKey}:anonymous`;
+      if (handledSignupIntentKeyRef.current === anonymousIntentKey) return;
+      handledSignupIntentKeyRef.current = anonymousIntentKey;
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+
+    const authenticatedIntentKey = `${intentKey}:authenticated`;
+    if (handledSignupIntentKeyRef.current === authenticatedIntentKey) return;
+    handledSignupIntentKeyRef.current = authenticatedIntentKey;
+
+    const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+    nextSearchParams.delete('intent');
+    const nextSearch = nextSearchParams.toString();
+    const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    isLoggedIn,
+    openAuthModal,
+  ]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const intent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
+    const trialPlan = String(currentRoute?.searchParams?.get('trialPlan') || 'pro').trim().toLowerCase();
+    if (intent !== 'trial' || !TRIAL_PLAN_KEYS.has(trialPlan)) {
+      handledTrialIntentKeyRef.current = '';
+      return;
+    }
+
+    if (!isLoggedIn) {
+      const anonymousIntentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}:anonymous`;
+      if (handledTrialIntentKeyRef.current === anonymousIntentKey) return;
+      handledTrialIntentKeyRef.current = anonymousIntentKey;
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+
+    const intentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    const authenticatedIntentKey = `${intentKey}:authenticated`;
+    if (handledTrialIntentKeyRef.current === authenticatedIntentKey) return;
+    handledTrialIntentKeyRef.current = authenticatedIntentKey;
+
+    const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+    nextSearchParams.delete('intent');
+    nextSearchParams.delete('trialPlan');
+    const nextSearch = nextSearchParams.toString();
+    const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+    handleBillingTrial(trialPlan);
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    handleBillingTrial,
+    isLoggedIn,
+    openAuthModal,
+  ]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const intent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
+    const planKey = String(currentRoute?.searchParams?.get('billingPlan') || '').trim().toLowerCase();
+    const requestedBillingCycle = normalizeBillingCycle(currentRoute?.searchParams?.get('billingCycle'));
+    if (intent !== 'checkout' || !BILLING_PLAN_KEYS.has(planKey)) {
+      handledBillingIntentKeyRef.current = '';
+      return;
+    }
+
+    if (!isLoggedIn) {
+      const anonymousIntentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}:anonymous`;
+      if (handledBillingIntentKeyRef.current === anonymousIntentKey) return;
+      handledBillingIntentKeyRef.current = anonymousIntentKey;
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+
+    const intentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    const authenticatedIntentKey = `${intentKey}:authenticated`;
+    if (handledBillingIntentKeyRef.current === authenticatedIntentKey) return;
+    handledBillingIntentKeyRef.current = authenticatedIntentKey;
+
+    const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+    nextSearchParams.delete('intent');
+    nextSearchParams.delete('billingPlan');
+    nextSearchParams.delete('billingCycle');
+    const nextSearch = nextSearchParams.toString();
+    const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+    handlePlanCheckout(planKey, requestedBillingCycle);
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    handlePlanCheckout,
+    isLoggedIn,
+    openAuthModal,
+  ]);
 
   const handleAuthSuccess = async (user) => {
     setCurrentUser(user);
     setIsLoggedIn(true);
     setAccessLevel(ACCESS_LEVELS.EDIT);
+    identifyAnalyticsUser(user);
+    const loginMethod = user?.authProvider === 'google' || user?.authMode === 'google' ? 'google' : 'password';
+    trackEvent('login', {
+      method: loginMethod,
+      app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
+    });
+
+    const postSuccessAction = pendingAuthPostSuccessAction;
+    const pendingScan = postSuccessAction === 'start-scan' || postSuccessAction === 'select-plan-before-scan'
+      ? pendingAuthScanRef.current
+      : null;
+    if (pendingScan) {
+      pendingAuthScanRef.current = null;
+    }
+    setPendingAuthPostSuccessAction(null);
 
     // Load user's projects, maps, and history
     try {
-      const [projectsData, mapsData, historyData] = await Promise.all([
-        api.getProjects(),
-        api.getMaps(),
-        api.getHistory(),
+      await loadAuthenticatedWorkspace();
+      await Promise.all([
+        loadPendingMapInvites({ silent: true }),
+        loadPendingAccessRequests({ silent: true }),
       ]);
-
-      // Organize maps into projects
-      const projectsWithMaps = (projectsData.projects || []).map(project => ({
-        ...project,
-        maps: (mapsData.maps || []).filter(m => m.project_id === project.id),
-      }));
-
-      // Add uncategorized maps (those without a project)
-      const uncategorizedMaps = (mapsData.maps || []).filter(m => !m.project_id);
-      if (uncategorizedMaps.length > 0) {
-        const uncategorized = projectsWithMaps.find(p => p.name === 'Uncategorized');
-        if (uncategorized) {
-          uncategorized.maps = [...uncategorized.maps, ...uncategorizedMaps];
-        } else {
-          projectsWithMaps.push({
-            id: 'uncategorized',
-            name: 'Uncategorized',
-            maps: uncategorizedMaps,
-          });
-        }
-      }
-
-      setProjects(projectsWithMaps);
-      setScanHistory(historyData.history || []);
     } catch (e) {
       console.error('Failed to load user data:', e);
     }
+    if (postSuccessAction === 'open-projects') {
+      openProjectsPanel({ skipAuth: true });
+    }
+    if (pendingScan && postSuccessAction === 'select-plan-before-scan') {
+      pendingPlanScanRef.current = {
+        ...pendingScan,
+        authFlow: {
+          ...(pendingScan.authFlow || {}),
+          currentUser: user,
+          skipGuestScanPrompt: true,
+        },
+      };
+      openPlansModal('guest-scan-signup', { resumeScanAfterPlan: true });
+    } else if (pendingScan) {
+      window.setTimeout(() => {
+        scanRef.current?.(
+          pendingScan.url,
+          pendingScan.preserveName,
+          {
+            ...(pendingScan.authFlow || {}),
+            currentUser: user,
+            skipGuestScanPrompt: true,
+          }
+        );
+      }, 0);
+    }
   };
 
-  const handleDemoAccess = useCallback((user) => {
-    setCurrentUser(user);
-    setIsLoggedIn(true);
-    setAccessLevel(ACCESS_LEVELS.EDIT);
-    setProjects([]);
-    setScanHistory([]);
-  }, []);
+  useEffect(() => {
+    if (authLoading) return;
+
+    const authSuccess = currentRoute?.searchParams?.get('auth_success') || '';
+    const authError = currentRoute?.searchParams?.get('auth_error') || '';
+    const authProvider = currentRoute?.searchParams?.get('auth_provider') || '';
+
+    if (!authSuccess && !authError) {
+      handledAuthRedirectKeyRef.current = '';
+      return;
+    }
+
+    const authRedirectKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    if (handledAuthRedirectKeyRef.current === authRedirectKey) return;
+    handledAuthRedirectKeyRef.current = authRedirectKey;
+
+    if (authSuccess === 'google' && currentUser) {
+      showToast('Signed in with Google', 'success');
+      trackEvent('login', {
+        method: 'google',
+        app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
+      });
+    } else if (authError) {
+      showToast('Google sign-in did not complete. Try again or use email instead.', 'error');
+      if (!currentUser) {
+        openAuthModal({
+          contextMessage: authProvider === 'google'
+            ? 'Google sign-in did not complete. You can try again or use email and password.'
+            : '',
+        });
+      }
+    }
+
+    const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+    nextSearchParams.delete('auth_success');
+    nextSearchParams.delete('auth_error');
+    nextSearchParams.delete('auth_provider');
+    const nextSearch = nextSearchParams.toString();
+    const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    currentUser,
+    openAuthModal,
+    showToast,
+  ]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const billingResult = billingRouteResult;
+    const checkoutSessionId = billingRouteSessionId;
+    if (isBillingReturnFromBillingWindow) return;
+    if (!billingResult) {
+      handledBillingRedirectKeyRef.current = '';
+      return;
+    }
+
+    const billingRedirectKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    if (handledBillingRedirectKeyRef.current === billingRedirectKey) return;
+    handledBillingRedirectKeyRef.current = billingRedirectKey;
+
+    const clearBillingParams = () => {
+      const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+      nextSearchParams.delete('billing');
+      nextSearchParams.delete('billingSessionId');
+      const nextSearch = nextSearchParams.toString();
+      const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+      window.history.replaceState({}, '', nextUrl);
+      const PopStateEventCtor = window.PopStateEvent || window.Event;
+      window.dispatchEvent(new PopStateEventCtor('popstate', { state: window.history.state }));
+    };
+
+    const refreshBillingReturn = async () => {
+      try {
+        await handleBillingReturnResult({ billingResult, checkoutSessionId });
+      } finally {
+        clearBillingParams();
+      }
+    };
+
+    refreshBillingReturn();
+  }, [
+    authLoading,
+    billingRouteResult,
+    billingRouteSessionId,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    handleBillingReturnResult,
+    isBillingReturnFromBillingWindow,
+  ]);
+
+  useEffect(() => {
+    if (currentUser) {
+      identifyAnalyticsUser(currentUser);
+      return;
+    }
+    clearAnalyticsUser();
+  }, [currentUser]);
 
 
   const applyLoggedOutState = useCallback(({ preserveViewOnlyMap = false } = {}) => {
@@ -2809,20 +8369,28 @@ export default function App() {
       if (preserveViewOnlyMap && root) {
         setCurrentUser(null);
         setIsLoggedIn(false);
+        clearAnalyticsUser();
         setProjects([]);
         setScanHistory([]);
         setCurrentMap(null);
         setAccessLevel(ACCESS_LEVELS.VIEW);
         setShowSaveMapModal(false);
+        setShowInviteInboxModal(false);
+        setShowAccessRequestsInboxModal(false);
         setShowProfileDrawer(false);
         setShowSettingsDrawer(false);
         setShowVersionHistoryDrawer(false);
+        setShowImageReportDrawer(false);
+        if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
+          navigateToRoute(createAppHomeRoute(), { replace: true });
+        }
         showToast('Logged out. Map is now view-only.', 'info');
         return;
       }
 
       setCurrentUser(null);
       setIsLoggedIn(false);
+      clearAnalyticsUser();
       setProjects([]);
       setScanHistory([]);
       setRoot(null);
@@ -2835,22 +8403,29 @@ export default function App() {
       setSelectionBox(null);
       setThumbnailScopeIds(null);
       setShowImageMenu(false);
+      setShowImageReportDrawer(false);
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setUrlInput('');
       resetScanLayers();
       setShowSaveMapModal(false);
+      setShowInviteInboxModal(false);
+      setShowAccessRequestsInboxModal(false);
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
       setShowVersionHistoryDrawer(false);
+      if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
+        navigateToRoute(createAppHomeRoute(), { replace: true });
+      }
       showToast('Logged out', 'info');
     } finally {
       setPendingLogoutAfterSave(false);
-      setPendingCreateAfterSave(false);
+      setPendingCreateAfterSave(null);
+      setCreateMapDefaults(null);
       setPendingLoadMap(null);
       setHasCreatedShareLink(false);
       setCurrentShareAccess(null);
     }
-  }, [applyTransform, resetScanLayers, root, showToast]);
+  }, [applyTransform, currentRoute?.surface, navigateToRoute, resetScanLayers, root, showToast]);
 
   const performLogout = useCallback(async ({ preserveViewOnlyMap = false } = {}) => {
     try {
@@ -2868,7 +8443,7 @@ export default function App() {
       const wantsSave = await showConfirm({
         title: 'Save before logout?',
         message: 'You have an unsaved map. Save it before logging out?',
-        confirmText: 'Save Map',
+        confirmText: 'Save map',
         cancelText: 'Log Out',
       });
       if (wantsSave) {
@@ -2899,11 +8474,275 @@ export default function App() {
     showConfirm,
   ]);
 
+  const getActiveAppRoute = useCallback(() => {
+    if (currentMap?.id) return createMapRoute(currentMap.id);
+    return createAppHomeRoute();
+  }, [currentMap?.id]);
+
+  const handleShowInviteInbox = useCallback(async () => {
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
+    setShowProjectsModal(false);
+    setShowHistoryModal(false);
+    setShowVersionHistoryDrawer(false);
+    setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
+    setShowShareModal(false);
+    setShowCollaborationModal(false);
+    setShowInviteInboxModal(true);
+    await loadPendingMapInvites();
+  }, [loadPendingMapInvites]);
+
+  const handleShowAccessRequestsInbox = useCallback(async () => {
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
+    setShowProjectsModal(false);
+    setShowHistoryModal(false);
+    setShowVersionHistoryDrawer(false);
+    setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
+    setShowShareModal(false);
+    setShowCollaborationModal(false);
+    setShowAccessRequestsInboxModal(true);
+    await loadPendingAccessRequests();
+  }, [loadPendingAccessRequests]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invites') return;
+    if (authLoading) return;
+    if (!isLoggedIn) {
+      openAuthModal();
+      return;
+    }
+    setShowInviteInboxModal(true);
+    loadPendingMapInvites();
+    navigateToRoute(getActiveAppRoute(), { replace: true });
+  }, [
+    authLoading,
+    currentRoute?.section,
+    currentRoute?.surface,
+    getActiveAppRoute,
+    isLoggedIn,
+    loadPendingMapInvites,
+    navigateToRoute,
+    openAuthModal,
+  ]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'access_requests') return;
+    if (authLoading) return;
+    if (!isLoggedIn) {
+      openAuthModal();
+      return;
+    }
+    setShowAccessRequestsInboxModal(true);
+    loadPendingAccessRequests();
+    navigateToRoute(getActiveAppRoute(), { replace: true });
+  }, [
+    authLoading,
+    currentRoute?.section,
+    currentRoute?.surface,
+    getActiveAppRoute,
+    isLoggedIn,
+    loadPendingAccessRequests,
+    navigateToRoute,
+    openAuthModal,
+  ]);
+
+  const handleAcceptPendingInvite = useCallback(async (invite) => {
+    if (!invite?.id) return;
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.acceptMapInviteById(invite.id);
+      trackEvent('invite_accepted', {
+        map_id: String(invite?.mapId || ''),
+      });
+      showToast(`Invite accepted for ${invite.mapName || 'shared map'}`, 'success');
+      await Promise.all([
+        loadAuthenticatedWorkspace(),
+        loadPendingMapInvites({ silent: true }),
+        loadPendingAccessRequests({ silent: true }),
+      ]);
+      if (invite.mapId && loadSavedMapByIdRef.current) {
+        try {
+          await loadSavedMapByIdRef.current(invite.mapId, { silent: true });
+          setRouteMapGateState(null);
+          setRouteAccessRequestMessage('');
+        } catch {
+          if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map' && sameId(currentRoute?.mapId, invite.mapId)) {
+            setRouteMapGateState((previous) => previous ? { ...previous, loading: false } : previous);
+          }
+        }
+      }
+    } catch (error) {
+      setPendingMapInvitesError(error.message || 'Failed to accept invite.');
+      showToast(error.message || 'Failed to accept invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [
+    currentRoute?.mapId,
+    currentRoute?.section,
+    currentRoute?.surface,
+    loadAuthenticatedWorkspace,
+    loadPendingAccessRequests,
+    loadPendingMapInvites,
+    showToast,
+  ]);
+
+  const handleDeclinePendingInvite = useCallback(async (invite) => {
+    if (!invite?.id) return;
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.declineMapInviteById(invite.id);
+      showToast(`Invite declined for ${invite.mapName || 'shared map'}`, 'info');
+      await loadPendingMapInvites({ silent: true });
+      if (invite.mapId && currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map' && sameId(currentRoute?.mapId, invite.mapId)) {
+        setRouteMapGateState((previous) => previous ? { ...previous, loading: false } : previous);
+      }
+    } catch (error) {
+      setPendingMapInvitesError(error.message || 'Failed to decline invite.');
+      showToast(error.message || 'Failed to decline invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [currentRoute?.mapId, currentRoute?.section, currentRoute?.surface, loadPendingMapInvites, showToast]);
+
+  const handleApprovePendingAccessRequest = useCallback(async (request, role) => {
+    if (!request?.id || !request?.mapId) return;
+    setPendingAccessRequestsLoading(true);
+    setPendingAccessRequestsError('');
+    try {
+      await api.reviewMapAccessRequest(request.mapId, request.id, {
+        status: 'approved',
+        role: role || request.requestedRole || 'viewer',
+      });
+      trackEvent('access_request_approved', {
+        map_id: String(request.mapId),
+        role: role || request.requestedRole || 'viewer',
+      });
+      showToast(`Approved access for ${request.requesterName || request.requesterEmail || 'user'}`, 'success');
+      await Promise.all([
+        loadPendingAccessRequests({ silent: true }),
+        currentMap?.id && sameId(currentMap.id, request.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      setPendingAccessRequestsError(error.message || 'Failed to approve access request.');
+      showToast(error.message || 'Failed to approve access request.', 'error');
+    } finally {
+      setPendingAccessRequestsLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, loadPendingAccessRequests, showToast]);
+
+  const handleDenyPendingAccessRequest = useCallback(async (request) => {
+    if (!request?.id || !request?.mapId) return;
+    setPendingAccessRequestsLoading(true);
+    setPendingAccessRequestsError('');
+    try {
+      await api.reviewMapAccessRequest(request.mapId, request.id, {
+        status: 'denied',
+      });
+      showToast(`Denied access for ${request.requesterName || request.requesterEmail || 'user'}`, 'info');
+      await Promise.all([
+        loadPendingAccessRequests({ silent: true }),
+        currentMap?.id && sameId(currentMap.id, request.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      setPendingAccessRequestsError(error.message || 'Failed to deny access request.');
+      showToast(error.message || 'Failed to deny access request.', 'error');
+    } finally {
+      setPendingAccessRequestsLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, loadPendingAccessRequests, showToast]);
+
+  const handleRequestRouteMapAccess = useCallback(async () => {
+    const mapId = currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map'
+      ? currentRoute.mapId
+      : routeMapGateState?.mapId || null;
+    if (!mapId) return;
+    if (!isLoggedIn) {
+      openAuthModal();
+      return;
+    }
+    const requestedRole = routeMapGateState?.requestedRole || 'viewer';
+
+    setRouteMapGateState((previous) => ({
+      mapId,
+      loading: false,
+      errorStatus: previous?.errorStatus || null,
+      errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
+      requestStatus: 'submitting',
+      requestError: '',
+      requestedRole,
+      source: previous?.source || null,
+    }));
+
+    try {
+      const response = await api.createMapAccessRequest(mapId, {
+        requestedRole,
+        message: routeAccessRequestMessage.trim() || undefined,
+      });
+      trackEvent('access_request_sent', {
+        map_id: String(mapId),
+        reused: response?.reused ? 'true' : 'false',
+      });
+      setRouteMapGateState((previous) => ({
+        mapId,
+        loading: false,
+        errorStatus: previous?.errorStatus || 403,
+        errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
+        requestStatus: 'submitted',
+        requestError: '',
+        requestId: response?.accessRequest?.id || null,
+        requestedRole,
+        source: previous?.source || null,
+      }));
+      showToast(
+        response?.reused
+          ? 'Your access request is already pending review.'
+          : 'Access request sent to the map owners.',
+        'success'
+      );
+    } catch (error) {
+      if (error?.status === 409 && /pending invite/i.test(error.message || '')) {
+        await loadPendingMapInvites({ silent: true });
+      }
+      setRouteMapGateState((previous) => ({
+        mapId,
+        loading: false,
+        errorStatus: previous?.errorStatus || error?.status || null,
+        errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
+        requestStatus: error?.status === 403 ? 'disabled' : 'idle',
+        requestError: error?.message || 'Failed to send access request.',
+        requestedRole,
+        source: previous?.source || null,
+      }));
+      showToast(
+        error?.message || 'Failed to send access request.',
+        error?.status === 403 ? 'warning' : 'error'
+      );
+    }
+  }, [
+    currentRoute?.mapId,
+    currentRoute?.section,
+    currentRoute?.surface,
+    isLoggedIn,
+    loadPendingMapInvites,
+    openAuthModal,
+    routeAccessRequestMessage,
+    routeMapGateState?.mapId,
+    routeMapGateState?.requestedRole,
+    showToast,
+  ]);
+
   const handleShowProfile = useCallback(() => {
     setShowProfileDrawer(true);
     setShowSettingsDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
     setShowVersionHistoryDrawer(false);
     setShowProjectsModal(false);
     setShowHistoryModal(false);
@@ -2914,39 +8753,55 @@ export default function App() {
     setShowProfileDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
     setShowVersionHistoryDrawer(false);
     setShowProjectsModal(false);
     setShowHistoryModal(false);
   }, []);
 
-  const handleShowProjects = useCallback(() => {
-    setShowProjectsModal(true);
-    setShowHistoryModal(false);
-    setShowCommentsPanel(false);
-    setShowReportDrawer(false);
-    setShowProfileDrawer(false);
-    setShowSettingsDrawer(false);
-    setShowVersionHistoryDrawer(false);
-  }, []);
+  const handleShowProjects = openProjectsPanel;
+
+  const handleShowBilling = useCallback(() => {
+    handleBillingPortal('account-menu');
+  }, [handleBillingPortal]);
 
   const handleShowHistory = useCallback(() => {
+    if (!isLoggedIn) {
+      openAuthModal({
+        contextMessage: MODIFY_AUTH_CONTEXT_MESSAGE,
+        postSuccessAction: 'open-projects',
+      });
+      return;
+    }
     setShowHistoryModal(true);
     setShowProjectsModal(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
     setShowVersionHistoryDrawer(false);
-  }, []);
+  }, [isLoggedIn, openAuthModal]);
 
   const authValue = useMemo(() => ({
     isLoggedIn,
     currentUser,
     onLogin: handleLogin,
+    onSignup: handleSignup,
     onLogout: handleLogout,
     onShowProfile: handleShowProfile,
+    onShowBilling: handleShowBilling,
     onShowSettings: handleShowSettings,
-  }), [isLoggedIn, currentUser, handleLogin, handleLogout, handleShowProfile, handleShowSettings]);
+  }), [
+    isLoggedIn,
+    currentUser,
+    handleLogin,
+    handleSignup,
+    handleLogout,
+    handleShowProfile,
+    handleShowBilling,
+    handleShowSettings,
+  ]);
 
   const startMapNameEdit = useCallback(() => {
     if (!canEdit()) return;
@@ -2961,6 +8816,17 @@ export default function App() {
 
   const commitMapNameEdit = useCallback(() => {
     const trimmedName = (mapName || '').trim() || 'Untitled Map';
+    if (currentMap?.id) {
+      const conflict = findMapNameConflict(projects, {
+        projectId: currentMap.project_id || null,
+        name: trimmedName,
+        excludeMapId: currentMap.id,
+      });
+      if (conflict) {
+        showToast(getMapNameConflictMessage(trimmedName), 'error');
+        return;
+      }
+    }
     setMapName(trimmedName);
     setIsEditingMapName(false);
 
@@ -2981,31 +8847,74 @@ export default function App() {
         showToast(result.error || 'Failed to queue map rename', 'error');
       }
     }
-  }, [currentMap?.id, currentMap?.name, isLiveActive, mapName, showToast, submitLiveDraft]);
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, isLiveActive, mapName, projects, showToast, submitLiveDraft]);
 
-  const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
-    if (!nodeId || !thumbnailUrl) return;
-    setRoot((prev) => {
-      if (!prev) return prev;
-      if (!findNodeById(prev, nodeId)) return prev;
-      const copy = structuredClone(prev);
-      const target = findNodeById(copy, nodeId);
-      if (target) target.thumbnailUrl = thumbnailUrl;
-      return copy;
+  const updateNodeScreenshotAssets = useCallback((nodeId, assetUpdates = {}, options = {}) => {
+    if (!nodeId) return false;
+    const queueSave = options?.queueSave !== false;
+    const nextAssets = Object.entries(assetUpdates).filter(([key, value]) => {
+      if (value === undefined) return false;
+      if (value === null) return true;
+      if (typeof value === 'string') {
+        if (value.trim().length > 0) return true;
+        return CLEARABLE_NODE_ASSET_KEYS.has(key);
+      }
+      return true;
     });
-    setOrphans((prev) => {
-      let updated = false;
-      const next = prev.map((orphan) => {
-        if (!findNodeById(orphan, nodeId)) return orphan;
-        const copy = structuredClone(orphan);
-        const target = findNodeById(copy, nodeId);
-        if (target) target.thumbnailUrl = thumbnailUrl;
-        updated = true;
-        return copy;
+    if (nextAssets.length === 0) return false;
+    const nextMap = applyNodeAssetUpdatesToMap({
+      root: rootRef.current || root,
+      orphans: orphansRef.current || orphans,
+      nodeId,
+      assetEntries: nextAssets,
+    });
+    if (!nextMap.updated) return false;
+    assetAutosaveSuppressionUntilRef.current = Date.now() + ASSET_AUTOSAVE_SUPPRESSION_MS;
+    rootRef.current = nextMap.root;
+    orphansRef.current = nextMap.orphans;
+    const normalizedAssets = nextAssets.reduce((acc, [key, value]) => {
+      acc[key] = typeof value === 'string' && value.trim().length === 0 ? null : value;
+      return acc;
+    }, {});
+    if (queueSave) {
+      pendingNodeAssetUpdatesRef.current.set(nodeId, {
+        ...(pendingNodeAssetUpdatesRef.current.get(nodeId) || {}),
+        ...normalizedAssets,
       });
-      return updated ? next : prev;
+    }
+    setRoot(nextMap.root);
+    setOrphans(nextMap.orphans);
+    return true;
+  }, [orphans, root]);
+
+  const getThumbnailAssetUpdates = (data) => {
+    const smallUrl = data?.thumbnailUrl || data?.url || '';
+    const previewUrl = data?.thumbnailFullUrl || data?.previewUrl || data?.fullSizeUrl || data?.url || '';
+    const updates = {
+      authRequired: false,
+      thumbnailCaptureFailed: false,
+      thumbnailCaptureError: null,
+      thumbnailCaptureFailedAt: null,
+    };
+    if (smallUrl) updates.thumbnailUrl = smallUrl;
+    if (previewUrl) updates.thumbnailFullUrl = previewUrl;
+    return updates;
+  };
+
+  const markThumbnailCaptureFailed = (nodeId, message, extraUpdates = {}) => {
+    if (!nodeId) return false;
+    return updateNodeScreenshotAssets(nodeId, {
+      thumbnailCaptureFailed: true,
+      thumbnailCaptureError: message || 'Thumbnail capture failed',
+      thumbnailCaptureFailedAt: new Date().toISOString(),
+      ...extraUpdates,
     });
   };
+
+  const isScreenshotAuthError = useCallback((message) => (
+    String(message || '').toLowerCase().includes('requires authentication')
+    || String(message || '').toLowerCase().includes('requires login')
+  ), []);
 
   const bumpThumbnailReload = useCallback((nodeId) => {
     if (!nodeId) return;
@@ -3015,145 +8924,478 @@ export default function App() {
     }));
   }, []);
 
-  const flushThumbnailAutosave = () => {
-    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion || isLiveEditingModeActive) return;
-    const payload = {
+  const flushThumbnailAutosave = useCallback(({ createVersionCheckpoint = false, forceVersionCheckpoint = false } = {}) => {
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    const latestScanMeta = scanMetaRef.current || scanMeta;
+    if (!currentMap?.id || !latestRoot || isImportedMap || isViewingHistoricalVersion || isCoeditingReadOnlyMode) {
+      return Promise.resolve(false);
+    }
+    const payload = buildMapSavePayload({
       name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
-      root,
-      orphans,
+      root: latestRoot,
+      orphans: latestOrphans,
       connections,
       colors,
       connectionColors,
+      scanMeta: latestScanMeta,
       project_id: currentMap?.project_id || null,
+    });
+    const snapshot = serializeMapAutosaveSnapshot(payload);
+    const requestVersionCheckpoint = () => {
+      if (createVersionCheckpoint) {
+        setAutosaveCheckpointRequest({
+          mapId: currentMap.id,
+          changedAt: Date.now(),
+          skipVersionCheckpoint: false,
+          force: forceVersionCheckpoint,
+          snapshot: {
+            root: payload.root,
+            orphans: payload.orphans,
+            connections: payload.connections,
+            colors: payload.colors,
+            connectionColors: payload.connectionColors,
+          },
+        });
+      }
     };
-    const snapshot = JSON.stringify(payload);
-    autosavePendingRef.current = {
-      mapId: currentMap.id,
-      expectedUpdatedAt: currentMap?.updated_at || null,
-      payload,
-      snapshot,
-    };
-    flushAutosave();
-  };
 
-  const updateThumbnailErrorState = useCallback((nodeId, hasError) => {
+    if (nodeAssetSaveInFlightRef.current || autosaveInFlightRef.current) {
+      if (!thumbnailAutosaveTimerRef.current) {
+        thumbnailAutosaveTimerRef.current = setTimeout(() => {
+          thumbnailAutosaveTimerRef.current = null;
+          flushThumbnailAutosave({ createVersionCheckpoint, forceVersionCheckpoint });
+        }, 600);
+      }
+      return Promise.resolve(false);
+    }
+
+    const pendingUpdates = Array.from(pendingNodeAssetUpdatesRef.current.entries())
+      .map(([nodeId, assets]) => ({ nodeId, assets }));
+
+    if (autosavePendingRef.current?.mapId === currentMap.id) {
+      autosavePendingRef.current = {
+        ...autosavePendingRef.current,
+        payload,
+        snapshot,
+      };
+    }
+
+    if (pendingUpdates.length === 0) {
+      if (snapshot === lastAutosaveSnapshotRef.current) {
+        requestVersionCheckpoint();
+        return Promise.resolve(true);
+      }
+      autosavePendingRef.current = {
+        mapId: currentMap.id,
+        expectedUpdatedAt: currentMap?.updated_at || null,
+        payload,
+        snapshot,
+        skipVersionCheckpoint: !createVersionCheckpoint,
+        forceVersionCheckpoint,
+      };
+      flushAutosave();
+      return Promise.resolve(true);
+    }
+
+    pendingNodeAssetUpdatesRef.current.clear();
+    nodeAssetSaveInFlightRef.current = true;
+    if (nodeAssetSaveRetryTimerRef.current) {
+      clearTimeout(nodeAssetSaveRetryTimerRef.current);
+      nodeAssetSaveRetryTimerRef.current = null;
+    }
+
+    return api.updateMapNodeAssets(currentMap.id, pendingUpdates)
+      .then((response) => {
+        const updatedAt = response?.map?.updated_at || null;
+        if (updatedAt) {
+          setCurrentMap((prev) => (prev && prev.id === currentMap.id
+            ? { ...prev, updated_at: updatedAt }
+            : prev));
+          setProjects((prev) => prev.map((project) => ({
+            ...project,
+            maps: (project.maps || []).map((map) => (
+              map.id === currentMap.id ? { ...map, updated_at: updatedAt } : map
+            )),
+          })));
+        }
+        requestVersionCheckpoint();
+        return true;
+      })
+      .catch((error) => {
+        console.error('Thumbnail asset save failed:', error);
+        pendingUpdates.forEach(({ nodeId, assets }) => {
+          pendingNodeAssetUpdatesRef.current.set(nodeId, {
+            ...assets,
+            ...(pendingNodeAssetUpdatesRef.current.get(nodeId) || {}),
+          });
+        });
+        nodeAssetSaveRetryTimerRef.current = setTimeout(() => {
+          nodeAssetSaveRetryTimerRef.current = null;
+          flushThumbnailAutosave({ createVersionCheckpoint, forceVersionCheckpoint });
+        }, 1500);
+        return false;
+      })
+      .finally(() => {
+        nodeAssetSaveInFlightRef.current = false;
+        if (pendingNodeAssetUpdatesRef.current.size > 0 && !thumbnailAutosaveTimerRef.current) {
+          thumbnailAutosaveTimerRef.current = setTimeout(() => {
+            thumbnailAutosaveTimerRef.current = null;
+            flushThumbnailAutosave({ createVersionCheckpoint: false });
+          }, 250);
+        }
+      });
+  }, [
+    colors,
+    connectionColors,
+    connections,
+    currentMap?.id,
+    currentMap?.name,
+    currentMap?.project_id,
+    currentMap?.updated_at,
+    flushAutosave,
+    isCoeditingReadOnlyMode,
+    isImportedMap,
+    isViewingHistoricalVersion,
+    mapName,
+    orphans,
+    root,
+    scanMeta,
+    setAutosaveCheckpointRequest,
+    setProjects,
+  ]);
+
+  const flushThumbnailAutosaveNow = useCallback((options = {}) => {
+    if (thumbnailAutosaveTimerRef.current) {
+      clearTimeout(thumbnailAutosaveTimerRef.current);
+      thumbnailAutosaveTimerRef.current = null;
+    }
+    return flushThumbnailAutosave(options);
+  }, [flushThumbnailAutosave]);
+
+  const waitForThumbnailAssetSave = useCallback(async (options = {}) => {
+    const deadline = Date.now() + (options.maxWaitMs || 300000);
+    let attempt = 0;
+    while (Date.now() < deadline) {
+      const saved = await flushThumbnailAutosaveNow(options);
+      if (saved && pendingNodeAssetUpdatesRef.current.size === 0 && !nodeAssetSaveInFlightRef.current) {
+        return true;
+      }
+      attempt += 1;
+      const delayMs = Math.min(1200, 250 + (attempt * 150));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    return pendingNodeAssetUpdatesRef.current.size === 0 && !nodeAssetSaveInFlightRef.current;
+  }, [flushThumbnailAutosaveNow]);
+
+  const clearInvalidThumbnailAsset = useCallback((nodeId) => {
+    if (!nodeId) return false;
+    let markedInvalid = false;
+    setInvalidThumbnailAssetIds((prev) => {
+      if (prev.has(nodeId)) return prev;
+      const next = new Set(prev);
+      next.add(nodeId);
+      markedInvalid = true;
+      return next;
+    });
+    return markedInvalid;
+  }, []);
+
+  const validateStoredAssetsForNodes = useCallback(async (nodes, assetKey) => {
+    const idsByUrl = new Map();
+    (nodes || []).forEach((node) => {
+      const url = String(node?.[assetKey] || '').trim();
+      if (!node?.id || !hasStoredImageAsset(url)) return;
+      if (!idsByUrl.has(url)) idsByUrl.set(url, []);
+      idsByUrl.get(url).push(node.id);
+    });
+    const urls = Array.from(idsByUrl.keys());
+    if (urls.length === 0) return new Set();
+
+    const missingIds = new Set();
+    const availableIds = new Set();
+    for (let start = 0; start < urls.length; start += SCREENSHOT_ASSET_VALIDATION_BATCH_SIZE) {
+      const batchUrls = urls.slice(start, start + SCREENSHOT_ASSET_VALIDATION_BATCH_SIZE);
+      try {
+        const response = await api.validateScreenshotAssets(batchUrls);
+        const results = response?.results || {};
+        batchUrls.forEach((url) => {
+          const ids = idsByUrl.get(url) || [];
+          if (results[url]?.available === false) {
+            ids.forEach((id) => missingIds.add(id));
+          } else if (results[url]?.available === true) {
+            ids.forEach((id) => availableIds.add(id));
+          }
+        });
+      } catch (error) {
+        console.warn('Failed to validate screenshot assets', error);
+      }
+    }
+
+    const applyInvalidState = assetKey === 'thumbnailUrl'
+      ? setInvalidThumbnailAssetIds
+      : (assetKey === 'fullScreenshotUrl' ? setInvalidFullScreenshotAssetIds : null);
+    if (applyInvalidState && (missingIds.size > 0 || availableIds.size > 0)) {
+      applyInvalidState((prev) => {
+        const next = new Set(prev);
+        let changed = false;
+        missingIds.forEach((id) => {
+          if (!next.has(id)) {
+            next.add(id);
+            changed = true;
+          }
+        });
+        availableIds.forEach((id) => {
+          if (next.delete(id)) changed = true;
+        });
+        return changed ? next : prev;
+      });
+    }
+    return missingIds;
+  }, [hasStoredImageAsset]);
+
+  useEffect(() => {
+    if (!currentMap?.id || !root || thumbnailStats.mode || useLargeMapSurface) return undefined;
+    const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.id);
+    const assetTokens = [];
+    nodes.forEach((node) => {
+      if (hasStoredImageAsset(node.thumbnailUrl)) {
+        assetTokens.push(`t:${node.id}:${node.thumbnailUrl}`);
+      }
+    });
+    if (assetTokens.length === 0) return undefined;
+    const signature = `${currentMap.id}:${nodes.length}:${assetTokens.join('|')}`;
+    if (signature === screenshotAssetValidationSignatureRef.current) return undefined;
+    const timer = setTimeout(() => {
+      screenshotAssetValidationSignatureRef.current = signature;
+      validateStoredAssetsForNodes(nodes, 'thumbnailUrl');
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    currentMap?.id,
+    hasStoredImageAsset,
+    orphans,
+    root,
+    thumbnailStats.mode,
+    useLargeMapSurface,
+    validateStoredAssetsForNodes,
+  ]);
+
+  const validateCurrentMapImageAssets = useCallback(() => {
+    const latestRoot = rootRef.current || root;
+    if (!latestRoot) return Promise.resolve();
+    const latestOrphans = orphansRef.current || orphans;
+    const nodes = collectAllNodesWithOrphans(latestRoot, latestOrphans).filter((node) => node?.id);
+    return Promise.all([
+      validateStoredAssetsForNodes(nodes, 'thumbnailUrl'),
+      validateStoredAssetsForNodes(nodes, 'fullScreenshotUrl'),
+    ]).catch((error) => {
+      console.warn('Failed to validate current map image assets', error);
+    });
+  }, [orphans, root, validateStoredAssetsForNodes]);
+
+  const findNodeInCurrentMap = useCallback((nodeId) => {
+    const id = String(nodeId || '').trim();
+    if (useLargeMapSurface) {
+      return largeMapNodeCacheRef.current.get(id)
+        || largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, id))
+        || null;
+    }
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    return collectAllNodesWithOrphans(latestRoot, latestOrphans)
+      .find((node) => String(node?.id || '') === id) || null;
+  }, [orphans, root, useLargeMapSurface]);
+
+  const getCaptureIssueNodeContext = useCallback((nodeId) => {
+    const node = findNodeInCurrentMap(nodeId);
+    return {
+      node,
+      pageNumber: reportNumberMap.get(nodeId) || node?.number || node?.pageNumber || '',
+      title: node?.title || 'Untitled page',
+      url: node?.url || '',
+    };
+  }, [findNodeInCurrentMap, reportNumberMap]);
+
+  const syncCaptureIssuesState = useCallback(() => {
+    setCaptureIssues(Array.from(captureIssuesRef.current.values()));
+  }, []);
+
+  const clearCaptureIssues = useCallback(() => {
+    captureIssuesRef.current = new Map();
+    setCaptureIssues([]);
+  }, []);
+
+  const clearCaptureIssueForNode = useCallback((nodeId) => {
+    if (!nodeId || captureIssuesRef.current.size === 0) return;
+    let changed = false;
+    const next = new Map();
+    captureIssuesRef.current.forEach((issue, key) => {
+      if (String(issue.nodeId) === String(nodeId)) {
+        changed = true;
+        return;
+      }
+      next.set(key, issue);
+    });
+    if (!changed) return;
+    captureIssuesRef.current = next;
+    syncCaptureIssuesState();
+  }, [syncCaptureIssuesState]);
+
+  const recordCaptureIssue = useCallback((issueInput = {}) => {
+    const nodeId = issueInput.nodeId || issueInput?.result?.nodeId;
+    const context = getCaptureIssueNodeContext(nodeId);
+    const issue = normalizeCaptureIssue({
+      ...issueInput,
+      ...context,
+      nodeId,
+      node: context.node,
+    });
+    captureIssuesRef.current.set(issue.id, issue);
+    syncCaptureIssuesState();
+    return issue;
+  }, [getCaptureIssueNodeContext, syncCaptureIssuesState]);
+
+  const getActiveImageCaptureMode = useCallback(() => {
+    if (activeImageCaptureJob?.mode) return activeImageCaptureJob.mode;
+    return shouldShowImageCaptureProgressToast(thumbnailStats) ? thumbnailStats.mode : null;
+  }, [activeImageCaptureJob, thumbnailStats]);
+
+  const guardImageCaptureAvailable = useCallback((nextMode) => {
+    const activeMode = getActiveImageCaptureMode();
+    if (!activeMode) return true;
+    const label = activeMode === 'screenshot' ? 'full screenshots' : 'thumbnails';
+    const nextLabel = nextMode === 'screenshot' ? 'full screenshots' : 'thumbnails';
+    showToast(`Finish or stop ${label} before capturing ${nextLabel}`, 'info');
+    return false;
+  }, [getActiveImageCaptureMode, showToast]);
+
+  const guardImageCapturePersistenceReady = useCallback(() => {
+    if (currentMap?.id) return true;
+    showToast('Save this map before capturing screenshots', 'info');
+    return false;
+  }, [currentMap?.id, showToast]);
+
+  const completeThumbnailCapture = useCallback((nodeId, { captured = true } = {}) => {
     if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
-    const errorSet = thumbnailErrorRef.current;
-    if (hasError) {
-      if (!errorSet.has(nodeId)) {
-        errorSet.add(nodeId);
-        setThumbnailStats((prev) => ({ ...prev, failed: prev.failed + 1 }));
+    const updateStats = () => {
+      const completedCount = thumbnailFinishedRef.current.size;
+      const capturedCount = thumbnailLoadedRef.current.size;
+      const expectedCount = thumbnailExpectedRef.current.size;
+      setThumbnailStats((prev) => ({
+        ...prev,
+        loaded: capturedCount,
+        completed: completedCount,
+        failed: thumbnailErrorRef.current.size,
+        avgMs: completedCount ? Math.round(thumbnailTotalTimeRef.current / completedCount) : 0,
+      }));
+      if (!thumbnailCompletedRef.current && expectedCount > 0 && completedCount >= expectedCount) {
+        thumbnailCompletedRef.current = true;
+      }
+    };
+    if (thumbnailFinishedRef.current.has(nodeId)) {
+      if (captured && thumbnailErrorRef.current.has(nodeId)) {
+        thumbnailErrorRef.current.delete(nodeId);
+        thumbnailLoadedRef.current.add(nodeId);
+        updateStats();
       }
       return;
     }
-    if (errorSet.has(nodeId)) {
-      errorSet.delete(nodeId);
-      setThumbnailStats((prev) => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
+    thumbnailFinishedRef.current.add(nodeId);
+    if (captured) {
+      thumbnailLoadedRef.current.add(nodeId);
+      thumbnailErrorRef.current.delete(nodeId);
+    } else {
+      thumbnailErrorRef.current.add(nodeId);
     }
+    const start = thumbnailLoadStartRef.current.get(nodeId);
+    if (start) {
+      thumbnailTotalTimeRef.current += Date.now() - start;
+      thumbnailLoadStartRef.current.delete(nodeId);
+    }
+    thumbnailAttemptsRef.current.delete(nodeId);
+    updateStats();
   }, []);
 
-  const scheduleThumbnailRetry = useCallback((nodeId, url, attemptOverride) => {
-    if (!nodeId || !url) return;
-    if (thumbnailStopRequestedRef.current) return;
-    const currentAttempt = Number.isFinite(attemptOverride)
-      ? attemptOverride
-      : (thumbnailAttemptsRef.current.get(nodeId) || 0);
-    const nextAttempt = currentAttempt + 1;
-    thumbnailAttemptsRef.current.set(nodeId, nextAttempt);
-    const retryDelay = Math.min(THUMBNAIL_RETRY_BASE_DELAY * nextAttempt, 15000);
-    const sessionId = thumbnailSessionRef.current;
-    setTimeout(() => {
-      if (thumbnailStopRequestedRef.current) return;
-      if (thumbnailSessionRef.current !== sessionId) return;
-      if (thumbnailQueuedRef.current.has(nodeId) || thumbnailInFlightRef.current.has(nodeId)) return;
-      thumbnailQueuedRef.current.add(nodeId);
-      thumbnailQueueRef.current.push({
-        id: nodeId,
-        url,
-        attempt: nextAttempt,
-        sessionId,
-      });
-      setThumbnailQueueSize(thumbnailQueueRef.current.length);
-      processThumbnailQueue();
-    }, retryDelay);
-  }, []);
+  const handleThumbnailDisplayLoad = useCallback((nodeId) => {
+    if (!nodeId) return;
+    thumbnailDisplayRetryRef.current.delete(String(nodeId));
+    setInvalidThumbnailAssetIds((prev) => {
+      if (!prev.has(nodeId)) return prev;
+      const next = new Set(prev);
+      next.delete(nodeId);
+      return next;
+    });
+    clearCaptureIssueForNode(nodeId);
+    completeThumbnailCapture(nodeId, { captured: true });
+  }, [clearCaptureIssueForNode, completeThumbnailCapture]);
 
-  const processThumbnailQueue = () => {
-    if (thumbnailStopRequestedRef.current) return;
-    if (thumbnailActiveRef.current >= MAX_THUMBNAIL_CONCURRENCY) return;
-    const next = thumbnailQueueRef.current.shift();
-    if (!next) return;
-    if (next.sessionId && next.sessionId !== thumbnailSessionRef.current) {
-      processThumbnailQueue();
+  const handleThumbnailDisplayError = useCallback((nodeId) => {
+    if (!nodeId) return;
+    if (thumbnailLoadedRef.current.has(nodeId)) return;
+    const id = String(nodeId);
+    const node = findNodeInCurrentMap(id);
+    const thumbnailUrl = String(node?.thumbnailUrl || '').trim();
+    if (hasStoredImageAsset(thumbnailUrl)) {
+      const retryCount = thumbnailDisplayRetryRef.current.get(id) || 0;
+      validateStoredAssetsForNodes([node], 'thumbnailUrl')
+        .then((missingIds) => {
+          if (missingIds?.has(id)) {
+            thumbnailDisplayRetryRef.current.delete(id);
+            clearInvalidThumbnailAsset(id);
+            recordCaptureIssue({
+              nodeId: id,
+              status: 'image_load',
+              error: 'Image failed to load',
+            });
+            completeThumbnailCapture(id, { captured: false });
+            return;
+          }
+
+          setInvalidThumbnailAssetIds((prev) => {
+            if (!prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          clearCaptureIssueForNode(id);
+          if (retryCount < THUMBNAIL_DISPLAY_MAX_VALIDATED_RETRIES) {
+            thumbnailDisplayRetryRef.current.set(id, retryCount + 1);
+            window.setTimeout(() => bumpThumbnailReload(id), THUMBNAIL_DISPLAY_RETRY_DELAY_MS * (retryCount + 1));
+          }
+        })
+        .catch(() => {
+          if (retryCount < THUMBNAIL_DISPLAY_MAX_VALIDATED_RETRIES) {
+            thumbnailDisplayRetryRef.current.set(id, retryCount + 1);
+            window.setTimeout(() => bumpThumbnailReload(id), THUMBNAIL_DISPLAY_RETRY_DELAY_MS * (retryCount + 1));
+          }
+        });
       return;
     }
-    thumbnailQueuedRef.current.delete(next.id);
-    const attempt = Number.isFinite(next.attempt)
-      ? next.attempt
-      : (thumbnailAttemptsRef.current.get(next.id) || 0);
-    thumbnailAttemptsRef.current.set(next.id, attempt);
-    thumbnailActiveRef.current += 1;
-    setThumbnailQueueSize(thumbnailQueueRef.current.length);
-    setThumbnailActiveCount(thumbnailActiveRef.current);
-    thumbnailLoadStartRef.current.set(next.id, Date.now());
-    thumbnailInFlightRef.current.add(next.id);
-    let success = false;
-    const controller = new AbortController();
-    thumbnailAbortControllersRef.current.set(next.id, controller);
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, 45000);
+    clearInvalidThumbnailAsset(nodeId);
+    recordCaptureIssue({
+      nodeId,
+      status: 'image_load',
+      error: 'Image failed to load',
+    });
+    completeThumbnailCapture(nodeId, { captured: false });
+  }, [
+    bumpThumbnailReload,
+    clearCaptureIssueForNode,
+    clearInvalidThumbnailAsset,
+    completeThumbnailCapture,
+    findNodeInCurrentMap,
+    hasStoredImageAsset,
+    recordCaptureIssue,
+    validateStoredAssetsForNodes,
+  ]);
 
-    fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(next.url)}&type=thumb`, {
-      signal: controller.signal,
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (ok && data?.url) {
-          updateNodeThumbnail(next.id, data.url);
-          bumpThumbnailReload(next.id);
-          updateThumbnailErrorState(next.id, false);
-          success = true;
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        clearTimeout(timeoutId);
-        const isStale = next.sessionId && next.sessionId !== thumbnailSessionRef.current;
-        if (!isStale) {
-          thumbnailActiveRef.current -= 1;
-          setThumbnailActiveCount(thumbnailActiveRef.current);
-          setThumbnailQueueSize(thumbnailQueueRef.current.length);
-        }
-        thumbnailInFlightRef.current.delete(next.id);
-        thumbnailAbortControllersRef.current.delete(next.id);
-        if (isStale) {
-          processThumbnailQueue();
-          return;
-        }
-        if (!success) {
-          thumbnailLoadStartRef.current.delete(next.id);
-        }
-        if (thumbnailStopRequestedRef.current) {
-          processThumbnailQueue();
-          return;
-        }
-        if (!success) {
-          updateThumbnailErrorState(next.id, true);
-          scheduleThumbnailRetry(next.id, next.url, attempt);
-        }
-        processThumbnailQueue();
-      });
-  };
-
-  const resetThumbnailQueue = (total, cached = 0, bumpSession = true) => {
+  const resetThumbnailQueue = (total, cached = 0, bumpSession = true, mode = 'thumbnail', unavailable = 0) => {
     if (bumpSession) {
       const nextSessionId = thumbnailSessionRef.current + 1;
       thumbnailSessionRef.current = nextSessionId;
       setThumbnailSessionId(nextSessionId);
     }
-    thumbnailQueueRef.current = [];
-    thumbnailQueuedRef.current.clear();
     thumbnailInFlightRef.current.clear();
     thumbnailAbortControllersRef.current.forEach((controller) => controller.abort());
     thumbnailAbortControllersRef.current.clear();
@@ -3163,80 +9405,82 @@ export default function App() {
     thumbnailAttemptsRef.current = new Map();
     thumbnailExpectedRef.current = new Set();
     thumbnailLoadedRef.current = new Set();
+    thumbnailFinishedRef.current = new Set();
     thumbnailErrorRef.current = new Set();
+    imageCaptureSavedRef.current = new Set();
+    imageCaptureAppliedRef.current = new Set();
+    imageCaptureAssetCursorRef.current = 0;
+    thumbnailDisplayRetryRef.current = new Map();
+    thumbnailBatchIndexRef.current = 0;
+    thumbnailBatchTotalRef.current = 0;
     thumbnailCompletedRef.current = false;
     thumbnailStopRequestedRef.current = false;
+    screenshotStopRequestedRef.current = false;
+    imageCaptureJobRef.current = null;
+    setActiveImageCaptureJob(null);
+    thumbnailAuthToastShownRef.current = false;
+    thumbnailFailureToastShownRef.current = false;
     setThumbnailQueueSize(0);
     setThumbnailActiveCount(0);
     setThumbnailReloadMap({});
     setThumbnailStats({
+      mode,
       total,
+      saved: cached,
+      verified: cached,
       loaded: 0,
+      completed: 0,
       failed: 0,
+      skipped: 0,
       avgMs: 0,
       cached,
+      unavailable,
+      phase: null,
+      recoveryPass: 0,
+      retrying: 0,
+      batchIndex: 0,
+      batchTotal: 0,
+      scaleTier: null,
+      stageIndex: 0,
+      stageTotal: 0,
+      paused: false,
+      finalizing: false,
       stopped: false,
     });
   };
 
-  const requestThumbnail = (node) => {
-    if (!node?.id || !node?.url) return Promise.resolve(false);
-    if (thumbnailStopRequestedRef.current) return Promise.resolve(true);
-    if (thumbnailQueuedRef.current.has(node.id) || thumbnailInFlightRef.current.has(node.id)) {
-      return Promise.resolve(true);
-    }
-    if (!thumbnailAttemptsRef.current.has(node.id)) {
-      thumbnailAttemptsRef.current.set(node.id, 0);
-    }
-    thumbnailQueuedRef.current.add(node.id);
-    thumbnailQueueRef.current.push({
-      id: node.id,
-      url: node.url,
-      attempt: 0,
-      sessionId: thumbnailSessionRef.current,
-    });
-    setThumbnailQueueSize(thumbnailQueueRef.current.length);
-    processThumbnailQueue();
-    return Promise.resolve(true);
-  };
-
-  const handleThumbnailImageLoad = useCallback((nodeId) => {
-    if (thumbnailStopRequestedRef.current) return;
-    if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
-    if (thumbnailLoadedRef.current.has(nodeId)) return;
-    thumbnailLoadedRef.current.add(nodeId);
-    updateThumbnailErrorState(nodeId, false);
-    const start = thumbnailLoadStartRef.current.get(nodeId);
-    if (start) {
-      thumbnailTotalTimeRef.current += Date.now() - start;
-      thumbnailLoadStartRef.current.delete(nodeId);
-    }
-    thumbnailAttemptsRef.current.delete(nodeId);
-    const loadedCount = thumbnailLoadedRef.current.size;
-    const expectedCount = thumbnailExpectedRef.current.size;
-    setThumbnailStats((prev) => ({
-      ...prev,
-      loaded: loadedCount,
-      avgMs: loadedCount ? Math.round(thumbnailTotalTimeRef.current / loadedCount) : 0,
-    }));
-    if (!thumbnailCompletedRef.current && expectedCount > 0 && loadedCount >= expectedCount) {
-      thumbnailCompletedRef.current = true;
-      setTimeout(() => flushThumbnailAutosave(), 300);
-    }
-  }, [flushThumbnailAutosave, updateThumbnailErrorState]);
-
-  const handleThumbnailImageError = useCallback((nodeId, url) => {
-    if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
-    if (thumbnailStopRequestedRef.current) return;
-    thumbnailLoadStartRef.current.delete(nodeId);
-    updateThumbnailErrorState(nodeId, true);
-    scheduleThumbnailRetry(nodeId, url);
-  }, [scheduleThumbnailRetry, updateThumbnailErrorState]);
-
-  const orderThumbnailNodes = (nodes) => {
+  const orderThumbnailNodes = useCallback((nodes) => {
     if (!Array.isArray(nodes) || nodes.length === 0) return [];
     const layoutNodes = layoutRef.current?.nodes || new Map();
     const orderIndex = new Map(nodes.map((node, idx) => [node.id, idx]));
+    const primaryRootId = rootRef.current?.id || root?.id || null;
+    const parsePageNumber = (value) => {
+      const raw = String(value || '').trim();
+      if (!raw) return { hasNumber: false, parts: [], raw };
+      const cleaned = raw.replace(/^[a-z]+/i, '');
+      const parts = cleaned
+        .split('.')
+        .map((part) => Number.parseInt(part, 10))
+        .filter((part) => Number.isFinite(part));
+      return { hasNumber: parts.length > 0, parts, raw };
+    };
+    const comparePageNumber = (a, b) => {
+      if (a.hasNumber !== b.hasNumber) return a.hasNumber ? -1 : 1;
+      const len = Math.max(a.parts.length, b.parts.length);
+      for (let index = 0; index < len; index += 1) {
+        const partA = a.parts[index] ?? -1;
+        const partB = b.parts[index] ?? -1;
+        if (partA !== partB) return partA - partB;
+      }
+      return a.raw.localeCompare(b.raw);
+    };
+    const getPageNumber = (node) => parsePageNumber(
+      reportNumberMap.get(node.id)
+        || layoutNodes.get(node.id)?.number
+        || node.number
+        || node.pageNumber
+        || ''
+    );
     const groupRank = (node) => {
       const meta = forestIndex.nodes.get(node.id);
       if (meta?.treeType === 'subdomain') return 1;
@@ -3248,10 +9492,36 @@ export default function App() {
       if (!layout) return null;
       return { x: layout.x, y: layout.y };
     };
+    const getMeta = (node) => forestIndex.nodes.get(node.id) || {};
+    const compareCaptureMeta = (a, b) => {
+      const metaA = getMeta(a);
+      const metaB = getMeta(b);
+      const treeA = metaA.treeIndex ?? Number.MAX_SAFE_INTEGER;
+      const treeB = metaB.treeIndex ?? Number.MAX_SAFE_INTEGER;
+      if (treeA !== treeB) return treeA - treeB;
+      const depthA = metaA.depth ?? Number.MAX_SAFE_INTEGER;
+      const depthB = metaB.depth ?? Number.MAX_SAFE_INTEGER;
+      if (depthA !== depthB) return depthA - depthB;
+      const numberOrder = comparePageNumber(getPageNumber(a), getPageNumber(b));
+      if (numberOrder !== 0) return numberOrder;
+      const pathA = metaA.orderPath || '';
+      const pathB = metaB.orderPath || '';
+      if (pathA !== pathB) return pathA.localeCompare(pathB);
+      const orderA = metaA.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = metaB.order ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return null;
+    };
     return [...nodes].sort((a, b) => {
+      if (primaryRootId && a.id !== b.id) {
+        if (a.id === primaryRootId) return -1;
+        if (b.id === primaryRootId) return 1;
+      }
       const groupA = groupRank(a);
       const groupB = groupRank(b);
       if (groupA !== groupB) return groupA - groupB;
+      const captureOrder = compareCaptureMeta(a, b);
+      if (captureOrder !== null) return captureOrder;
       const posA = getPosition(a);
       const posB = getPosition(b);
       if (posA && posB) {
@@ -3264,9 +9534,57 @@ export default function App() {
       if (!posA && posB) return 1;
       return (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0);
     });
-  };
+  }, [forestIndex, reportNumberMap, root?.id]);
 
-  const getThumbnailCandidates = (scope) => {
+  const buildImageCaptureBatches = useCallback((nodes) => {
+    const orderedNodes = orderThumbnailNodes(nodes);
+    if (orderedNodes.length === 0) return [];
+    const primaryRootId = rootRef.current?.id || root?.id || null;
+    const batches = [];
+    let remainingNodes = orderedNodes;
+
+    if (primaryRootId) {
+      const rootIndex = remainingNodes.findIndex((node) => node?.id === primaryRootId);
+      if (rootIndex >= 0) {
+        batches.push([remainingNodes[rootIndex]]);
+        remainingNodes = remainingNodes.filter((_, index) => index !== rootIndex);
+      }
+    }
+
+    for (let start = 0; start < remainingNodes.length; start += IMAGE_CAPTURE_BATCH_SIZE) {
+      batches.push(remainingNodes.slice(start, start + IMAGE_CAPTURE_BATCH_SIZE));
+    }
+
+    return batches;
+  }, [orderThumbnailNodes, root?.id]);
+
+  const getThumbnailCandidates = (
+    scope,
+    invalidAssetIds = invalidThumbnailAssetIds,
+    targetMode = 'remaining',
+  ) => {
+    if (useLargeMapSurface && scope === 'selected') {
+      const selectedIds = Array.from(selectedNodeIds || [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean);
+      const candidates = selectedIds.map((id) => {
+        const cachedNode = largeMapNodeCacheRef.current.get(id);
+        const visibleNode = largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, id));
+        return {
+          id,
+          ...(cachedNode || visibleNode || {}),
+          url: cachedNode?.url || visibleNode?.url || '__large_map_selected_node__',
+        };
+      });
+      return {
+        targetIds: new Set(selectedIds),
+        candidates,
+        total: selectedIds.length,
+        cachedCount: 0,
+        unavailableCount: 0,
+      };
+    }
+
     const allNodes = collectAllNodesWithOrphans(root, orphans);
     const baseIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
     const scopedNodes = scope === 'selected'
@@ -3274,18 +9592,456 @@ export default function App() {
       : allNodes;
     const targetNodes = scopedNodes.filter((node) => node?.url);
     const orderedTargets = orderThumbnailNodes(targetNodes);
-    const candidates = orderedTargets.filter((node) => {
-      const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
-      return !(node.thumbnailUrl && isScreenshotThumb);
-    });
+    const forceRecapture = scope === 'selected';
+    const recaptureCapturedOnly = targetMode === 'captured';
+    let cachedCount = 0;
+    let unavailableCount = 0;
+    let candidates = [];
+    if (recaptureCapturedOnly) {
+      candidates = orderedTargets.filter((node) => hasStoredImageAsset(node.thumbnailUrl) && !invalidAssetIds.has(node.id));
+    } else if (forceRecapture) {
+      candidates = orderedTargets;
+    } else {
+      candidates = orderedTargets.filter((node) => {
+        const hasSavedThumb = hasStoredImageAsset(node.thumbnailUrl) && !invalidAssetIds.has(node.id);
+        if (hasSavedThumb) {
+          cachedCount += 1;
+          return false;
+        }
+        if (hasTerminalThumbnailFailure(node)) {
+          unavailableCount += 1;
+          return false;
+        }
+        return true;
+      });
+    }
     const targetIds = new Set(candidates.map((node) => node.id));
-    const cachedCount = orderedTargets.length - candidates.length;
-    return { targetIds, candidates, total: orderedTargets.length, cachedCount };
+    return {
+      targetIds,
+      candidates,
+      total: orderedTargets.length,
+      cachedCount: forceRecapture || recaptureCapturedOnly ? 0 : cachedCount,
+      unavailableCount: forceRecapture || recaptureCapturedOnly ? 0 : unavailableCount,
+    };
   };
 
-  const handleThumbnailCapture = (scope) => {
-    if (isLiveActive) {
-      warnLiveModeUnsupported('Thumbnail capture is disabled while live editing is active.');
+  const reconcileSavedImageCaptureAssets = useCallback(async ({ mapId, mode, nodeIds }) => {
+    const ids = Array.from(new Set((nodeIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+    if (!mapId || ids.length === 0) return;
+    try {
+      const response = await api.getMap(mapId);
+      const savedMap = response?.map;
+      const savedNodes = collectAllNodesWithOrphans(savedMap?.root, savedMap?.orphans || []);
+      const savedById = new Map(savedNodes.map((node) => [String(node?.id || ''), node]));
+      ids.forEach((nodeId) => {
+        const savedNode = savedById.get(nodeId);
+        const assetUrl = getCaptureAssetUrl(savedNode, mode);
+        if (!assetUrl) {
+          recordCaptureIssue({
+            nodeId,
+            status: 'missing_asset',
+            error: 'Saved image fields were not found on the map',
+          });
+          completeThumbnailCapture(nodeId, { captured: false });
+          return;
+        }
+        const assetUpdates = collectImageAssetUpdatesFromNode(savedNode);
+        const cached = useLargeMapSurface
+          ? mergeLargeMapNodeCache(savedNode, { preserveExistingAssetsOnEmpty: false })
+          : false;
+        const applied = updateNodeScreenshotAssets(nodeId, assetUpdates, { queueSave: false });
+        if (!applied && !cached && getCaptureAssetUrl(findNodeInCurrentMap(nodeId), mode) !== assetUrl) {
+          recordCaptureIssue({
+            nodeId,
+            status: 'missing_asset',
+            error: 'Saved image fields could not be applied to the canvas',
+          });
+          completeThumbnailCapture(nodeId, { captured: false });
+          return;
+        }
+        imageCaptureAppliedRef.current.add(nodeId);
+        if (mode === 'screenshot') {
+          clearCaptureIssueForNode(nodeId);
+          completeThumbnailCapture(nodeId, { captured: true });
+        } else {
+          bumpThumbnailReload(nodeId);
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to reconcile saved image capture assets', error);
+    }
+  }, [
+    bumpThumbnailReload,
+    clearCaptureIssueForNode,
+    completeThumbnailCapture,
+    findNodeInCurrentMap,
+    mergeLargeMapNodeCache,
+    recordCaptureIssue,
+    updateNodeScreenshotAssets,
+    useLargeMapSurface,
+  ]);
+
+  const applyImageCaptureJobUpdates = useCallback((job, expectedMode) => {
+    const payload = job?.progress || job?.result || {};
+    const updates = Array.isArray(payload.nodeAssetUpdates) ? payload.nodeAssetUpdates : [];
+    let maxAssetSeq = imageCaptureAssetCursorRef.current;
+    const savedButNotApplied = new Set();
+    updates.forEach((entry) => {
+      const nodeId = String(entry?.nodeId || '').trim();
+      const assets = entry?.assets || {};
+      if (!nodeId || !assets || typeof assets !== 'object') return;
+      const seq = Number(entry?.seq || 0);
+      if (seq > maxAssetSeq) maxAssetSeq = seq;
+      const key = `${nodeId}:${JSON.stringify(assets)}`;
+      if (imageCaptureAppliedUpdateKeysRef.current.has(key)) return;
+      imageCaptureAppliedUpdateKeysRef.current.add(key);
+      const cached = useLargeMapSurface ? mergeLargeMapNodeAssetCache(nodeId, assets) : false;
+      const applied = updateNodeScreenshotAssets(nodeId, assets, { queueSave: false });
+      const assetUrl = getCaptureAssetUrl(assets, expectedMode);
+      if (applied || cached || (assetUrl && getCaptureAssetUrl(findNodeInCurrentMap(nodeId), expectedMode) === assetUrl)) {
+        imageCaptureAppliedRef.current.add(nodeId);
+      } else if (assetUrl) {
+        savedButNotApplied.add(nodeId);
+      }
+      if (assets.thumbnailUrl) {
+        setInvalidThumbnailAssetIds((prev) => {
+          if (!prev.has(nodeId)) return prev;
+          const updated = new Set(prev);
+          updated.delete(nodeId);
+          return updated;
+        });
+        bumpThumbnailReload(nodeId);
+      }
+      if (assets.fullScreenshotUrl) {
+        setInvalidFullScreenshotAssetIds((prev) => {
+          if (!prev.has(nodeId)) return prev;
+          const updated = new Set(prev);
+          updated.delete(nodeId);
+          return updated;
+        });
+        completeThumbnailCapture(nodeId, { captured: true });
+      }
+    });
+    imageCaptureAssetCursorRef.current = maxAssetSeq;
+
+    if (Array.isArray(payload.targetIds)) {
+      thumbnailExpectedRef.current = new Set(payload.targetIds);
+    }
+
+    const results = Array.isArray(payload.results) ? payload.results : [];
+    results.forEach((result) => {
+      const nodeId = String(result?.nodeId || '').trim();
+      if (!nodeId || !result?.status) return;
+      if (result.status === 'saved') {
+        imageCaptureSavedRef.current.add(nodeId);
+        if (!imageCaptureAppliedRef.current.has(nodeId)) {
+          const node = findNodeInCurrentMap(nodeId);
+          if (getCaptureAssetUrl(node, expectedMode)) {
+            imageCaptureAppliedRef.current.add(nodeId);
+          } else {
+            savedButNotApplied.add(nodeId);
+          }
+        }
+        return;
+      }
+      const context = getCaptureIssueNodeContext(nodeId);
+      recordCaptureIssue(buildCaptureIssueFromResult(result, context.node, context.pageNumber));
+      completeThumbnailCapture(nodeId, { captured: false });
+    });
+    const failedTotal = Number((payload.failed || 0) + (payload.blocked || 0) + (payload.missingAsset || 0));
+    const skippedTotal = Number(payload.skipped || 0);
+    const issueCount = Math.max(captureIssuesRef.current.size, failedTotal + skippedTotal);
+    const savedCount = Math.max(
+      0,
+      Number(payload.saved ?? payload.verified ?? payload.captured ?? imageCaptureSavedRef.current.size ?? 0) || 0
+    );
+    const verifiedCount = Math.max(savedCount, Number(payload.verified ?? savedCount) || 0);
+    const progress = getReconciledCaptureProgress({
+      total: Number(payload.total || 0),
+      saved: savedCount,
+      verified: verifiedCount,
+      captured: Number(payload.captured || savedCount),
+      loadedIds: thumbnailLoadedRef.current,
+      issueCount,
+    });
+    const completed = progress.completed;
+    const elapsed = Number(payload.elapsedMs || (thumbnailElapsedStartRef.current ? Date.now() - thumbnailElapsedStartRef.current : 0));
+    setThumbnailStats((prev) => ({
+      ...prev,
+      mode: expectedMode,
+      total: Number(payload.total || prev.total || 0),
+      saved: progress.saved,
+      verified: progress.verified,
+      loaded: thumbnailLoadedRef.current.size,
+      completed,
+      failed: Math.max(failedTotal, thumbnailErrorRef.current.size),
+      skipped: skippedTotal,
+      cached: Number(payload.cached || prev.cached || 0),
+      unavailable: Number(payload.unavailable || prev.unavailable || 0),
+      phase: payload.phase || prev.phase || 'capturing',
+      recoveryPass: Number(payload.recoveryPass || 0),
+      retrying: Number(payload.retrying || 0),
+      scaleTier: payload.scaleTier || prev.scaleTier || null,
+      stageIndex: Number(payload.stageIndex || prev.stageIndex || 0),
+      stageTotal: Number(payload.stageTotal || prev.stageTotal || 0),
+      paused: Boolean(payload.paused) || job?.status === 'paused',
+      avgMs: completed ? Math.round(elapsed / completed) : prev.avgMs,
+    }));
+    return { savedButNotApplied: Array.from(savedButNotApplied) };
+  }, [
+    bumpThumbnailReload,
+    completeThumbnailCapture,
+    findNodeInCurrentMap,
+    getCaptureIssueNodeContext,
+    mergeLargeMapNodeAssetCache,
+    recordCaptureIssue,
+    updateNodeScreenshotAssets,
+    useLargeMapSurface,
+  ]);
+
+  useEffect(() => {
+    if (!currentMap?.id || !root || isViewingHistoricalVersion) return undefined;
+    if (activeImageCaptureJob?.jobId) return undefined;
+    const localCaptureActive = thumbnailStats.mode
+      && !thumbnailStats.stopped
+      && (thumbnailStats.completed || 0) < (thumbnailStats.total || 0);
+    if (localCaptureActive) return undefined;
+
+    const mapId = currentMap.id;
+    if (imageCaptureReattachMapRef.current === mapId) return undefined;
+    imageCaptureReattachMapRef.current = mapId;
+
+    let canceled = false;
+    api.getActiveMapImageCaptureJob(mapId)
+      .then(({ job }) => {
+        if (canceled || !job?.id || !['queued', 'running', 'paused'].includes(job.status)) return;
+        const mode = job.payload?.captureType === 'full' ? 'screenshot' : 'thumbnail';
+        imageCaptureJobRef.current = { mapId, jobId: job.id, mode };
+        imageCaptureAppliedUpdateKeysRef.current = new Set();
+        const elapsedMs = Number(job.progress?.elapsedMs || 0);
+        thumbnailElapsedStartRef.current = Date.now() - elapsedMs;
+        setThumbnailElapsedMs(elapsedMs);
+        setShowThumbnails(true);
+        setActiveImageCaptureJob({ mapId, jobId: job.id, mode, status: job.status });
+        applyImageCaptureJobUpdates(job, mode);
+        requestLargeMapSceneRefresh();
+      })
+      .catch((error) => {
+        imageCaptureReattachMapRef.current = null;
+        console.warn('Failed to check active image capture job', error);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [
+    activeImageCaptureJob?.jobId,
+    applyImageCaptureJobUpdates,
+    currentMap?.id,
+    isViewingHistoricalVersion,
+    requestLargeMapSceneRefresh,
+    root,
+    thumbnailStats.completed,
+    thumbnailStats.mode,
+    thumbnailStats.stopped,
+    thumbnailStats.total,
+  ]);
+
+  const runMapImageCaptureJob = useCallback(async ({
+    scope,
+    captureType,
+    mode,
+    targetMode = 'remaining',
+    targets,
+    targetIds,
+    cachedCount = 0,
+    unavailableCount = 0,
+  }) => {
+    if (!currentMap?.id) return false;
+    const mapId = currentMap.id;
+    const total = targets.length;
+    const targetIdSet = new Set((targets || []).map((node) => String(node?.id || '')).filter(Boolean));
+    clearCaptureIssues();
+    imageCaptureAppliedUpdateKeysRef.current = new Set();
+    resetThumbnailQueue(total, cachedCount, true, mode, unavailableCount);
+    const runSessionId = thumbnailSessionRef.current;
+    thumbnailExpectedRef.current = new Set(targets.map((node) => node.id));
+    thumbnailElapsedStartRef.current = Date.now();
+    setThumbnailElapsedMs(0);
+    setThumbnailScopeIds(targetIds || new Set(targets.map((node) => node.id)));
+    setShowThumbnails(true);
+    setShowImageMenu(false);
+    trackEvent('screenshot_capture', {
+      type: captureType === 'full' ? 'full' : 'thumbnail',
+      scope,
+      count: total,
+      pipeline: 'job',
+    });
+
+    let jobId = null;
+    try {
+      const response = await api.createMapImageCaptureJob(mapId, {
+        captureType,
+        scope,
+        nodeIds: scope === 'selected' ? Array.from(selectedNodeIds) : [],
+        targetMode,
+        force: scope === 'selected' || targetMode === 'captured',
+      });
+      jobId = response?.jobId;
+      if (!jobId) throw new Error('Image capture job did not start');
+      imageCaptureJobRef.current = { mapId, jobId, mode };
+      setActiveImageCaptureJob({ mapId, jobId, mode });
+    } catch (error) {
+      const isActiveJobConflict = error?.code === 'IMAGE_CAPTURE_JOB_ACTIVE'
+        || error?.payload?.code === 'IMAGE_CAPTURE_JOB_ACTIVE';
+      const activeJobId = error?.jobId || error?.payload?.jobId;
+      if (isActiveJobConflict && activeJobId) {
+        jobId = activeJobId;
+        imageCaptureJobRef.current = { mapId, jobId, mode };
+        setActiveImageCaptureJob({ mapId, jobId, mode, status: 'running' });
+        showToast('Reattached to the image capture already running for this map', 'info');
+      } else {
+        imageCaptureJobRef.current = null;
+        setActiveImageCaptureJob(null);
+        if (handleEntitlementError(error, 'Your plan does not have enough screenshot credits for this capture.')) {
+          setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+          return true;
+        }
+        showToast(
+          getImageCaptureJobErrorMessage(error, 'Failed to start image capture job'),
+          isActiveJobConflict ? 'warning' : 'error',
+        );
+        setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+        return true;
+      }
+    }
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const waitForCanvasThumbnailLoads = async () => true;
+    try {
+      while (thumbnailSessionRef.current === runSessionId) {
+        if (
+          (mode === 'screenshot' && screenshotStopRequestedRef.current)
+          || (mode !== 'screenshot' && thumbnailStopRequestedRef.current)
+        ) {
+          await api.cancelMapImageCaptureJob(mapId, jobId).catch(() => {});
+          setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+          imageCaptureJobRef.current = null;
+          setActiveImageCaptureJob(null);
+          return true;
+        }
+
+        const includeResult = false;
+        const { job } = await api.getMapImageCaptureJob(mapId, jobId, {
+          includeResult,
+          assetUpdateCursor: imageCaptureAssetCursorRef.current,
+        });
+        setActiveImageCaptureJob({ mapId, jobId, mode, status: job?.status });
+        const reconciliation = applyImageCaptureJobUpdates(job, mode);
+        if (reconciliation?.savedButNotApplied?.length > 0) {
+          await reconcileSavedImageCaptureAssets({
+            mapId,
+            mode,
+            nodeIds: reconciliation.savedButNotApplied,
+          });
+        }
+
+        if (['complete', 'failed', 'canceled'].includes(job?.status)) {
+          const finalResponse = job.status === 'complete'
+            ? await api.getMapImageCaptureJob(mapId, jobId, {
+                includeResult: true,
+                assetUpdateCursor: imageCaptureAssetCursorRef.current,
+              })
+            : { job };
+          const finalJob = finalResponse.job || job;
+          const finalReconciliation = applyImageCaptureJobUpdates(finalJob, mode);
+          if (finalReconciliation?.savedButNotApplied?.length > 0) {
+            await reconcileSavedImageCaptureAssets({
+              mapId,
+              mode,
+              nodeIds: finalReconciliation.savedButNotApplied,
+            });
+          }
+          requestLargeMapSceneRefresh();
+          imageCaptureJobRef.current = null;
+          setActiveImageCaptureJob(null);
+
+          if (finalJob.status === 'canceled') {
+            setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+            showToast('Image capture stopped', 'warning');
+            return true;
+          }
+          if (finalJob.status === 'failed') {
+            setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+            showToast(getImageCaptureJobErrorMessage(finalJob, 'Image capture failed'), 'error');
+            return true;
+          }
+
+          setThumbnailStats((prev) => ({ ...prev, finalizing: true }));
+          const summary = finalJob.result || finalJob.progress || {};
+          await waitForCanvasThumbnailLoads(Number(summary.total || targets.length || 0));
+          await refreshTimelineAfterImageCapture();
+          const shown = Math.max(0, Number(summary.saved ?? summary.verified ?? summary.captured ?? imageCaptureSavedRef.current.size) || 0);
+          const unavailable = Number(summary.unavailable || 0);
+          const failed = Number((summary.failed || 0) + (summary.blocked || 0) + (summary.missingAsset || 0));
+          const skipped = Number(summary.skipped || 0);
+          const currentIssues = Array.from(captureIssuesRef.current.values())
+            .filter((issue) => targetIdSet.size === 0 || targetIdSet.has(String(issue.nodeId || '')));
+          const issueCount = Math.max(failed + skipped + unavailable, currentIssues.length);
+          const issueLabels = currentIssues.map((issue) => issue.label);
+          const label = mode === 'screenshot' ? 'full screenshot' : 'thumbnail';
+          const toastResult = formatImageCaptureCompletionToast({
+            shown,
+            label,
+            failed: failed + unavailable,
+            skipped,
+            issueCount,
+            issueLabels,
+          });
+          if (issueCount > 0) {
+            showToast(toastResult.message, toastResult.type);
+          } else {
+            showToast(toastResult.message, toastResult.type);
+          }
+          setThumbnailStats((prev) => ({ ...prev, finalizing: false }));
+          trackEvent('screenshot_capture_complete', {
+            type: captureType === 'full' ? 'full' : 'thumbnail',
+            scope,
+            count: shown,
+            failed: issueCount,
+            skipped,
+            pipeline: 'job',
+          });
+          await refreshCurrentUser();
+          return true;
+        }
+        await sleep(1000);
+      }
+    } catch (error) {
+      imageCaptureJobRef.current = null;
+      setActiveImageCaptureJob(null);
+      showToast(getImageCaptureJobErrorMessage(error, 'Image capture failed'), 'error');
+      setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+      return true;
+    }
+    imageCaptureJobRef.current = null;
+    setActiveImageCaptureJob(null);
+    return true;
+  }, [
+    applyImageCaptureJobUpdates,
+    clearCaptureIssues,
+    currentMap?.id,
+    handleEntitlementError,
+    reconcileSavedImageCaptureAssets,
+    refreshCurrentUser,
+    refreshTimelineAfterImageCapture,
+    requestLargeMapSceneRefresh,
+    selectedNodeIds,
+    showToast,
+  ]);
+
+  const handleThumbnailCapture = async (scope, targetMode = 'remaining') => {
+    if (warnCoeditingReadOnly('Thumbnail capture')) {
       return;
     }
     if (!root) {
@@ -3296,16 +10052,43 @@ export default function App() {
       showToast('Select pages to capture thumbnails', 'info');
       return;
     }
-    const { targetIds, candidates, total, cachedCount } = getThumbnailCandidates(scope);
+    if (!guardImageCaptureAvailable('thumbnail')) return;
+    if (!guardImageCapturePersistenceReady()) return;
+    const invalidIds = new Set(invalidThumbnailAssetIds);
+    const { targetIds, candidates, total, cachedCount, unavailableCount } = getThumbnailCandidates(scope, invalidIds, targetMode);
     if (total === 0) {
-      resetThumbnailQueue(0);
+      resetThumbnailQueue(0, 0, true, 'thumbnail');
       setThumbnailScopeIds(new Set());
       setShowThumbnails(true);
       setShowImageMenu(false);
       showToast('No pages with URLs to capture', 'info');
       return;
     }
-    resetThumbnailQueue(total, cachedCount, true);
+    if (targetMode === 'captured' && candidates.length === 0) {
+      resetThumbnailQueue(0, 0, true, 'thumbnail');
+      setThumbnailScopeIds(new Set());
+      setShowImageMenu(false);
+      showToast('No captured thumbnails to update', 'info');
+      return;
+    }
+    if (!(await confirmScreenshotCreditUsage({
+      mode: 'thumbnail',
+      captureType: 'thumb',
+      count: candidates.length,
+      scope,
+    }))) return;
+    const handledByJob = await runMapImageCaptureJob({
+      scope,
+      captureType: 'thumb',
+      mode: 'thumbnail',
+      targetMode,
+      targets: candidates,
+      targetIds,
+      cachedCount,
+      unavailableCount,
+    });
+    if (handledByJob) return;
+    resetThumbnailQueue(candidates.length, cachedCount, true, 'thumbnail', unavailableCount);
     thumbnailElapsedStartRef.current = Date.now();
     setThumbnailElapsedMs(0);
     thumbnailExpectedRef.current = new Set(candidates.map((node) => node.id));
@@ -3313,44 +10096,306 @@ export default function App() {
       setThumbnailScopeIds(new Set());
       setShowThumbnails(true);
       setShowImageMenu(false);
-      showToast('No new thumbnails to generate', 'info');
+      showToast(
+        unavailableCount > 0
+          ? `${unavailableCount} thumbnail${unavailableCount === 1 ? '' : 's'} could not be captured. Select those pages and run Selected to retry.`
+          : 'No new thumbnails to generate',
+        unavailableCount > 0 ? 'warning' : 'info',
+      );
       return;
     }
     setThumbnailScopeIds(targetIds);
     setShowThumbnails(true);
     setShowImageMenu(false);
-    candidates.forEach((node) => {
-      requestThumbnail(node);
+    const captureBatches = buildImageCaptureBatches(candidates);
+    thumbnailBatchTotalRef.current = Math.max(1, captureBatches.length);
+    thumbnailBatchIndexRef.current = 0;
+    setThumbnailStats((prev) => ({
+      ...prev,
+      batchIndex: 0,
+      batchTotal: thumbnailBatchTotalRef.current,
+    }));
+    trackEvent('screenshot_capture', {
+      type: 'thumbnail',
+      scope,
+      count: candidates.length,
     });
+    const runSessionId = thumbnailSessionRef.current;
+    candidates.forEach((node) => {
+      thumbnailAttemptsRef.current.set(node.id, 0);
+    });
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const updateRunCounts = () => {
+      const completedCount = thumbnailFinishedRef.current.size;
+      const capturedCount = thumbnailLoadedRef.current.size;
+      const elapsed = thumbnailElapsedStartRef.current ? Date.now() - thumbnailElapsedStartRef.current : 0;
+      setThumbnailStats((prev) => ({
+        ...prev,
+        loaded: capturedCount,
+        completed: completedCount,
+        failed: thumbnailErrorRef.current.size,
+        avgMs: completedCount ? Math.round(elapsed / completedCount) : 0,
+      }));
+      setThumbnailActiveCount(thumbnailActiveRef.current);
+      setThumbnailQueueSize(Math.max(
+        0,
+        candidates.length - completedCount - thumbnailInFlightRef.current.size,
+      ));
+    };
+    const captureNode = async (node) => {
+      if (!node?.id || !node?.url) return false;
+      if (thumbnailFinishedRef.current.has(node.id)) return false;
+      let lastErrorMessage = 'Thumbnail capture failed';
+      for (let attempt = 0; attempt < MAX_THUMBNAIL_ATTEMPTS; attempt += 1) {
+        if (thumbnailStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) {
+          return false;
+        }
+        thumbnailAttemptsRef.current.set(node.id, attempt);
+        thumbnailActiveRef.current += 1;
+        thumbnailInFlightRef.current.add(node.id);
+        thumbnailLoadStartRef.current.set(node.id, Date.now());
+        updateRunCounts();
+        const controller = new AbortController();
+        thumbnailAbortControllersRef.current.set(node.id, controller);
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, 45000);
+        let captured = false;
+        let terminalFailure = false;
+        try {
+          const data = await api.captureScreenshot(
+            { url: node.url, type: 'thumb' },
+            { signal: controller.signal },
+          );
+          if (thumbnailStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) {
+            return false;
+          }
+          if (data?.error) {
+            lastErrorMessage = data.error;
+          }
+          if (data?.url) {
+            const persisted = updateNodeScreenshotAssets(node.id, getThumbnailAssetUpdates(data));
+            if (!persisted) {
+              lastErrorMessage = 'Failed to save thumbnail assets on this page';
+              terminalFailure = true;
+            } else {
+              setInvalidThumbnailAssetIds((prev) => {
+                if (!prev.has(node.id)) return prev;
+                const updated = new Set(prev);
+                updated.delete(node.id);
+                return updated;
+              });
+              bumpThumbnailReload(node.id);
+              completeThumbnailCapture(node.id);
+              captured = true;
+              return true;
+            }
+          }
+          if (isScreenshotAuthError(lastErrorMessage)) {
+            terminalFailure = true;
+            updateNodeScreenshotAssets(node.id, {
+              authRequired: true,
+              thumbnailCaptureFailed: true,
+              thumbnailCaptureError: 'Requires login',
+              thumbnailCaptureFailedAt: new Date().toISOString(),
+            });
+            if (!thumbnailAuthToastShownRef.current) {
+              thumbnailAuthToastShownRef.current = true;
+              showToast('Screenshot capture for this page requires login. Prompted credentials are not supported yet.', 'info');
+            }
+          }
+        } catch (error) {
+          lastErrorMessage = error?.message || 'Thumbnail capture failed';
+          if (thumbnailStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) {
+            return false;
+          }
+          if (handleEntitlementError(error, 'Your plan does not have enough screenshot credits for this capture.')) {
+            terminalFailure = true;
+            thumbnailStopRequestedRef.current = true;
+            break;
+          }
+          if (isScreenshotAuthError(lastErrorMessage)) {
+            terminalFailure = true;
+            updateNodeScreenshotAssets(node.id, {
+              authRequired: true,
+              thumbnailCaptureFailed: true,
+              thumbnailCaptureError: 'Requires login',
+              thumbnailCaptureFailedAt: new Date().toISOString(),
+            });
+            if (!thumbnailAuthToastShownRef.current) {
+              thumbnailAuthToastShownRef.current = true;
+              showToast('Screenshot capture for this page requires login. Prompted credentials are not supported yet.', 'info');
+            }
+          }
+        } finally {
+          clearTimeout(timeoutId);
+          thumbnailAbortControllersRef.current.delete(node.id);
+          thumbnailInFlightRef.current.delete(node.id);
+          thumbnailActiveRef.current = Math.max(0, thumbnailActiveRef.current - 1);
+          if (!captured) {
+            thumbnailLoadStartRef.current.delete(node.id);
+          }
+          updateRunCounts();
+        }
+        if (captured) return true;
+        if (terminalFailure) break;
+        if (attempt < MAX_THUMBNAIL_ATTEMPTS - 1) {
+          await sleep(Math.min(THUMBNAIL_RETRY_BASE_DELAY * (attempt + 1), 15000));
+        }
+      }
+      if (
+        !thumbnailStopRequestedRef.current
+        && thumbnailSessionRef.current === runSessionId
+        && !thumbnailFinishedRef.current.has(node.id)
+      ) {
+        if (!isScreenshotAuthError(lastErrorMessage)) {
+          markThumbnailCaptureFailed(node.id, lastErrorMessage);
+        }
+        completeThumbnailCapture(node.id, { captured: false });
+        updateRunCounts();
+      }
+      return false;
+    };
+
+    try {
+      for (let batchIndex = 0; batchIndex < captureBatches.length; batchIndex += 1) {
+        if (thumbnailStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) break;
+        const batch = captureBatches[batchIndex];
+        thumbnailBatchIndexRef.current = batchIndex + 1;
+        setThumbnailStats((prev) => ({
+          ...prev,
+          batchIndex: thumbnailBatchIndexRef.current,
+          batchTotal: thumbnailBatchTotalRef.current,
+        }));
+        let nextIndex = 0;
+        const workerCount = Math.min(MAX_THUMBNAIL_CONCURRENCY, batch.length);
+        const workers = Array.from({ length: workerCount }, async () => {
+          while (!thumbnailStopRequestedRef.current && thumbnailSessionRef.current === runSessionId) {
+            const node = batch[nextIndex];
+            nextIndex += 1;
+            if (!node) break;
+            await captureNode(node);
+          }
+        });
+        await Promise.all(workers);
+        flushThumbnailAutosaveNow({ createVersionCheckpoint: false });
+      }
+      const finalSaved = await waitForThumbnailAssetSave({
+        createVersionCheckpoint: true,
+        forceVersionCheckpoint: true,
+        maxWaitMs: 600000,
+      });
+      if (!finalSaved) {
+        setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+        showToast('Captured thumbnails are still saving. Retry Remaining after save finishes.', 'warning');
+        return;
+      }
+      if (thumbnailStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) {
+        return;
+      }
+      const failedCount = thumbnailErrorRef.current.size;
+      if (failedCount > 0 && !thumbnailFailureToastShownRef.current) {
+        thumbnailFailureToastShownRef.current = true;
+        showToast(
+          `${failedCount} thumbnail${failedCount === 1 ? '' : 's'} could not be captured. Select those pages and run Selected to retry.`,
+          'warning',
+        );
+      } else if (thumbnailLoadedRef.current.size > 0) {
+        showToast(`Captured ${thumbnailLoadedRef.current.size} thumbnail${thumbnailLoadedRef.current.size === 1 ? '' : 's'}`, 'success');
+      }
+      trackEvent('screenshot_capture_complete', {
+        type: 'thumbnail',
+        scope,
+        count: thumbnailLoadedRef.current.size,
+        failed: failedCount,
+      });
+      await refreshCurrentUser();
+    } catch (error) {
+      console.error('Thumbnail capture batch error:', error);
+      showToast(error.message || 'Failed to capture thumbnails', 'error');
+      await waitForThumbnailAssetSave({
+        createVersionCheckpoint: true,
+        forceVersionCheckpoint: true,
+        maxWaitMs: 600000,
+      });
+    }
   };
 
-  const handleStopThumbnailCapture = async () => {
+  const stopThumbnailCaptureNow = (showStoppedToast = false) => {
     if (!thumbnailStats.total || thumbnailStats.stopped) return;
-    const confirmed = await showConfirm({
-      title: 'Stop capturing thumbnails?',
-      message: 'This will stop the capture process. Thumbnails already captured will be kept.',
-      confirmText: 'Stop',
-      cancelText: 'Keep going',
-      danger: true,
-    });
-    if (!confirmed) return;
-    thumbnailStopRequestedRef.current = true;
-    thumbnailQueueRef.current = [];
-    thumbnailQueuedRef.current.clear();
+    const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
+    if (isScreenshotCapture) {
+      screenshotStopRequestedRef.current = true;
+    } else {
+      thumbnailStopRequestedRef.current = true;
+    }
     thumbnailAbortControllersRef.current.forEach((controller) => controller.abort());
     thumbnailAbortControllersRef.current.clear();
+    const activeJob = imageCaptureJobRef.current;
+    if (activeJob?.mapId && activeJob?.jobId) {
+      api.cancelMapImageCaptureJob(activeJob.mapId, activeJob.jobId).catch((error) => {
+        console.warn('Failed to cancel image capture job', error);
+      });
+      imageCaptureJobRef.current = null;
+      setActiveImageCaptureJob(null);
+    }
     setThumbnailQueueSize(0);
     setThumbnailStats((prev) => ({ ...prev, stopped: true }));
-    setTimeout(() => flushThumbnailAutosave(), 300);
+    setTimeout(() => {
+      waitForThumbnailAssetSave({
+        createVersionCheckpoint: true,
+        forceVersionCheckpoint: true,
+        maxWaitMs: 600000,
+      });
+    }, 300);
+    if (showStoppedToast) {
+      const captured = thumbnailStats.saved || imageCaptureSavedRef.current.size || thumbnailLoadedRef.current.size;
+      const total = thumbnailExpectedRef.current.size || thumbnailStats.total || 0;
+      const label = isScreenshotCapture ? 'screenshot' : 'thumbnail';
+      showToast(
+        `Stopped after capturing ${captured} of ${total} ${label}${total === 1 ? '' : 's'}`,
+        'warning',
+      );
+    }
+  };
+
+  const pauseImageCaptureNow = () => {
+    const activeJob = imageCaptureJobRef.current || activeImageCaptureJob;
+    if (!activeJob?.mapId || !activeJob?.jobId) return;
+    api.pauseMapImageCaptureJob(activeJob.mapId, activeJob.jobId)
+      .then(() => {
+        setActiveImageCaptureJob((prev) => (
+          prev?.jobId === activeJob.jobId ? { ...prev, status: 'paused' } : prev
+        ));
+        setThumbnailStats((prev) => ({ ...prev, paused: true, phase: prev.phase || 'capturing' }));
+      })
+      .catch((error) => {
+        showToast(getImageCaptureJobErrorMessage(error, 'Could not pause image capture'), 'error');
+      });
+  };
+
+  const resumeImageCaptureNow = () => {
+    const activeJob = imageCaptureJobRef.current || activeImageCaptureJob;
+    if (!activeJob?.mapId || !activeJob?.jobId) return;
+    api.resumeMapImageCaptureJob(activeJob.mapId, activeJob.jobId)
+      .then(() => {
+        setActiveImageCaptureJob((prev) => (
+          prev?.jobId === activeJob.jobId ? { ...prev, status: 'running' } : prev
+        ));
+        setThumbnailStats((prev) => ({ ...prev, paused: false, phase: prev.phase || 'capturing' }));
+      })
+      .catch((error) => {
+        showToast(getImageCaptureJobErrorMessage(error, 'Could not resume image capture'), 'error');
+      });
   };
 
   useEffect(() => {
-    const cached = thumbnailStats.cached || 0;
-    const totalNew = Math.max(0, thumbnailStats.total - cached);
-    const isActive = showThumbnails
-      && totalNew > 0
+    const total = thumbnailStats.total || 0;
+    const completed = thumbnailStats.completed || 0;
+    const isActive = (showThumbnails || thumbnailStats.mode === 'screenshot')
+      && total > 0
       && !thumbnailStats.stopped
-      && thumbnailStats.loaded < totalNew;
+      && (activeImageCaptureJob || thumbnailStats.finalizing || completed < total);
     if (!isActive) {
       if (thumbnailElapsedTimerRef.current) {
         clearInterval(thumbnailElapsedTimerRef.current);
@@ -3372,96 +10417,548 @@ export default function App() {
         thumbnailElapsedTimerRef.current = null;
       }
     };
-  }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [activeImageCaptureJob, showThumbnails, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
-  // Fetch full page screenshot from backend (or display direct image URL)
-  const viewFullScreenshot = async (urlOrImage, isDirectImage = false, nodeId = null) => {
-    // If it's a direct image URL (uploaded thumbnail), just display it
-    if (isDirectImage) {
-      setFullImageUrl(urlOrImage);
+  const getFullScreenshotCandidates = (
+    scope,
+    invalidAssetIds = invalidFullScreenshotAssetIds,
+    targetMode = 'remaining',
+  ) => {
+    const allNodes = collectAllNodesWithOrphans(root, orphans);
+    const scopedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const scopedNodes = scope === 'selected'
+      ? allNodes.filter((node) => scopedIds.has(node.id))
+      : allNodes;
+    const orderedTargets = orderThumbnailNodes(scopedNodes.filter((node) => node?.url));
+    const forceRecapture = scope === 'selected';
+    const recaptureCapturedOnly = targetMode === 'captured';
+    let candidates = [];
+    if (recaptureCapturedOnly) {
+      candidates = orderedTargets.filter((node) => hasStoredImageAsset(node.fullScreenshotUrl) && !invalidAssetIds.has(node.id));
+    } else if (forceRecapture) {
+      candidates = orderedTargets;
+    } else {
+      candidates = orderedTargets.filter((node) => !hasStoredImageAsset(node.fullScreenshotUrl) || invalidAssetIds.has(node.id));
+    }
+    return {
+      candidates,
+      total: orderedTargets.length,
+      cachedCount: forceRecapture || recaptureCapturedOnly ? 0 : orderedTargets.length - candidates.length,
+    };
+  };
+
+  const getDownloadableScreenshotTargets = useCallback((scope, assetType) => {
+    const assetKey = assetType === 'thumb' ? 'thumbnailUrl' : 'fullScreenshotUrl';
+    const allNodes = collectAllNodesWithOrphans(root, orphans);
+    const scopedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const scopedNodes = scope === 'selected'
+      ? allNodes.filter((node) => scopedIds.has(node.id))
+      : allNodes;
+    return orderThumbnailNodes(
+      scopedNodes.filter((node) => {
+        const invalidIds = assetType === 'thumb' ? invalidThumbnailAssetIds : invalidFullScreenshotAssetIds;
+        return hasStoredImageAsset(node?.[assetKey]) && !invalidIds.has(node.id);
+      })
+    );
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidThumbnailAssetIds, invalidFullScreenshotAssetIds, orderThumbnailNodes]);
+
+  const buildImageDownloadNodeDescriptors = useCallback((scope) => {
+    const selectedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const descriptors = [];
+
+    const visit = (node, parentPath = []) => {
+      if (!node?.id) return;
+      const number = reportNumberMap.get(node.id) || node.number || node.pageNumber || '';
+      const segment = {
+        id: node.id,
+        number,
+        title: node.title || '',
+        url: node.url || '',
+      };
+      const pathSegments = [...parentPath, segment];
+      if (!selectedIds || selectedIds.has(node.id)) {
+        descriptors.push({
+          ...segment,
+          pathSegments,
+        });
+      }
+      (node.children || []).forEach((child) => visit(child, pathSegments));
+    };
+
+    if (root) visit(root, []);
+    (orphans || []).forEach((orphan) => visit(orphan, []));
+    return descriptors;
+  }, [orphans, reportNumberMap, root, selectedNodeIds]);
+
+  const downloadImageAssets = async (scope) => {
+    if (!guardAccountCanCreateWork('Screenshot downloads')) return;
+    if (!currentMap?.id) {
+      showToast('Save this map before downloading images', 'warning');
       return;
     }
 
-    setImageLoading(true);
-    setFullImageUrl(null);
-    showToast('Loading full page screenshot...', 'loading', true);
+    const selectedNodeIdsForRequest = scope === 'selected' ? Array.from(selectedNodeIds) : [];
+    const allTargets = [
+      ...getDownloadableScreenshotTargets(scope, 'thumb'),
+      ...getDownloadableScreenshotTargets(scope, 'full'),
+    ];
+    if (allTargets.length === 0) {
+      showToast('No saved images to download', 'info');
+      return;
+    }
+
+    setShowImageMenu(false);
+    showToast('Preparing image download...', 'loading', true);
 
     try {
-      let data = null;
+      await api.downloadMapImages(currentMap.id, {
+        scope,
+        selectedNodeIds: selectedNodeIdsForRequest,
+        nodes: buildImageDownloadNodeDescriptors(scope),
+      });
+      showToast('Downloaded images', 'success');
+      trackEvent('screenshot_download', {
+        asset_type: 'all',
+        scope,
+        count: allTargets.length,
+      });
+      refreshCurrentUser();
+    } catch (error) {
+      console.error('Image asset download error:', error);
+      showToast(error.message || 'Failed to download images', 'error');
+    }
+  };
 
-      if (SCREENSHOT_JOB_PIPELINE_ENABLED) {
-        const { jobId } = await api.createScreenshotJob({ url: urlOrImage, type: 'full' });
-        if (!jobId) throw new Error('Failed to start screenshot job');
+  // Fetch full page screenshot from backend (or display direct image URL).
+  // When a node id is provided, persist the generated backend asset URLs onto that node.
+  const viewFullScreenshot = async (urlOrImage, isDirectImage = false, nodeId = null, captureType = 'full') => {
+    if (isDirectImage) {
+      setImageLoading(true);
+      setFullImageUrl(urlOrImage);
+      return;
+    }
+    const normalizedCaptureType = captureType === 'thumb' ? 'thumb' : 'full';
+    const captureMode = normalizedCaptureType === 'thumb' ? 'thumbnail' : 'screenshot';
+    if (!guardImageCaptureAvailable(captureMode)) return;
+    if (!guardImageCapturePersistenceReady()) return;
+    if (!(await confirmScreenshotCreditUsage({
+      mode: captureMode,
+      captureType: normalizedCaptureType,
+      count: 1,
+      scope: 'selected',
+    }))) return;
 
-        const startedAt = Date.now();
-        const timeoutMs = 120000;
-        while (true) {
-          const { job } = await api.getScreenshotJob(jobId, { includeResult: true });
-          if (!job) throw new Error('Screenshot job not found');
+    setImageLoading(true);
+    setFullImageUrl(null);
+    resetThumbnailQueue(1, 0, true, captureMode);
+    thumbnailElapsedStartRef.current = Date.now();
+    setThumbnailElapsedMs(0);
+    if (nodeId) {
+      setThumbnailScopeIds(new Set([nodeId]));
+      setShowThumbnails(true);
+    }
 
-          if (job.status === 'complete') {
-            data = job.result || {};
-            break;
-          }
-          if (job.status === 'failed') {
-            throw new Error(job.error || 'Screenshot job failed');
-          }
-          if (job.status === 'canceled') {
-            throw new Error('Screenshot job canceled');
-          }
-          if (Date.now() - startedAt > timeoutMs) {
-            try {
-              await api.cancelScreenshotJob(jobId);
-            } catch {
-              // no-op
-            }
-            throw new Error('Screenshot job timed out');
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1200));
-        }
-      } else {
-        const res = await fetch(
-          `${API_BASE}/screenshot?url=${encodeURIComponent(urlOrImage)}&type=full`
-        );
-        data = await res.json();
-      }
-
+    try {
+      const data = await api.captureScreenshot({ url: urlOrImage, type: normalizedCaptureType });
       if (data?.error) {
         throw new Error(data.error);
       }
-
-      if (data?.url) {
-        setFullImageUrl(data.url);
-        setToast(null); // Clear the loading toast
-        if (nodeId && !isLiveActive) {
-          updateNodeThumbnail(nodeId, data.url);
-        }
-      } else {
+      if (!data?.url) {
         throw new Error('No screenshot URL returned');
       }
+      if (nodeId) {
+        const assetUpdates = { authRequired: false };
+        if (normalizedCaptureType === 'full') {
+          assetUpdates.fullScreenshotUrl = data.url;
+          if (data.thumbnailUrl) {
+            Object.assign(assetUpdates, {
+              thumbnailUrl: data.thumbnailUrl,
+              thumbnailCaptureFailed: false,
+              thumbnailCaptureError: null,
+              thumbnailCaptureFailedAt: null,
+            });
+          }
+          if (data.thumbnailFullUrl) assetUpdates.thumbnailFullUrl = data.thumbnailFullUrl;
+        } else {
+          Object.assign(assetUpdates, getThumbnailAssetUpdates(data));
+        }
+        const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
+        if (!persisted) {
+          throw new Error('Failed to save screenshot assets on this page');
+        }
+        if (normalizedCaptureType === 'full') {
+          setInvalidFullScreenshotAssetIds((prev) => {
+            if (!prev.has(nodeId)) return prev;
+            const updated = new Set(prev);
+            updated.delete(nodeId);
+            return updated;
+          });
+        }
+        if (assetUpdates.thumbnailUrl) {
+          setInvalidThumbnailAssetIds((prev) => {
+            if (!prev.has(nodeId)) return prev;
+            const updated = new Set(prev);
+            updated.delete(nodeId);
+            return updated;
+          });
+          setThumbnailScopeIds((prev) => {
+            const next = new Set(prev || []);
+            next.add(nodeId);
+            return next;
+          });
+          bumpThumbnailReload(nodeId);
+          setShowThumbnails(true);
+        }
+        await flushThumbnailAutosaveNow({ createVersionCheckpoint: true, forceVersionCheckpoint: true });
+      }
+      setThumbnailStats((prev) => ({
+        ...prev,
+        loaded: 1,
+        completed: 1,
+        avgMs: Date.now() - thumbnailElapsedStartRef.current,
+      }));
+      setFullImageUrl(
+        normalizedCaptureType === 'thumb'
+          ? (data.thumbnailFullUrl || data.previewUrl || data.url)
+          : data.url
+      );
+      setToast(null);
+      refreshCurrentUser();
     } catch (e) {
       console.error('Screenshot error:', e);
+      if (handleEntitlementError(e, 'Your plan does not have enough screenshot credits for this capture.')) {
+        setImageLoading(false);
+        return;
+      }
+      if (screenshotStopRequestedRef.current || e?.message === 'Screenshot capture stopped') {
+        showToast('Screenshot capture stopped', 'warning');
+        setImageLoading(false);
+        return;
+      }
+      if (nodeId && isScreenshotAuthError(e?.message)) {
+        updateNodeScreenshotAssets(nodeId, {
+          authRequired: true,
+        });
+      }
       showToast(`Screenshot failed: ${e.message}`, 'error');
       setImageLoading(false);
     }
   };
 
-  // Project folder functions
-  const createProject = async (name) => {
-    if (!name?.trim()) return;
+  const handleFullScreenshotCapture = async (scope, targetMode = 'remaining') => {
+    if (warnCoeditingReadOnly('Full screenshot capture')) {
+      return;
+    }
+    if (!root) {
+      showToast('Create or load a map before capturing screenshots', 'info');
+      return;
+    }
+    if (scope === 'selected' && selectedNodeIds.size === 0) {
+      showToast('Select pages to capture full screenshots', 'info');
+      return;
+    }
+    if (!guardImageCaptureAvailable('screenshot')) return;
+    if (!guardImageCapturePersistenceReady()) return;
+
+    const invalidIds = new Set(invalidFullScreenshotAssetIds);
+    const { candidates: targets, total, cachedCount } = getFullScreenshotCandidates(scope, invalidIds, targetMode);
+    if (total === 0) {
+      setShowImageMenu(false);
+      showToast('No pages with URLs to capture', 'info');
+      return;
+    }
+    if (targetMode === 'captured' && targets.length === 0) {
+      setShowImageMenu(false);
+      resetThumbnailQueue(0, 0, true, 'screenshot');
+      setThumbnailScopeIds(new Set());
+      showToast('No captured full screenshots to update', 'info');
+      return;
+    }
+    if (targets.length === 0) {
+      setShowImageMenu(false);
+      resetThumbnailQueue(0, cachedCount, true, 'screenshot');
+      setThumbnailScopeIds(new Set());
+      showToast('All full screenshots are already captured', 'info');
+      return;
+    }
+
+    if (!(await confirmScreenshotCreditUsage({
+      mode: 'screenshot',
+      captureType: 'full',
+      count: targets.length,
+      scope,
+    }))) return;
+
+    const handledByJob = await runMapImageCaptureJob({
+      scope,
+      captureType: 'full',
+      mode: 'screenshot',
+      targetMode,
+      targets,
+      targetIds: new Set(targets.map((node) => node.id)),
+      cachedCount,
+      unavailableCount: 0,
+    });
+    if (handledByJob) return;
+
+    setShowImageMenu(false);
+    setShowThumbnails(true);
+    setThumbnailScopeIds(new Set(targets.map((node) => node.id)));
+    resetThumbnailQueue(targets.length, cachedCount, true, 'screenshot');
+    const captureBatches = buildImageCaptureBatches(targets);
+    thumbnailBatchTotalRef.current = Math.max(1, captureBatches.length);
+    thumbnailBatchIndexRef.current = 0;
+    setThumbnailStats((prev) => ({
+      ...prev,
+      batchIndex: 0,
+      batchTotal: thumbnailBatchTotalRef.current,
+    }));
+    thumbnailElapsedStartRef.current = Date.now();
+    setThumbnailElapsedMs(0);
+    thumbnailExpectedRef.current = new Set(targets.map((node) => node.id));
+    const runSessionId = thumbnailSessionRef.current;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const updateActiveCounts = () => {
+      const completedCount = thumbnailFinishedRef.current.size;
+      setThumbnailActiveCount(thumbnailActiveRef.current);
+      setThumbnailQueueSize(Math.max(
+        0,
+        targets.length - completedCount - thumbnailInFlightRef.current.size,
+      ));
+    };
+
     try {
-      const { project } = await api.createProject(name.trim());
-      setProjects(prev => [...prev, { ...project, maps: [] }]);
-      showToast(`Project "${name}" created`, 'success');
-      return project;
-    } catch (e) {
-      showToast(e.message || 'Failed to create project', 'error');
-      return null;
+      const captureNode = async (node) => {
+        if (!node?.id || !node?.url) return false;
+        if (thumbnailFinishedRef.current.has(node.id)) return false;
+        let lastErrorMessage = 'Full screenshot capture failed';
+        for (let attempt = 0; attempt < MAX_THUMBNAIL_ATTEMPTS; attempt += 1) {
+          if (screenshotStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) {
+            return false;
+          }
+          thumbnailAttemptsRef.current.set(node.id, attempt);
+          thumbnailActiveRef.current += 1;
+          thumbnailInFlightRef.current.add(node.id);
+          thumbnailLoadStartRef.current.set(node.id, Date.now());
+          updateActiveCounts();
+          const controller = new AbortController();
+          thumbnailAbortControllersRef.current.set(node.id, controller);
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+          }, 90000);
+          let terminalFailure = false;
+          try {
+            const data = await api.captureScreenshot(
+              { url: node.url, type: 'full' },
+              { signal: controller.signal },
+            );
+            if (screenshotStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) {
+              return false;
+            }
+            if (data?.error) {
+              throw new Error(data.error);
+            }
+            if (!data?.url) {
+              throw new Error('No screenshot URL returned');
+            }
+            const assetUpdates = {
+              fullScreenshotUrl: data.url,
+              authRequired: false,
+            };
+            if (data.thumbnailUrl) {
+              Object.assign(assetUpdates, {
+                thumbnailUrl: data.thumbnailUrl,
+                thumbnailCaptureFailed: false,
+                thumbnailCaptureError: null,
+                thumbnailCaptureFailedAt: null,
+              });
+            }
+            if (data.thumbnailFullUrl) assetUpdates.thumbnailFullUrl = data.thumbnailFullUrl;
+            const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
+            if (!persisted) {
+              lastErrorMessage = 'Failed to save screenshot assets on the selected page';
+              terminalFailure = true;
+            } else {
+              setInvalidFullScreenshotAssetIds((prev) => {
+                if (!prev.has(node.id)) return prev;
+                const updated = new Set(prev);
+                updated.delete(node.id);
+                return updated;
+              });
+              if (assetUpdates.thumbnailUrl) {
+                setInvalidThumbnailAssetIds((prev) => {
+                  if (!prev.has(node.id)) return prev;
+                  const updated = new Set(prev);
+                  updated.delete(node.id);
+                  return updated;
+                });
+                setThumbnailScopeIds((prev) => {
+                  const next = new Set(prev || []);
+                  next.add(node.id);
+                  return next;
+                });
+                bumpThumbnailReload(node.id);
+                setShowThumbnails(true);
+              }
+              completeThumbnailCapture(node.id);
+              updateActiveCounts();
+              return true;
+            }
+          } catch (error) {
+            lastErrorMessage = error?.message || 'Full screenshot capture failed';
+            if (
+              screenshotStopRequestedRef.current
+              || thumbnailSessionRef.current !== runSessionId
+              || error?.message === 'Screenshot capture stopped'
+            ) {
+              return false;
+            }
+            if (handleEntitlementError(error, 'Your plan does not have enough screenshot credits for this capture.')) {
+              terminalFailure = true;
+              screenshotStopRequestedRef.current = true;
+              break;
+            }
+            if (isScreenshotAuthError(lastErrorMessage)) {
+              terminalFailure = true;
+              updateNodeScreenshotAssets(node.id, {
+                authRequired: true,
+              });
+              if (!thumbnailAuthToastShownRef.current) {
+                thumbnailAuthToastShownRef.current = true;
+                showToast('Screenshot capture for this page requires login. Prompted credentials are not supported yet.', 'info');
+              }
+            }
+            console.error('Full screenshot capture failed:', error);
+          } finally {
+            clearTimeout(timeoutId);
+            thumbnailAbortControllersRef.current.delete(node.id);
+            thumbnailInFlightRef.current.delete(node.id);
+            thumbnailActiveRef.current = Math.max(0, thumbnailActiveRef.current - 1);
+            if (!thumbnailFinishedRef.current.has(node.id)) {
+              thumbnailLoadStartRef.current.delete(node.id);
+            }
+            updateActiveCounts();
+          }
+          if (terminalFailure) break;
+          if (attempt < MAX_THUMBNAIL_ATTEMPTS - 1) {
+            await sleep(Math.min(THUMBNAIL_RETRY_BASE_DELAY * (attempt + 1), 15000));
+          }
+        }
+        if (
+          !screenshotStopRequestedRef.current
+          && thumbnailSessionRef.current === runSessionId
+          && !thumbnailFinishedRef.current.has(node.id)
+        ) {
+          completeThumbnailCapture(node.id, { captured: false });
+          updateActiveCounts();
+          console.error('Full screenshot capture failed:', new Error(lastErrorMessage));
+        }
+        return false;
+      };
+
+      for (let batchIndex = 0; batchIndex < captureBatches.length; batchIndex += 1) {
+        if (screenshotStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) break;
+        const batch = captureBatches[batchIndex];
+        thumbnailBatchIndexRef.current = batchIndex + 1;
+        setThumbnailStats((prev) => ({
+          ...prev,
+          batchIndex: thumbnailBatchIndexRef.current,
+          batchTotal: thumbnailBatchTotalRef.current,
+        }));
+        let nextIndex = 0;
+        const workerCount = Math.min(FULL_SCREENSHOT_CONCURRENCY, batch.length);
+        const workers = Array.from({ length: workerCount }, async () => {
+          while (!screenshotStopRequestedRef.current && thumbnailSessionRef.current === runSessionId) {
+            const node = batch[nextIndex];
+            nextIndex += 1;
+            if (!node) break;
+            await captureNode(node);
+          }
+        });
+        await Promise.all(workers);
+        flushThumbnailAutosaveNow({ createVersionCheckpoint: false });
+      }
+      const finalSaved = await waitForThumbnailAssetSave({
+        createVersionCheckpoint: true,
+        forceVersionCheckpoint: true,
+        maxWaitMs: 600000,
+      });
+      if (!finalSaved) {
+        setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+        showToast('Captured screenshots are still saving. Retry Remaining after save finishes.', 'warning');
+        return;
+      }
+      if (screenshotStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) {
+        const successCount = thumbnailLoadedRef.current.size;
+        showToast(`Stopped after capturing ${successCount} of ${targets.length} screenshots`, 'warning');
+        await waitForThumbnailAssetSave({
+          createVersionCheckpoint: true,
+          forceVersionCheckpoint: true,
+          maxWaitMs: 600000,
+        });
+        return;
+      }
+      const successCount = thumbnailLoadedRef.current.size;
+      const failedCount = thumbnailErrorRef.current.size;
+      const message = failedCount > 0
+        ? `Captured ${successCount} full screenshot${successCount === 1 ? '' : 's'}; ${failedCount} failed`
+        : `Captured ${successCount} full screenshot${successCount === 1 ? '' : 's'}`;
+      showToast(message, failedCount > 0 ? 'warning' : 'success');
+      trackEvent('screenshot_capture', {
+        type: 'full',
+        scope,
+        count: successCount,
+        failed: failedCount,
+      });
+      await refreshCurrentUser();
+    } catch (error) {
+      console.error('Full screenshot batch error:', error);
+      if (handleEntitlementError(error, 'Your plan does not have enough screenshot credits for this capture.')) {
+        return;
+      }
+      if (isScreenshotAuthError(error?.message)) {
+        showToast(error.message, 'info');
+        return;
+      }
+      showToast(error.message || 'Failed to capture full screenshots', 'error');
     }
   };
 
+  // Project folder functions
+  const createProject = useCallback(async (name) => {
+    if (!name?.trim()) return;
+    if (!guardAccountCanCreateWork('Project creation')) return null;
+    if (projectLimitReachedValue) {
+      showEntitlementLock({
+        title: 'Plan limit reached',
+        message: 'Your plan has reached its active project limit.',
+      });
+      return null;
+    }
+    try {
+      const { project } = await api.createProject(name.trim());
+      await loadAuthenticatedWorkspace();
+      setExpandedProjects({ [project.id]: true });
+      trackEvent('project_created', {
+        project_id: String(project?.id || ''),
+        project_name: project?.name || name.trim(),
+      });
+      if (!root) {
+        setShowProjectsModal(true);
+      }
+      showToast(`Project "${name}" created`, 'success');
+      return project;
+    } catch (e) {
+      if (handleEntitlementError(e, 'Your plan has reached its active project limit.')) {
+        return null;
+      }
+      showToast(e.message || 'Failed to create project', 'error');
+      return null;
+    }
+  }, [guardAccountCanCreateWork, handleEntitlementError, loadAuthenticatedWorkspace, projectLimitReachedValue, root, showEntitlementLock, showToast]);
+
   const renameProject = async (projectId, newName) => {
-    if (projectId === 'uncategorized') {
+    if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
       setEditingProjectId(null);
       return;
     }
@@ -3488,9 +10985,83 @@ export default function App() {
     }
   };
 
+  const renameMap = async (projectId, mapId, newName) => {
+    if (!mapId) {
+      setEditingMapId(null);
+      return;
+    }
+    const trimmedName = newName?.trim();
+    if (!trimmedName) {
+      setEditingMapId(null);
+      showToast('Map name is required', 'error');
+      return;
+    }
+
+    const currentProject = projects.find((project) => project.id === projectId);
+    const current = (currentProject?.maps || []).find((map) => map.id === mapId)
+      || projects.flatMap((project) => project.maps || []).find((map) => map.id === mapId);
+
+    if (current && current.name === trimmedName) {
+      setEditingMapId(null);
+      return;
+    }
+
+    const targetProjectId = normalizeProjectSelection(projectId);
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: trimmedName,
+      excludeMapId: mapId,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(trimmedName), 'error');
+      return;
+    }
+
+    if (isCoeditingReadOnlyMode && currentMap?.id === mapId) {
+      setEditingMapId(null);
+      warnCoeditingReadOnly('This map');
+      return;
+    }
+    if (isLiveActive && currentMap?.id === mapId) {
+      setEditingMapId(null);
+      showToast('Rename this map after live editing is turned off.', 'info');
+      return;
+    }
+
+    try {
+      const { map } = await updateMapWithLatestTimestamp(
+        mapId,
+        { name: trimmedName },
+        { expectedUpdatedAt: current?.updated_at || (currentMap?.id === mapId ? currentMap?.updated_at : null) }
+      );
+      setProjects((prev) => prev.map((project) => ({
+        ...project,
+        maps: (project.maps || []).map((projectMap) => (projectMap.id === map.id ? map : projectMap)),
+      })));
+      if (currentMap?.id === map.id) {
+        setCurrentMap(map);
+        setMapName(map.name || '');
+      }
+      setMapSaveConflict(null);
+      setEditingMapId(null);
+      showToast('Map renamed', 'success');
+    } catch (error) {
+      if (isMapUpdateConflictError(error)) {
+        setEditingMapId(null);
+        registerMapConflict({ error, mapId, source: 'rename' });
+        return;
+      }
+      if (isMapNameConflictError(error)) {
+        showToast(error.message || getMapNameConflictMessage(trimmedName), 'error');
+        return;
+      }
+      showToast(error.message || 'Failed to rename map', 'error');
+    }
+  };
+
   const deleteProject = async (projectId) => {
-    if (projectId === 'uncategorized') {
-      showToast('Cannot delete Uncategorized', 'warning');
+    if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
+      showToast('Cannot delete a virtual folder', 'warning');
       return;
     }
     const confirmed = await showConfirm({
@@ -3502,7 +11073,17 @@ export default function App() {
     if (!confirmed) return;
     try {
       await api.deleteProject(projectId);
+      const deletedProject = projects.find((project) => project.id === projectId);
       setProjects(prev => prev.filter(p => p.id !== projectId));
+      if (editingProjectId === projectId) {
+        setEditingProjectId(null);
+      }
+      if (deletedProject?.maps?.some((map) => map.id === editingMapId)) {
+        setEditingMapId(null);
+      }
+      if (expandedProjects[projectId]) {
+        setExpandedProjects({});
+      }
       showToast('Project deleted', 'success');
     } catch (e) {
       showToast(e.message || 'Failed to delete project', 'error');
@@ -3524,8 +11105,17 @@ export default function App() {
     if ((currentProjectId || null) === (targetProjectId || null)) {
       return;
     }
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: mapRecord?.name || '',
+      excludeMapId: mapId,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(mapRecord?.name || 'Untitled Map'), 'error');
+      return;
+    }
     try {
-      const { map } = await api.updateMap(
+      const { map } = await updateMapWithLatestTimestamp(
         mapId,
         { project_id: targetProjectId || null },
         { expectedUpdatedAt: mapRecord?.updated_at || (currentMap?.id === mapId ? currentMap?.updated_at : null) }
@@ -3562,46 +11152,37 @@ export default function App() {
         registerMapConflict({ error: e, mapId, source: 'move' });
         return;
       }
+      if (isMapNameConflictError(e)) {
+        showToast(e.message || getMapNameConflictMessage(mapRecord?.name || 'Untitled Map'), 'error');
+        return;
+      }
       showToast(e.message || 'Failed to move map', 'error');
     }
   };
 
-  const openSaveVersionModal = () => {
-    if (!currentMap?.id || !root) {
-      showToast('Save the map first', 'warning');
-      return;
+  const handleBookmarkVersion = async (version, { name, notes } = {}) => {
+    if (!currentMap?.id || !version?.id) return null;
+    if (!canSaveVersion()) {
+      throw new Error('Only owners and editors can bookmark versions on this map.');
     }
-    if (warnCoeditingReadOnly('This map')) return;
-    const nextNumber = (mapVersions[0]?.version_number || 0) + 1;
-    setSaveVersionMeta({
-      number: nextNumber,
-      timestamp: new Date().toLocaleString(),
-    });
-    setShowSaveVersionModal(true);
-  };
-
-  const handleSaveVersion = async (name, notes) => {
-    if (!currentMap?.id) return;
     if (warnCoeditingReadOnly('This map')) {
-      setShowSaveVersionModal(false);
-      return;
+      throw new Error('This map is read-only right now.');
     }
-    try {
-      const version = await createVersionFromSnapshot({
-        mapId: currentMap.id,
-        name,
-        notes,
-      });
-      if (version) {
-        showToast('Version saved', 'success');
-      } else {
-        showToast('No changes to save', 'info');
+
+    const { version: updatedVersion } = await api.updateMapVersion(currentMap.id, version.id, {
+      name,
+      notes,
+    });
+    if (updatedVersion) {
+      setMapVersions((prev) => prev.map((item) => (
+        item.id === updatedVersion.id ? { ...item, ...updatedVersion } : item
+      )));
+      if (showVersionHistoryDrawer && canViewActivityValue) {
+        loadMapActivity(currentMap.id, { silent: true, allowToast: false });
       }
-    } catch (error) {
-      showToast(error.message || 'Failed to save version', 'error');
-    } finally {
-      setShowSaveVersionModal(false);
+      showToast('Version bookmarked', 'success');
     }
+    return updatedVersion;
   };
 
   const duplicateCurrentMap = () => {
@@ -3629,9 +11210,21 @@ export default function App() {
   const handleDuplicateMapSave = async (projectId, name, notes) => {
     const snapshot = getVersionSnapshot();
     if (!snapshot?.root) return;
+    const targetProjectId = normalizeProjectSelection(projectId);
+    const trimmedName = name.trim();
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: trimmedName,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(trimmedName), 'error');
+      return;
+    }
+    setIsSavingMap(true);
     try {
-      const { map } = await api.saveMap({
-        name: name.trim(),
+      await waitForUiResponse();
+      const { map, initialVersion } = await api.saveMap({
+        name: trimmedName,
         url: snapshot.root?.url || '',
         root: snapshot.root,
         orphans: snapshot.orphans,
@@ -3639,7 +11232,7 @@ export default function App() {
         colors: snapshot.colors,
         connectionColors: snapshot.connectionColors,
         notes: notes?.trim() || null,
-        project_id: projectId || null,
+        project_id: targetProjectId,
       });
       setProjects(prev => {
         let updated = prev.map(p => ({
@@ -3663,46 +11256,74 @@ export default function App() {
         return updated;
       });
       setCurrentMap(map);
+      navigateToRoute(createMapRoute(map.id));
       setMapName(map.name);
       setIsImportedMap(false);
       setActiveVersionId(null);
       setShowVersionEditPrompt(false);
       versionBaselineRef.current = null;
-      lastAutosaveSnapshotRef.current = '';
+      resetAutosaveTracking({
+        snapshot: serializeMapAutosaveSnapshot({
+          root: snapshot.root,
+          orphans: snapshot.orphans,
+          connections: snapshot.connections,
+          colors: snapshot.colors,
+          connectionColors: snapshot.connectionColors,
+        }),
+      });
+      if (initialVersion) {
+        setMapVersions([initialVersion]);
+        setLatestVersionId(initialVersion.id);
+      }
       await loadMapVersions(map.id);
-      await createVersionFromSnapshot({ mapId: map.id, snapshot });
+      await loadMapActivity(map.id, { silent: true, allowToast: false });
       showToast('Map duplicated', 'success');
       setDuplicateMapConfig(null);
     } catch (error) {
+      if (isMapNameConflictError(error)) {
+        showToast(error.message || getMapNameConflictMessage(trimmedName), 'error');
+        return;
+      }
       showToast(error.message || 'Failed to duplicate map', 'error');
     } finally {
+      setIsSavingMap(false);
       setShowSaveMapModal(false);
     }
   };
 
   const restoreVersion = (version) => {
     if (!version?.root) return;
-    const versionHasThumbnails = collectAllNodesWithOrphans(version.root, version.orphans || []).some((node) => !!node.thumbnailUrl);
-    setRoot(version.root);
-    setOrphans(normalizeOrphans(version.orphans));
+    const normalizedVersionOrphans = normalizeOrphans(version.orphans);
+    const hydratedVersion = hydratePersistedScanLimitMap(version.root, normalizedVersionOrphans);
+    const hydratedVersionScanMeta = hydratedVersion.scanMeta || { brokenLinks: [] };
+    const versionScanLayerAvailability = getDisplayScanLayerAvailability(hydratedVersion.root, hydratedVersion.orphans || []);
+    const versionHasThumbnails = collectAllNodesWithOrphans(hydratedVersion.root, hydratedVersion.orphans || []).some((node) => !!node.thumbnailUrl);
+    scanMetaRef.current = hydratedVersionScanMeta;
+    setRoot(hydratedVersion.root);
+    setOrphans(hydratedVersion.orphans);
     setConnections(version.connections || []);
     setColors(version.colors || DEFAULT_COLORS);
     setConnectionColors(version.connectionColors || DEFAULT_CONNECTION_COLORS);
-    setUrlInput(version.root?.url || '');
+    setScanMeta(hydratedVersionScanMeta);
+    setScanLayerAvailability(versionScanLayerAvailability);
+    setScanLayerVisibility(versionScanLayerAvailability);
+    setUrlInput(hydratedVersion.root?.url || '');
     setActiveVersionId(version.id);
     setShowVersionEditPrompt(false);
     setShowVersionHistoryDrawer(false);
+    setShowImageReportDrawer(false);
     setThumbnailScopeIds(versionHasThumbnails ? new Set() : null);
     setShowThumbnails(versionHasThumbnails);
     const snapshot = serializeVersionSnapshot({
       root: version.root,
-      orphans: version.orphans,
+      orphans: normalizedVersionOrphans,
       connections: version.connections || [],
       colors: version.colors || DEFAULT_COLORS,
       connectionColors: version.connectionColors || DEFAULT_CONNECTION_COLORS,
+      scanMeta: hydratedVersionScanMeta,
     });
     versionBaselineRef.current = snapshot;
-    showToast('Version restored', 'success');
+    showToast(canSaveVersion() ? 'Version restored' : 'Version preview loaded', 'success');
   };
 
   const handleOverrideVersion = async () => {
@@ -3714,7 +11335,7 @@ export default function App() {
 
     const snapshot = getVersionSnapshot();
     try {
-      const { map } = await api.updateMap(
+      const { map } = await updateMapWithLatestTimestamp(
         currentMap.id,
         {
           name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
@@ -3734,7 +11355,7 @@ export default function App() {
         ...p,
         maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
       })));
-      lastAutosaveSnapshotRef.current = JSON.stringify({
+      lastAutosaveSnapshotRef.current = serializeMapAutosaveSnapshot({
         name: map.name,
         root: snapshot.root,
         orphans: snapshot.orphans,
@@ -3762,6 +11383,15 @@ export default function App() {
     }
     const baseName = (currentMap?.name || mapName || 'Untitled Map').trim();
     const copyName = `${baseName} (Copy)`;
+    const targetProjectId = normalizeProjectSelection(currentMap?.project_id || null);
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: copyName,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(copyName), 'error');
+      return;
+    }
     try {
       const { map } = await api.saveMap({
         name: copyName,
@@ -3771,7 +11401,7 @@ export default function App() {
         connections: snapshot.connections,
         colors: snapshot.colors,
         connectionColors: snapshot.connectionColors,
-        project_id: currentMap?.project_id || null,
+        project_id: targetProjectId,
       });
       setProjects(prev => {
         let updated = prev.map(p => ({
@@ -3796,61 +11426,79 @@ export default function App() {
       });
       setShowVersionEditPrompt(false);
       versionBaselineRef.current = serializeVersionSnapshot(snapshot);
-      await createVersionFromSnapshot({ mapId: map.id, snapshot });
       showToast('Saved as a copy', 'success');
     } catch (error) {
+      if (isMapNameConflictError(error)) {
+        showToast(error.message || getMapNameConflictMessage(copyName), 'error');
+        return;
+      }
       showToast(error.message || 'Failed to save copy', 'error');
     }
   };
 
   // Map functions
   const saveMap = async (projectId, mapName, notes) => {
-    if (!root) return showToast('No sitemap to save', 'warning');
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    const latestScanMeta = scanMetaRef.current || scanMeta;
+    if (!latestRoot) return showToast('No sitemap to save', 'warning');
     if (!mapName?.trim()) return;
     if (currentMap?.id && warnCoeditingReadOnly('This map')) {
       setShowSaveMapModal(false);
       return;
     }
-    if (isLiveActive && currentMap?.id) {
-      showToast('Live editing already persists this saved map. Turn live editing off before using Save Map.', 'info');
-      setShowSaveMapModal(false);
+    const wasNewMap = !currentMap?.id;
+    const targetProjectId = normalizeProjectSelection(projectId);
+    const trimmedName = mapName.trim();
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: trimmedName,
+      excludeMapId: currentMap?.id || null,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(trimmedName), 'error');
       return;
     }
-    const wasNewMap = !currentMap?.id;
 
+    setIsSavingMap(true);
     try {
+      await waitForUiResponse();
       let savedMap;
+      let initialVersion = null;
       if (currentMap?.id) {
         // Update existing map
-        const { map } = await api.updateMap(
+        const { map } = await updateMapWithLatestTimestamp(
           currentMap.id,
-          {
-            name: mapName.trim(),
-            root,
-            orphans,
+          buildMapSavePayload({
+            name: trimmedName,
+            root: latestRoot,
+            orphans: latestOrphans,
             connections,
             colors,
             connectionColors,
+            scanMeta: latestScanMeta,
             notes: notes?.trim() || null,
-            project_id: projectId || null,
-          },
+            project_id: targetProjectId,
+          }),
           { expectedUpdatedAt: currentMap?.updated_at || null }
         );
         savedMap = map;
       } else {
         // Create new map
-        const { map } = await api.saveMap({
-          name: mapName.trim(),
-          url: root.url,
-          root,
-          orphans,
+        const response = await api.saveMap(buildMapSavePayload({
+          name: trimmedName,
+          url: latestRoot.url,
+          root: latestRoot,
+          orphans: latestOrphans,
           connections,
           colors,
           connectionColors,
+          scanMeta: latestScanMeta,
           notes: notes?.trim() || null,
-          project_id: projectId || null,
-        });
-        savedMap = map;
+          project_id: targetProjectId,
+        }));
+        savedMap = response.map;
+        initialVersion = response.initialVersion || null;
       }
 
       // Update local projects list
@@ -3862,9 +11510,9 @@ export default function App() {
         }));
 
         // Add to new project
-        if (projectId) {
+        if (targetProjectId) {
           updated = updated.map(p =>
-            p.id === projectId
+            p.id === targetProjectId
               ? { ...p, maps: [savedMap, ...(p.maps || [])] }
               : p
           );
@@ -3880,9 +11528,31 @@ export default function App() {
       });
 
       setCurrentMap(savedMap);
+      setMapName(savedMap?.name || trimmedName);
+      setIsImportedMap(false);
+      largeMapHomeSceneKeyRef.current = '';
+      navigateToRoute(createMapRoute(savedMap.id));
+      resetAutosaveTracking({
+        snapshot: serializeMapAutosaveSnapshot({
+          name: trimmedName,
+          root: latestRoot,
+          orphans: latestOrphans,
+          connections,
+          colors,
+          connectionColors,
+          scanMeta: latestScanMeta,
+          project_id: savedMap?.project_id || null,
+        }),
+      });
       setMapSaveConflict(null);
       setShowSaveMapModal(false);
-      showToast(`Map "${mapName}" saved`, 'success');
+      trackEvent('map_saved', {
+        map_id: String(savedMap?.id || ''),
+        project_id: String(savedMap?.project_id || targetProjectId || ''),
+        new_map: wasNewMap ? 'true' : 'false',
+        imported_map: isImportedMap ? 'true' : 'false',
+      });
+      showToast(`Map "${trimmedName}" saved`, 'success');
 
       if (pendingLogoutAfterSave) {
         const shouldPreserveAsViewOnly = Boolean(savedMap?.id)
@@ -3895,16 +11565,21 @@ export default function App() {
       }
 
       if (wasNewMap) {
+        if (initialVersion) {
+          setMapVersions([initialVersion]);
+          setLatestVersionId(initialVersion.id);
+        }
         await loadMapVersions(savedMap.id);
-        await createVersionFromSnapshot({
-          mapId: savedMap.id,
-          snapshot: getVersionSnapshot(),
-        });
+        await loadMapActivity(savedMap.id, { silent: true, allowToast: false });
       }
       if (pendingLoadMap) {
         const mapToLoad = pendingLoadMap;
         setPendingLoadMap(null);
-        loadMap(mapToLoad);
+        if (mapToLoad.root) {
+          loadMap(mapToLoad);
+        } else if (mapToLoad.id) {
+          await loadSavedMapById(mapToLoad.id);
+        }
         return;
       }
       if (wasNewMap && lastHistoryId && lastScanUrl && root?.url === lastScanUrl) {
@@ -3919,15 +11594,31 @@ export default function App() {
           });
       }
       if (pendingCreateAfterSave) {
-        setPendingCreateAfterSave(false);
-        setShowCreateMapModal(true);
+        const createConfig = pendingCreateAfterSave;
+        setPendingCreateAfterSave(null);
+        setDuplicateMapConfig(null);
+        setPendingLoadMap(null);
+        setCreateMapMode(true);
+        setCreateMapDefaults({
+          projectId: createConfig?.projectId || null,
+          name: '',
+          notes: '',
+        });
+        setShowCreateMapModal(false);
+        setShowSaveMapModal(true);
       }
     } catch (e) {
       if (isMapUpdateConflictError(e)) {
         registerMapConflict({ error: e, mapId: currentMap?.id || null, source: 'save' });
         return;
       }
+      if (isMapNameConflictError(e)) {
+        showToast(e.message || getMapNameConflictMessage(trimmedName), 'error');
+        return;
+      }
       showToast(e.message || 'Failed to save map', 'error');
+    } finally {
+      setIsSavingMap(false);
     }
   };
 
@@ -3935,20 +11626,28 @@ export default function App() {
     if (!mapName?.trim()) return;
     const trimmedName = mapName.trim();
     setCreateMapMode(false);
+    setCreateMapDefaults(null);
+    setPendingCreateAfterSave(null);
     setPendingMapCreation({ name: trimmedName, projectId: projectId || null, notes: notes?.trim() || '' });
     setMapName(trimmedName);
     setRoot(null);
     setOrphans([]);
     setConnections([]);
+    setScanMeta({ brokenLinks: [] });
+    scanMetaRef.current = { brokenLinks: [] };
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
+    largeMapHomeNodeRef.current = null;
+    largeMapVisibleNodesRef.current = [];
     setIsImportedMap(false);
     setCurrentMap({ name: trimmedName, project_id: projectId || null, notes: notes?.trim() || '' });
+    navigateToRoute(createAppHomeRoute());
     setMapSaveConflict(null);
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
     setThumbnailScopeIds(null);
     setShowImageMenu(false);
+    setShowImageReportDrawer(false);
     setShowThumbnails(false);
     resetThumbnailQueue(0);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
@@ -3959,17 +11658,112 @@ export default function App() {
     setEditModalMode('add');
   };
 
-  const loadMap = (map) => {
+  const clearLoadedMapView = useCallback(() => {
+    resetAutosaveTracking();
+    cancelScheduledResetView();
+    setMapPermissions(null);
     resetScanLayers();
+    setLargeMapDisplaySummary(null);
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
-    const mapHasThumbnails = collectAllNodesWithOrphans(map.root, map.orphans || []).some((node) => !!node.thumbnailUrl);
-    setRoot(map.root);
-    setOrphans(normalizeOrphans(map.orphans));
+    largeMapHomeNodeRef.current = null;
+    largeMapVisibleNodesRef.current = [];
+    setRoot(null);
+    setOrphans([]);
+    setConnections([]);
+    setScanMeta({ brokenLinks: [] });
+    scanMetaRef.current = { brokenLinks: [] };
+    setColors(DEFAULT_COLORS);
+    setConnectionColors(DEFAULT_CONNECTION_COLORS);
+    setCurrentMap(null);
+    setIsImportedMap(false);
+    setMapName('');
+    setSavedMapCommentsByNode({});
+    setExpandedStacks({});
+    setMapActivity([]);
+    setMapVersions([]);
+    setDraftVersions([]);
+    setDraftLatestVersionId(null);
+    setActiveVersionId(null);
+    setLatestVersionId(null);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
+    setShowVersionHistoryDrawer(false);
+    setShowShareModal(false);
+    setShowCollaborationModal(false);
+    setSelectedNodeIds(new Set());
+    setSelectionBox(null);
+    setThumbnailScopeIds(null);
+    setShowImageMenu(false);
+    setShowThumbnails(false);
+    setUrlInput('');
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+  }, [applyTransform, cancelScheduledResetView, resetAutosaveTracking, resetScanLayers]);
+
+  useEffect(() => {
+    clearLoadedMapViewRef.current = clearLoadedMapView;
+  }, [clearLoadedMapView]);
+
+  const leaveSharedMap = useCallback(async () => {
+    const confirmed = await showConfirm({
+      title: 'Leave shared map',
+      message: 'Leave this shared map and go to the Vellic start screen?',
+      confirmText: 'Exit',
+      cancelText: 'Cancel',
+    });
+    if (!confirmed) return false;
+    clearLoadedMapView();
+    navigateToRoute(createAppHomeRoute());
+    return true;
+  }, [clearLoadedMapView, navigateToRoute, showConfirm]);
+
+  const loadMap = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    const normalizedOrphans = normalizeOrphans(map?.orphans);
+    const hydratedMap = hydratePersistedScanLimitMap(map?.root, normalizedOrphans);
+    const hydratedScanMeta = hydratedMap.scanMeta || { brokenLinks: [] };
+    resetAutosaveTracking({
+      snapshot: serializeMapAutosaveSnapshot({
+        name: map?.name || '',
+        root: hydratedMap.root,
+        orphans: hydratedMap.orphans,
+        connections: map?.connections,
+        colors: map?.colors,
+        connectionColors: map?.connectionColors,
+        scanMeta: hydratedScanMeta,
+        project_id: map?.project_id || null,
+      }),
+    });
+    setMapPermissions(null);
+    resetScanLayers();
+    setLargeMapDisplaySummary(null);
+    setHasCreatedShareLink(false);
+    setCurrentShareAccess(null);
+    setExpandedStacks({});
+    largeMapHomeSceneKeyRef.current = '';
+    largeMapHomeNodeRef.current = map.homeNode || null;
+    largeMapVisibleNodesRef.current = [];
+    pendingInitialCenterRef.current = false;
+    pendingInitialLargeMapCenterRef.current = false;
+    const mapHasThumbnails = mapHasThumbnailAsset(hydratedMap.root, hydratedMap.orphans || []);
+    const displayScanLayerAvailability = getDisplayScanLayerAvailability(hydratedMap.root, hydratedMap.orphans || []);
+    scanMetaRef.current = hydratedScanMeta;
+    setRoot(hydratedMap.root);
+    setOrphans(hydratedMap.orphans);
     setConnections(map.connections || []);
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
-    setCurrentMap(map);
+    setScanMeta(hydratedScanMeta);
+    setScanLayerAvailability(displayScanLayerAvailability);
+    setScanLayerVisibility(displayScanLayerAvailability);
+    setCurrentMap({
+      ...map,
+      root: hydratedMap.root,
+      orphans: hydratedMap.orphans,
+    });
+    if (!skipNavigation) {
+      navigateToRoute(createMapRoute(map.id));
+    }
     setMapSaveConflict(null);
     setMapName(map.name || '');
     setActiveVersionId(null);
@@ -3979,22 +11773,316 @@ export default function App() {
     setSelectionBox(null);
     setThumbnailScopeIds(mapHasThumbnails ? new Set() : null);
     setShowImageMenu(false);
+    setShowImageReportDrawer(false);
     setShowThumbnails(mapHasThumbnails);
+    clearCaptureIssues();
     resetThumbnailQueue(0);
-    loadMapVersions(map.id);
+    setMapVersions([]);
+    setLatestVersionId(null);
     setShowProjectsModal(false);
+    setEditingProjectId(null);
+    setEditingMapId(null);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-    setUrlInput(map.root?.url || '');
-    showToast(`Loaded "${map.name}"`, 'success');
-    scheduleResetView();
-  };
+    setUrlInput(hydratedMap.root?.url || '');
+    if (!silent) {
+      showToast(`Loaded "${map.name}"`, 'success');
+    }
+    pendingInitialCenterRef.current = true;
+    scheduleResetViewRef.current?.();
+  }, [applyTransform, clearCaptureIssues, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
+
+  const loadLargeMapShell = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    const rootSummary = map?.rootSummary || {};
+    const shellRoot = {
+      id: rootSummary.id || `map-${map.id}-root`,
+      title: rootSummary.title || map.name || 'Untitled Map',
+      url: rootSummary.url || map.url || '',
+      children: [],
+      ...(map?.scanMeta ? { [SAVED_SCAN_META_KEY]: map.scanMeta } : {}),
+    };
+    const shellScanMeta = getPersistedScanMetaFromRoot(shellRoot) || { brokenLinks: [] };
+    resetAutosaveTracking({
+      snapshot: serializeMapAutosaveSnapshot({
+        name: map?.name || '',
+        root: shellRoot,
+        orphans: [],
+        connections: [],
+        colors: map?.colors || DEFAULT_COLORS,
+        connectionColors: map?.connectionColors || DEFAULT_CONNECTION_COLORS,
+        scanMeta: shellScanMeta,
+        project_id: map?.project_id || null,
+      }),
+    });
+    setMapPermissions(null);
+    resetScanLayers();
+    setLargeMapDisplaySummary(normalizeMapDisplaySummary(map?.displaySummary));
+    setHasCreatedShareLink(false);
+    setCurrentShareAccess(null);
+    setExpandedStacks({});
+    largeMapHomeSceneKeyRef.current = '';
+    largeMapHomeNodeRef.current = map.homeNode || null;
+    largeMapVisibleNodesRef.current = [];
+    pendingInitialCenterRef.current = false;
+    pendingInitialLargeMapCenterRef.current = true;
+    scanMetaRef.current = shellScanMeta;
+    setRoot(shellRoot);
+    setOrphans([]);
+    setConnections([]);
+    setColors(map.colors || DEFAULT_COLORS);
+    setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
+    setScanMeta(shellScanMeta);
+    setCurrentMap({
+      ...map,
+      root: shellRoot,
+      orphans: [],
+      connections: [],
+      largeMapShell: true,
+    });
+    if (!skipNavigation) {
+      navigateToRoute(createMapRoute(map.id));
+    }
+    setMapSaveConflict(null);
+    setMapName(map.name || '');
+    setActiveVersionId(null);
+    setShowVersionEditPrompt(false);
+    versionBaselineRef.current = null;
+    setSelectedNodeIds(new Set());
+    setSelectionBox(null);
+    setThumbnailScopeIds(map.hasThumbnails ? new Set() : null);
+    setShowImageMenu(false);
+    setShowImageReportDrawer(false);
+    setShowThumbnails(!!map.hasThumbnails);
+    clearCaptureIssues();
+    resetThumbnailQueue(0);
+    setMapVersions([]);
+    setLatestVersionId(null);
+    setShowProjectsModal(false);
+    setEditingProjectId(null);
+    setEditingMapId(null);
+    const initialHomeTransform = getCenteredNodeTransform(map.homeNode, 1);
+    if (initialHomeTransform) {
+      pendingInitialLargeMapCenterRef.current = false;
+    }
+    applyTransform(initialHomeTransform || { scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    if (pendingInitialLargeMapCenterRef.current) {
+      scheduleResetViewRef.current?.(20);
+    }
+    setUrlInput(shellRoot.url || '');
+    if (!silent) {
+      showToast(`Loaded "${map.name}"`, 'success');
+    }
+  }, [applyTransform, clearCaptureIssues, getCenteredNodeTransform, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
+
+  const loadSavedMapById = useCallback(async (mapId, options = {}) => {
+    const { map: summary } = await api.getMapSummary(mapId, { orientation: mapOrientation });
+    if (!summary) {
+      const error = new Error('Map not found');
+      error.status = 404;
+      throw error;
+    }
+    if (shouldUseLargeMapSurface({ nodeCount: summary.nodeCount, hasSavedMap: true })) {
+      loadLargeMapShell(summary, options);
+      return summary;
+    }
+    const { map } = await api.getMap(mapId);
+    if (!map) {
+      const error = new Error('Map not found');
+      error.status = 404;
+      throw error;
+    }
+    loadMap(map, options);
+    return map;
+  }, [loadLargeMapShell, loadMap, mapOrientation]);
+
+  useEffect(() => {
+    loadSavedMapByIdRef.current = loadSavedMapById;
+  }, [loadSavedMapById]);
+
+  useEffect(() => {
+    if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map') return;
+    if (currentRoute?.surface === ROUTE_SURFACES.SHARE) return;
+    setRouteMapGateState(null);
+    setRouteAccessRequestMessage('');
+  }, [currentRoute?.section, currentRoute?.surface]);
+
+  useEffect(() => {
+    if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'invite_accept') return;
+    setInviteAcceptState(null);
+  }, [currentRoute?.section, currentRoute?.surface]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || !currentRoute?.mapId) return undefined;
+    if (currentMap?.id && sameId(currentMap.id, currentRoute.mapId)) return undefined;
+    if (isBillingReturnRoute) return undefined;
+    if (authLoading) return undefined;
+
+    if (!isLoggedIn) {
+      if (hasMap && !currentMap?.id) {
+        const promptKey = `${currentRoute.mapId}:${root?.id || 'draft'}`;
+        navigateToRoute(createAppHomeRoute(), { replace: true });
+        if (!pendingUnsavedRoutePromptRef.current) {
+          pendingUnsavedRoutePromptRef.current = promptKey;
+          showConfirm({
+            title: 'Save current map?',
+            message: 'You have an unsaved map. Save it before leaving?',
+            confirmText: 'Save map',
+            cancelText: "Don't Save",
+          }).then((wantsSave) => {
+            if (pendingUnsavedRoutePromptRef.current !== promptKey) return;
+            pendingUnsavedRoutePromptRef.current = '';
+            if (wantsSave) {
+              setCreateMapMode(false);
+              setDuplicateMapConfig(null);
+              setPendingLoadMap(null);
+              setShowSaveMapModal(true);
+              return;
+            }
+            clearLoadedMapView();
+            navigateToRoute(createAppHomeRoute(), { replace: true });
+          });
+        }
+        return undefined;
+      }
+      setRouteMapGateState({
+        mapId: currentRoute.mapId,
+        loading: false,
+        errorStatus: null,
+        errorMessage: '',
+        requestStatus: 'idle',
+        requestError: '',
+      });
+      openAuthModal();
+      return undefined;
+    }
+
+    let cancelled = false;
+    setRouteMapGateState((previous) => ({
+      mapId: currentRoute.mapId,
+      loading: true,
+      errorStatus: null,
+      errorMessage: '',
+      requestStatus: previous?.mapId === currentRoute.mapId ? previous.requestStatus || 'idle' : 'idle',
+      requestError: '',
+    }));
+
+    loadSavedMapById(currentRoute.mapId, { skipNavigation: true, silent: true })
+      .then(() => {
+        if (cancelled) return;
+        setRouteMapGateState(null);
+        setRouteAccessRequestMessage('');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        clearLoadedMapView();
+        setRouteMapGateState({
+          mapId: currentRoute.mapId,
+          loading: false,
+          errorStatus: error?.status || null,
+          errorMessage: error?.message || 'Failed to load map',
+          requestStatus: 'idle',
+          requestError: '',
+        });
+        if (error?.status === 404 || error?.status === 403) {
+          loadPendingMapInvites({ silent: true });
+          return;
+        }
+        showToast(error.message || 'Failed to load map', 'error');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authLoading,
+    clearLoadedMapView,
+    currentMap?.id,
+    currentRoute?.mapId,
+    currentRoute?.surface,
+    isBillingReturnRoute,
+    isLoggedIn,
+    hasMap,
+    loadPendingMapInvites,
+    loadSavedMapById,
+    openAuthModal,
+    root?.id,
+    navigateToRoute,
+    showConfirm,
+    showToast,
+  ]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invite_accept' || !currentRoute?.inviteToken) {
+      return undefined;
+    }
+    if (authLoading) return undefined;
+
+    if (!isLoggedIn) {
+      setInviteAcceptState({
+        token: currentRoute.inviteToken,
+        status: 'auth_required',
+        error: '',
+      });
+      openAuthModal();
+      return undefined;
+    }
+
+    let cancelled = false;
+    setInviteAcceptState({
+      token: currentRoute.inviteToken,
+      status: 'processing',
+      error: '',
+    });
+
+    api.acceptMapInvite(currentRoute.inviteToken)
+      .then(async ({ invite }) => {
+        if (cancelled) return;
+        await Promise.all([
+          loadAuthenticatedWorkspace(),
+          loadPendingMapInvites({ silent: true }),
+        ]);
+        if (cancelled) return;
+        showToast(`Invite accepted for ${invite?.mapName || 'shared map'}`, 'success');
+        if (invite?.mapId) {
+          try {
+            await loadSavedMapById(invite.mapId, { silent: true });
+          } catch {
+            navigateToRoute(createMapRoute(invite.mapId), { replace: true });
+          }
+          return;
+        }
+        navigateToRoute(createInviteInboxRoute(), { replace: true });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setInviteAcceptState({
+          token: currentRoute.inviteToken,
+          status: 'error',
+          error: error?.message || 'Failed to accept invite.',
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authLoading,
+    currentRoute?.inviteToken,
+    currentRoute?.section,
+    currentRoute?.surface,
+    isLoggedIn,
+    loadAuthenticatedWorkspace,
+    loadPendingMapInvites,
+    loadSavedMapById,
+    navigateToRoute,
+    openAuthModal,
+    showToast,
+  ]);
 
   const reloadMapAfterConflict = async () => {
     const mapId = mapSaveConflict?.mapId || currentMap?.id;
     if (!mapId) return;
     try {
-      const { map } = await api.getMap(mapId);
-      loadMap(map);
+      await loadSavedMapById(mapId);
       setMapSaveConflict(null);
       showToast('Loaded latest map changes', 'success');
     } catch (error) {
@@ -4006,7 +12094,44 @@ export default function App() {
     setMapSaveConflict(null);
   };
 
-  const handleLoadMapRequest = (map) => {
+  const handleLiveResync = async () => {
+    const resynced = await resyncLiveDocument();
+    if (resynced) {
+      showToast('Live editing resynced', 'success');
+      return;
+    }
+
+    const mapId = currentMap?.id;
+    if (!mapId) {
+      showToast('Failed to resync live editing', 'error');
+      return;
+    }
+
+    try {
+      const { map } = await api.getMap(mapId);
+      if (!map) throw new Error('Map not found');
+      loadMap(map, { skipNavigation: true, silent: true });
+      resetLiveDocumentToSavedMap({
+        mapId: map.id,
+        version: 0,
+        name: map.name || 'Untitled Map',
+        notes: map.notes ?? null,
+        root: map.root,
+        orphans: map.orphans || [],
+        connections: map.connections || [],
+        colors: map.colors || DEFAULT_COLORS,
+        connectionColors: map.connectionColors || DEFAULT_CONNECTION_COLORS,
+        mapUpdatedAt: map.updated_at || null,
+        lastOpId: null,
+        lastActorId: currentUser?.id || null,
+      });
+      showToast('Resynced with the latest saved map', 'success');
+    } catch (error) {
+      showToast(error.message || 'Failed to resync live editing', 'error');
+    }
+  };
+
+  const handleLoadMapRequest = async (map) => {
     if (hasMap && !currentMap?.id) {
       setPendingLoadMap(map);
       setCreateMapMode(false);
@@ -4015,7 +12140,17 @@ export default function App() {
       setShowSaveMapModal(true);
       return;
     }
-    loadMap(map);
+    if (map?.root) {
+      loadMap(map);
+      return;
+    }
+    if (map?.id) {
+      try {
+        await loadSavedMapById(map.id);
+      } catch (error) {
+        showToast(error.message || 'Failed to load map', 'error');
+      }
+    }
   };
 
   const deleteMap = async (projectId, mapId) => {
@@ -4032,7 +12167,13 @@ export default function App() {
         if (p.id !== projectId) return p;
         return { ...p, maps: (p.maps || []).filter(m => m.id !== mapId) };
       }));
-      if (currentMap?.id === mapId) setCurrentMap(null);
+      if (editingMapId === mapId) {
+        setEditingMapId(null);
+      }
+      if (currentMap?.id === mapId) {
+        setCurrentMap(null);
+        navigateToRoute(createAppHomeRoute());
+      }
       showToast('Map deleted', 'success');
     } catch (e) {
       showToast(e.message || 'Failed to delete map', 'error');
@@ -4047,8 +12188,13 @@ export default function App() {
   };
 
   // History functions
-  const addToHistory = async (url, rootData, pageCount, scanConfig, depthValue) => {
+  const addToHistory = async (url, rootData, pageCount, scanConfig, snapshot = null) => {
     if (!isLoggedIn) return; // Only save history for logged-in users
+
+    const historyOrphans = Array.isArray(snapshot?.orphans) ? snapshot.orphans : orphans;
+    const historyConnections = Array.isArray(snapshot?.connections) ? snapshot.connections : connections;
+    const historyColors = snapshot?.colors || colors;
+    const historyConnectionColors = snapshot?.connectionColors || connectionColors;
 
     try {
       const { id } = await api.addToHistory({
@@ -4057,12 +12203,12 @@ export default function App() {
         title: rootData?.title || getHostname(url),
         page_count: pageCount,
         root: rootData,
-        orphans,
-        connections,
-        colors,
-        connectionColors,
+        orphans: historyOrphans,
+        connections: historyConnections,
+        colors: historyColors,
+        connectionColors: historyConnectionColors,
         scan_options: scanConfig || null,
-        scan_depth: Number.isFinite(depthValue) ? depthValue : null,
+        scan_depth: null,
         map_id: null,
       });
 
@@ -4075,12 +12221,12 @@ export default function App() {
         page_count: pageCount,
         scanned_at: new Date().toISOString(),
         root: rootData,
-        orphans,
-        connections,
-        colors,
-        connectionColors,
+        orphans: historyOrphans,
+        connections: historyConnections,
+        colors: historyColors,
+        connectionColors: historyConnectionColors,
         scan_options: scanConfig || null,
-        scan_depth: Number.isFinite(depthValue) ? depthValue : null,
+        scan_depth: null,
         map_id: null,
       };
 
@@ -4161,24 +12307,152 @@ export default function App() {
     messageTimerRef.current = null;
   };
 
-  const cancelScan = () => {
+  const closeScanStream = () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-    const jobId = scanJobIdRef.current;
+  };
+
+  const resetScanUi = ({ clearError = true, clearProgress = true } = {}) => {
+    closeScanStream();
     scanJobIdRef.current = null;
-    if (jobId) {
-      api.cancelScanJob(jobId).catch(() => {});
-    }
+    scanJobAccessTokenRef.current = null;
     stopScanTimers();
     setLoading(false);
     setShowCancelConfirm(false);
-    setScanProgress({ scanned: 0, queued: 0 });
+    setShowStopConfirm(false);
+    setIsStoppingScan(false);
+    if (clearProgress) {
+      setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+    }
+    setScanLimitProgressNote('');
+    if (clearError) {
+      setScanErrorMessage('');
+    }
+  };
+
+  const showScanError = (message) => {
+    closeScanStream();
+    scanJobIdRef.current = null;
+    scanJobAccessTokenRef.current = null;
+    stopScanTimers();
+    setLoading(false);
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
+    setIsStoppingScan(false);
+    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+    setScanLimitProgressNote('');
+    setScanErrorMessage(message || 'Scan failed');
+  };
+
+  const dismissScanError = () => {
+    setScanErrorMessage('');
+    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+  };
+
+  const requestCancelScan = () => {
+    setShowStopConfirm(false);
+    setShowCancelConfirm(true);
+  };
+
+  const requestStopScan = () => {
+    if (isStoppingScan) return;
+    setShowCancelConfirm(false);
+    setShowStopConfirm(true);
+  };
+
+  const dismissScanConfirm = () => {
+    if (isStoppingScan) return;
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
+  };
+
+  const cancelScan = () => {
+    const jobId = scanJobIdRef.current;
+    const accessToken = scanJobAccessTokenRef.current;
+    if (jobId) {
+      ignoredScanJobIdsRef.current.add(jobId);
+      window.setTimeout(() => {
+        ignoredScanJobIdsRef.current.delete(jobId);
+      }, 60000);
+    }
+    resetScanUi();
+    if (jobId) {
+      api.cancelScanJob(jobId, { accessToken }).catch(() => {});
+    }
     showToast('Scan cancelled', 'info');
   };
 
-  const scan = async (overrideUrl, preserveName = false) => {
+  useEffect(() => {
+    if (!hasMap || currentMap?.id || loading) return undefined;
+
+    const handleUnsavedMapPopState = () => {
+      const promptKey = `browser-back:${root?.id || 'draft'}`;
+      if (pendingUnsavedRoutePromptRef.current) return;
+      pendingUnsavedRoutePromptRef.current = promptKey;
+      window.setTimeout(() => {
+        showConfirm({
+          title: 'Save current map?',
+          message: 'You have an unsaved map. Save it before leaving?',
+          confirmText: 'Save map',
+          cancelText: "Don't Save",
+        }).then((wantsSave) => {
+          if (pendingUnsavedRoutePromptRef.current !== promptKey) return;
+          pendingUnsavedRoutePromptRef.current = '';
+          if (wantsSave) {
+            setCreateMapMode(false);
+            setDuplicateMapConfig(null);
+            setPendingLoadMap(null);
+            setShowSaveMapModal(true);
+            return;
+          }
+          clearLoadedMapView();
+          navigateToRoute(createAppHomeRoute(), { replace: true });
+        });
+      }, 0);
+    };
+
+    window.addEventListener('popstate', handleUnsavedMapPopState);
+    return () => window.removeEventListener('popstate', handleUnsavedMapPopState);
+  }, [
+    clearLoadedMapView,
+    currentMap?.id,
+    hasMap,
+    loading,
+    navigateToRoute,
+    root?.id,
+    showConfirm,
+  ]);
+
+  const stopScan = async () => {
+    const jobId = scanJobIdRef.current;
+    const accessToken = scanJobAccessTokenRef.current;
+    if (!jobId || isStoppingScan) return;
+
+    setIsStoppingScan(true);
+    setShowStopConfirm(false);
+    setShowCancelConfirm(false);
+
+    try {
+      const response = await api.stopScanJob(jobId, { accessToken });
+      if (scanJobIdRef.current !== jobId) return;
+      if (response?.canceled) {
+        resetScanUi();
+        showToast('Scan stopped before results were ready', 'warning');
+        return;
+      }
+      showToast('Stopping scan and preparing current results...', 'info');
+    } catch (err) {
+      if (scanJobIdRef.current !== jobId) return;
+      console.error('Scan stop failed:', err);
+      setIsStoppingScan(false);
+      setShowStopConfirm(true);
+      showToast(err.message || 'Failed to stop scan', 'error');
+    }
+  };
+
+  const scan = async (overrideUrl, preserveName = false, authFlow = {}) => {
     let urlToScan = urlInput;
     if (typeof overrideUrl === 'string') {
       urlToScan = overrideUrl;
@@ -4189,100 +12463,234 @@ export default function App() {
       return;
     }
 
-    const parsedDepth = Number.parseInt(scanDepth, 10);
-    const depthValue = Number.isFinite(parsedDepth) ? Math.min(Math.max(parsedDepth, 1), 8) : 4;
+    const effectiveCurrentUser = authFlow.currentUser || currentUser;
+    const effectiveIsLoggedIn = Boolean(authFlow.currentUser) || isLoggedIn;
+    const activeScanOptions = authFlow.scanOptionsOverride
+      ? { ...scanOptions, ...authFlow.scanOptionsOverride }
+      : scanOptions;
+    if (!effectiveIsLoggedIn && !authFlow.skipGuestScanPrompt) {
+      setUrlInput(url);
+      setGuestScanPrompt({
+        url,
+        preserveName,
+        authFlow: {
+          ...authFlow,
+          scanOptionsOverride: activeScanOptions,
+        },
+      });
+      return;
+    }
+    const requestedScanConfig = normalizeScanConfig({
+      url,
+      options: activeScanOptions,
+    });
+    const shouldReplaceEntitlementLimitedMap = isUnsavedScannedMap
+      && canRescanEntitlementLimitedMap({
+        scanMeta,
+        entitlements: effectiveCurrentUser?.entitlements,
+        isLoggedIn: effectiveIsLoggedIn,
+        requestedPages: DEFAULT_SCAN_REQUESTED_PAGES,
+      });
+    const shouldMergeScanResult = isUnsavedScannedMap
+      && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig)
+      && !shouldReplaceEntitlementLimitedMap;
+    const requestedPages = DEFAULT_SCAN_REQUESTED_PAGES;
+    const fallbackScanEntitlementPreview = getClientScanEntitlementPreview(requestedPages, {
+      user: effectiveCurrentUser,
+      isLoggedIn: effectiveIsLoggedIn,
+    });
+    let scanEntitlementPreview = fallbackScanEntitlementPreview;
+    try {
+      const previewResponse = await api.getScanEntitlementPreview({ maxPages: requestedPages });
+      scanEntitlementPreview = normalizeScanEntitlementPreview(
+        previewResponse?.entitlement,
+        fallbackScanEntitlementPreview
+      );
+    } catch (err) {
+      if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) return;
+      console.warn('Scan entitlement preview failed:', err);
+      showToast('Could not verify your scan limit. Please try again.', 'error');
+      return;
+    }
+    if (scanEntitlementPreview.blocked) {
+      showEntitlementLock({
+        title: scanEntitlementPreview.title || 'Scan locked',
+        message: scanEntitlementPreview.message || 'Your current plan does not allow a new scan.',
+      });
+      return;
+    }
+    if (effectiveIsLoggedIn && scanEntitlementPreview.capped && !authFlow.skipScanLimitPrompt) {
+      setUrlInput(url);
+      setScanLimitPrompt({
+        url,
+        preserveName,
+        prompt: scanEntitlementPreview,
+        authFlow: {
+          ...authFlow,
+          scanOptionsOverride: activeScanOptions,
+        },
+      });
+      return;
+    }
+    const maxPagesForRequest = requestedPages;
 
+    if (effectiveIsLoggedIn && AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
+      try {
+        const precheck = await api.precheckScanAuth({
+          url,
+          options: activeScanOptions,
+        });
+        if (precheck?.authRequired) {
+          setScanAuthPrompt({
+            url,
+            preserveName,
+            authCount: precheck.authCount || 0,
+            sampleUrls: precheck.sampleUrls || [],
+            interactiveLoginSupported: precheck.interactiveLoginSupported === true,
+            loading: false,
+            error: '',
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('Authenticated scan pre-check failed:', err);
+      }
+    }
+
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
+    setIsStoppingScan(false);
+    setScanErrorMessage('');
+    setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
+    setShowScanOptions(false);
+    setLastHistoryId(null);
+    setLastScanUrl('');
     setLoading(true);
-    setScanProgress({ scanned: 0, queued: 0 });
+    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
     startScanTimers();
+    trackEvent('scan_started', {
+      authenticated_pages: AUTHENTICATED_SCAN_ENABLED && scanOptions.authenticatedPages ? 'true' : 'false',
+    });
 
     const scanConfig = {
-      ...scanOptions,
+      ...activeScanOptions,
+      authenticatedPages: AUTHENTICATED_SCAN_ENABLED
+        ? Boolean(activeScanOptions.authenticatedPages || authFlow.authSessionId)
+        : false,
     };
     let jobId;
+    let jobAccessToken = null;
     try {
-      const jobResponse = await api.createScanJob({
-        url,
-        maxDepth: depthValue,
-        options: scanConfig,
-      });
+      let jobResponse = null;
+      let lastCreateError = null;
+      for (let attempt = 0; attempt < SCAN_JOB_CREATE_RETRY_DELAYS_MS.length; attempt += 1) {
+        if (SCAN_JOB_CREATE_RETRY_DELAYS_MS[attempt] > 0) {
+          await new Promise((resolve) => setTimeout(resolve, SCAN_JOB_CREATE_RETRY_DELAYS_MS[attempt]));
+        }
+        try {
+          jobResponse = await api.createScanJob({
+            url,
+            maxPages: maxPagesForRequest,
+            options: scanConfig,
+            ...(authFlow.authSessionId ? { authSessionId: authFlow.authSessionId } : {}),
+          });
+          break;
+        } catch (error) {
+          lastCreateError = error;
+          if (error?.status && error.status < 500) {
+            throw error;
+          }
+        }
+      }
+      if (!jobResponse && lastCreateError) {
+        throw lastCreateError;
+      }
       jobId = jobResponse?.jobId;
+      jobAccessToken = jobResponse?.jobAccessToken || null;
       if (!jobId) {
         throw new Error('Failed to start scan');
       }
+      if (hasScanEntitlementSessionMismatch({
+        isLoggedIn: effectiveIsLoggedIn,
+        preview: scanEntitlementPreview,
+        jobEntitlement: jobResponse?.entitlement,
+      })) {
+        api.cancelScanJob(jobId, { accessToken: jobAccessToken }).catch(() => {});
+        throw new Error('Your login session changed. Refresh or sign in again before scanning.');
+      }
+      scanEntitlementPreview = normalizeScanEntitlementPreview(
+        jobResponse?.entitlement,
+        scanEntitlementPreview
+      );
+      setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
     } catch (err) {
       console.error('Scan job creation failed:', err);
-      showToast(err.message || 'Failed to start scan', 'error');
-      stopScanTimers();
-      setLoading(false);
-      setScanProgress({ scanned: 0, queued: 0 });
+      if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) {
+        return;
+      }
+      trackEvent('scan_failed', {
+        phase: 'job_create',
+        message: err?.message || 'Failed to start scan',
+      });
+      showScanError(err.message || 'Failed to start scan');
       return;
     }
 
     scanJobIdRef.current = jobId;
+    scanJobAccessTokenRef.current = jobAccessToken;
 
-    const eventSource = new EventSource(`${API_BASE}/scan-jobs/${jobId}/stream`);
+    const eventSource = new EventSource(
+      api.getScanJobStreamUrl(jobId, { accessToken: jobAccessToken }),
+      { withCredentials: true }
+    );
     eventSourceRef.current = eventSource;
+    let streamHandled = false;
+    let streamErrorCount = 0;
+    const maxStreamErrorCount = 8;
 
-    eventSource.addEventListener('update', (e) => {
-      try {
-        const job = JSON.parse(e.data);
-        if (job?.progress) {
-          setScanProgress(job.progress);
-        }
-      } catch {}
-    });
-
-    eventSource.addEventListener('complete', (e) => {
-      let job;
-      try {
-        job = JSON.parse(e.data);
-      } catch (err) {
-        console.error('Scan payload parse failed:', err);
-        showToast('Scan completed but response could not be read', 'error');
-        eventSource.close();
-        eventSourceRef.current = null;
-        scanJobIdRef.current = null;
-        stopScanTimers();
-        setLoading(false);
-        setScanProgress({ scanned: 0, queued: 0 });
-        return;
-      }
+    const handleCompletedJob = (job) => {
+      if (streamHandled) return;
+      if (ignoredScanJobIdsRef.current.has(jobId)) return;
 
       if (job?.status === 'failed') {
-        showToast(`Scan failed: ${job.error || 'Unknown error'}`, 'error');
-        eventSource.close();
-        eventSourceRef.current = null;
-        scanJobIdRef.current = null;
-        stopScanTimers();
-        setLoading(false);
-        setScanProgress({ scanned: 0, queued: 0 });
+        streamHandled = true;
+        trackEvent('scan_failed', {
+          phase: 'complete',
+          message: job?.error || 'Unknown error',
+        });
+        showScanError(job?.error || 'Unknown error');
         return;
       }
 
       if (job?.status === 'canceled') {
+        streamHandled = true;
         showToast('Scan cancelled', 'info');
-        eventSource.close();
-        eventSourceRef.current = null;
-        scanJobIdRef.current = null;
-        stopScanTimers();
-        setLoading(false);
-        setScanProgress({ scanned: 0, queued: 0 });
+        resetScanUi();
         return;
       }
 
       const data = job?.result;
       if (!data?.root) {
         console.error('Scan completed without a root node:', data);
-        showToast('Scan completed but returned no pages', 'error');
-        eventSource.close();
-        eventSourceRef.current = null;
-        scanJobIdRef.current = null;
-        stopScanTimers();
-        setLoading(false);
-        setScanProgress({ scanned: 0, queued: 0 });
+        streamHandled = true;
+        trackEvent('scan_failed', {
+          phase: 'complete',
+          message: 'Scan completed but returned no pages',
+        });
+        showScanError('Scan completed but returned no pages');
         return;
       }
+
+      const normalizedPartialReason = data.partialReason || null;
+      const isStoppedPartial = data.partial === true && normalizedPartialReason === 'stopped_by_user';
+      const isPartialResult = data.partial === true;
+      const hostname = (() => {
+        try {
+          return new URL(url).hostname;
+        } catch {
+          return '';
+        }
+      })();
 
       let merged = { root: data.root, orphans: data.orphans || [] };
       try {
@@ -4292,20 +12700,56 @@ export default function App() {
         showToast('Scan completed with partial data', 'warning');
       }
 
-      const nodesForCounts = collectAllNodesWithOrphans(merged.root, merged.orphans);
-      const forestIndexForCounts = buildForestIndex(merged.root, merged.orphans);
-      const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
-      const authCount = nodesForCounts.filter((node) => !!node.authRequired).length;
-      const duplicateCount = nodesForCounts.filter((node) => node.isDuplicate).length;
-      const hasSubdomains = (merged.orphans || []).some((orphan) => !!orphan.subdomainRoot);
-      const hasOrphans = (merged.orphans || []).some((orphan) => !orphan.subdomainRoot);
-      const hasBroken = nodesForCounts.some((node) => {
-        const meta = forestIndexForCounts.nodes.get(node.id);
-        if (isTopLevelOrphanRootMeta(meta)) return false;
-        return !!node.isBroken || node.orphanType === 'broken';
-      });
-      const hasInactive = nodesForCounts.some((node) => !!node.isInactive || node.orphanType === 'inactive');
-      const hasErrors = nodesForCounts.some((node) => !!node.isError);
+      if (shouldMergeScanResult && shouldPreserveExistingMapForCollapsedScan({
+        result: data,
+        nextRoot: merged.root,
+        existingRoot: root,
+      })) {
+        streamHandled = true;
+        setScanMeta({
+          brokenLinks: data.brokenLinks || [],
+          partial: true,
+          partialReason: normalizedPartialReason,
+          scanDiagnostics: data.scanDiagnostics || null,
+          entitlement: data.entitlement || null,
+          discoveryManifest: data.discoveryManifest || null,
+        });
+        trackEvent('scan_completed', {
+          hostname,
+          page_count: countNodes(root),
+          partial: 'true',
+          partial_reason: normalizedPartialReason || '',
+          preserved_existing_map: 'true',
+        });
+        showToast(getCollapsedScanMessage(hostname), 'warning');
+        refreshCurrentUser();
+        resetScanUi();
+        return;
+      }
+
+      if (!shouldMergeScanResult && shouldRejectFreshRootOnlyScan({
+        result: data,
+        nextRoot: merged.root,
+        existingRoot: root,
+      })) {
+        streamHandled = true;
+        setScanMeta({
+          brokenLinks: data.brokenLinks || [],
+          partial: true,
+          partialReason: normalizedPartialReason,
+          scanDiagnostics: data.scanDiagnostics || null,
+          entitlement: data.entitlement || null,
+          discoveryManifest: data.discoveryManifest || null,
+        });
+        trackEvent('scan_failed', {
+          phase: 'quality_gate',
+          hostname,
+          partial_reason: normalizedPartialReason || '',
+        });
+        showScanError(getRootOnlyScanFailureMessage(hostname));
+        return;
+      }
+
       const seenCrosslinks = new Set();
       const scannedCrosslinks = (data.crosslinks || [])
         .map((link, index) => {
@@ -4323,51 +12767,59 @@ export default function App() {
           };
         })
         .filter(Boolean);
-      setRoot(merged.root);
-      setOrphans(merged.orphans);
+      const manualConnections = shouldMergeScanResult
+        ? connections.filter((connection) => !(connection.autoRoute || connection.locked || String(connection.id || '').startsWith('scan-crosslink-')))
+        : [];
+      if (shouldMergeScanResult) {
+        merged = mergeRescanResults({
+          existingRoot: root,
+          existingOrphans: orphans,
+          nextRoot: merged.root,
+          nextOrphans: merged.orphans,
+          manualConnections,
+        });
+      }
+      const realPageCount = countNodes(merged.root);
+      const displayMerged = addScanLimitGhosts(merged.root, merged.orphans, data.entitlement || null);
+      const displayScanLayerAvailability = getDisplayScanLayerAvailability(displayMerged.root, displayMerged.orphans);
+      const nextConnections = shouldMergeScanResult
+        ? [...manualConnections, ...scannedCrosslinks]
+        : scannedCrosslinks;
+      setRoot(displayMerged.root);
+      setOrphans(displayMerged.orphans);
       setShowThumbnails(false);
       setThumbnailScopeIds(null);
       resetThumbnailQueue(0);
-      setConnections(scannedCrosslinks);
-      setScanMeta({ brokenLinks: data.brokenLinks || [] });
-      setScanLayerAvailability({
-        placementPrimary: true,
-        placementSubdomain: hasSubdomains,
-        placementOrphan: hasOrphans,
-        typePages: false,
-        typeFiles: false,
-        statusBroken: hasBroken,
-        statusError: hasErrors,
-        statusInactive: hasInactive,
-        statusAuth: authCount > 0,
-        statusDuplicate: duplicateCount > 0,
+      setConnections(nextConnections);
+      setScanMeta({
+        brokenLinks: data.brokenLinks || [],
+        partial: isPartialResult,
+        partialReason: normalizedPartialReason,
+        scanDiagnostics: data.scanDiagnostics || null,
+        entitlement: data.entitlement || null,
+        discoveryManifest: data.discoveryManifest || null,
       });
-      setScanLayerVisibility({
-        placementPrimary: true,
-        placementSubdomain: hasSubdomains,
-        placementOrphan: hasOrphans,
-        typePages: false,
-        typeFiles: false,
-        statusBroken: hasBroken,
-        statusError: hasErrors,
-        statusInactive: hasInactive,
-        statusAuth: authCount > 0,
-        statusDuplicate: duplicateCount > 0,
-      });
+      setScanLayerAvailability(displayScanLayerAvailability);
+      setScanLayerVisibility(displayScanLayerAvailability);
       setCurrentMap(null);
+      navigateToRoute(createAppHomeRoute(), { replace: true });
+      try {
+        window.history.pushState({ vellicUnsavedMap: true }, '', buildRouteUrl(createAppHomeRoute()));
+      } catch {}
       setDraftVersionFromSnapshot({
-        root: merged.root,
-        orphans: merged.orphans,
-        connections: scannedCrosslinks,
-        colors: DEFAULT_COLORS,
-        connectionColors: DEFAULT_CONNECTION_COLORS,
+        root: displayMerged.root,
+        orphans: displayMerged.orphans,
+        connections: nextConnections,
+        colors: shouldMergeScanResult ? colors : DEFAULT_COLORS,
+        connectionColors: shouldMergeScanResult ? connectionColors : DEFAULT_CONNECTION_COLORS,
       }, 'Updated');
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setLastScanAt(new Date().toISOString());
+      setLastCompletedScanConfig(requestedScanConfig);
       // Set map name from site title
-      if (!preserveName && data.root?.title) {
+      if (!preserveName && !shouldMergeScanResult && data.root?.title) {
         setMapName(data.root.title);
-      } else if (!preserveName) {
+      } else if (!preserveName && !shouldMergeScanResult) {
         // Use domain as fallback
         try {
           const domain = new URL(url).hostname.replace('www.', '');
@@ -4376,59 +12828,354 @@ export default function App() {
           setMapName('Untitled Map');
         }
       }
-        const pageCount = countNodes(merged.root);
-        addToHistory(url, merged.root, pageCount, scanConfig, depthValue);
-        showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
-        setTimeout(resetView, 100);
+      const pageCount = realPageCount;
+      addToHistory(url, displayMerged.root, pageCount, scanConfig, {
+        orphans: displayMerged.orphans,
+        connections: nextConnections,
+      });
+      trackEvent('scan_completed', {
+        hostname,
+        page_count: pageCount,
+        partial: isPartialResult ? 'true' : 'false',
+        partial_reason: normalizedPartialReason || '',
+      });
+      if (isStoppedPartial) {
+        showToast(`Scan stopped. Showing current results${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (normalizedPartialReason === 'entitlement_cap') {
+        showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
+      } else if (normalizedPartialReason === 'scan_collapsed') {
+        showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (isPartialResult) {
+        showToast(`Scan complete with partial data${hostname ? `: ${hostname}` : ''}`, 'warning');
+      } else {
+        showToast(`Scan complete${hostname ? `: ${hostname}` : ''}`, 'success');
+      }
+      refreshCurrentUser();
+      pendingInitialCenterRef.current = true;
+      setTimeout(() => {
+        const didCenter = centerHomeRef.current?.(1, { skipPanClamp: true });
+        if (didCenter) {
+          pendingInitialCenterRef.current = false;
+          return;
+        }
+        scheduleResetViewRef.current?.(20);
+      }, 100);
 
-      eventSource.close();
-      eventSourceRef.current = null;
-      scanJobIdRef.current = null;
-      stopScanTimers();
-      setLoading(false);
-      setScanProgress({ scanned: 0, queued: 0 });
+      streamHandled = true;
+      resetScanUi();
+    };
+
+    const loadCompletedJobWithResult = async (job) => {
+      if (job?.status !== 'complete' || job?.result) return job;
+      const response = await api.getScanJob(jobId, {
+        includeResult: true,
+        accessToken: jobAccessToken,
+      });
+      return response?.job || job;
+    };
+
+    eventSource.addEventListener('update', (e) => {
+      try {
+        const job = JSON.parse(e.data);
+        streamErrorCount = 0;
+        if (job?.progress) {
+          setScanProgress(job.progress);
+        }
+        if (job?.status === 'stopping') {
+          setIsStoppingScan(true);
+          setShowCancelConfirm(false);
+          setShowStopConfirm(false);
+        }
+      } catch {
+      }
     });
 
-    eventSource.addEventListener('error', (e) => {
+    eventSource.addEventListener('complete', async (e) => {
+      let job;
+      try {
+        job = JSON.parse(e.data);
+      } catch (err) {
+        console.error('Scan payload parse failed:', err);
+        streamHandled = true;
+        trackEvent('scan_failed', {
+          phase: 'complete',
+          message: 'Scan completed but response could not be read',
+        });
+        showScanError('Scan completed but response could not be read');
+        return;
+      }
+
+      try {
+        handleCompletedJob(await loadCompletedJobWithResult(job));
+      } catch (err) {
+        console.error('Scan result fetch failed:', err);
+        streamHandled = true;
+        trackEvent('scan_failed', {
+          phase: 'complete',
+          message: err?.message || 'Scan completed but results could not be loaded',
+        });
+        showScanError(err?.message || 'Scan completed but results could not be loaded');
+      }
+    });
+
+    eventSource.addEventListener('job-error', (e) => {
+      let message = 'Connection error';
       try {
         const data = JSON.parse(e.data);
-        showToast(`Scan failed: ${data.error}`, 'error');
-      } catch {
-        showToast('Scan failed: Connection error', 'error');
-      }
-      eventSource.close();
-      eventSourceRef.current = null;
-      scanJobIdRef.current = null;
-      stopScanTimers();
-      setLoading(false);
-      setScanProgress({ scanned: 0, queued: 0 });
+        message = data?.error || message;
+      } catch {}
+      if (streamHandled) return;
+      streamHandled = true;
+      trackEvent('scan_failed', {
+        phase: 'stream',
+        message,
+      });
+      showScanError(message);
     });
 
-    eventSource.onerror = () => {
-      showToast('Scan failed: Connection error', 'error');
-      eventSource.close();
-      eventSourceRef.current = null;
-      scanJobIdRef.current = null;
-      stopScanTimers();
-      setLoading(false);
-      setScanProgress({ scanned: 0, queued: 0 });
+    eventSource.onerror = async () => {
+      if (streamHandled) return;
+
+      try {
+        const { job } = await api.getScanJob(jobId, {
+          includeResult: true,
+          accessToken: jobAccessToken,
+        });
+        if (job?.status === 'complete' || job?.status === 'failed' || job?.status === 'canceled') {
+          handleCompletedJob(job);
+          return;
+        }
+        if (job) {
+          streamErrorCount = 0;
+          if (job.progress) setScanProgress(job.progress);
+          if (job.status === 'stopping') {
+            setIsStoppingScan(true);
+          }
+          return;
+        }
+      } catch (err) {
+        streamErrorCount += 1;
+        if (streamErrorCount < maxStreamErrorCount) return;
+        const message = err?.message || 'Connection error';
+        streamHandled = true;
+        trackEvent('scan_failed', {
+          phase: 'stream',
+          message,
+        });
+        showScanError(message);
+        return;
+      }
+
+      streamHandled = true;
+      trackEvent('scan_failed', {
+        phase: 'stream',
+        message: 'Lost connection while receiving scan progress',
+      });
+      showScanError('Lost connection while receiving scan progress');
     };
+  };
+  scanRef.current = scan;
+
+  useEffect(() => {
+    if (authLoading || loading) return;
+    if (!shouldStartScanFromPrefill(currentRoute)) {
+      handledScanIntentKeyRef.current = '';
+      return;
+    }
+    if (currentRoute?.searchParams?.get('billing')) return;
+    const prefillUrl = getValidScanPrefillUrl(currentRoute);
+    if (!prefillUrl) return;
+    const intentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    if (handledScanIntentKeyRef.current === intentKey) return;
+    handledScanIntentKeyRef.current = intentKey;
+
+    const prefillOptions = getValidScanPrefillOptions(currentRoute);
+    const nextScanOptions = { ...scanOptions, ...prefillOptions };
+    setUrlInput(prefillUrl);
+    if (Object.keys(prefillOptions).length) {
+      setScanOptions((current) => ({ ...current, ...prefillOptions }));
+    }
+    window.setTimeout(() => {
+      scanRef.current?.(prefillUrl, false, {
+        scanOptionsOverride: nextScanOptions,
+      });
+    }, 0);
+  }, [
+    authLoading,
+    currentRoute,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    loading,
+    scanOptions,
+  ]);
+
+  const continueScanWithoutTargetAuth = () => {
+    const prompt = scanAuthPrompt;
+    if (!prompt?.url) return;
+    if (prompt.authBrowser?.sessionId) {
+      api.deleteScanAuthSession(prompt.authBrowser.sessionId).catch(() => {});
+    }
+    setScanAuthPrompt(null);
+    scan(prompt.url, prompt.preserveName, { skipAuthPrecheck: true });
+  };
+
+  const closeScanAuthPrompt = () => {
+    const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
+    if (sessionId) api.deleteScanAuthSession(sessionId).catch(() => {});
+    setScanAuthPrompt(null);
+  };
+
+  const startTargetAuthLogin = async () => {
+    const prompt = scanAuthPrompt;
+    if (!prompt?.url || prompt.loading) return;
+    setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
+    try {
+      const session = await api.createScanAuthSession({ url: prompt.url });
+      if (session?.status === 'ready' && session?.sessionId) {
+        setScanAuthPrompt(null);
+        scan(prompt.url, prompt.preserveName, {
+          skipAuthPrecheck: true,
+          authSessionId: session.sessionId,
+        });
+        return;
+      }
+      if ((session?.status === 'interactive' || session?.interactiveSupported) && session?.sessionId) {
+        setScanAuthPrompt((current) => current ? {
+          ...current,
+          loading: false,
+          error: '',
+          authBrowser: {
+            sessionId: session.sessionId,
+            pageUrl: session.loginUrl || prompt.url,
+            text: '',
+            screenshotUrl: '',
+          },
+        } : current);
+        return;
+      }
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        loading: false,
+        error: session?.message || 'Target-site login is not available in this environment yet.',
+      } : current);
+    } catch (err) {
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        loading: false,
+        error: err?.message || 'Failed to start target-site login.',
+      } : current);
+    }
+  };
+
+  const sendTargetAuthBrowserAction = async (payload) => {
+    const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
+    if (!sessionId) return;
+    try {
+      const result = await api.sendScanAuthAction(sessionId, payload);
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        authBrowser: {
+          ...current.authBrowser,
+          pageUrl: result?.pageUrl || current.authBrowser?.pageUrl,
+        },
+      } : current);
+    } catch (err) {
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        error: err?.message || 'Failed to control the login browser.',
+      } : current);
+    }
+  };
+
+  const clickTargetAuthBrowser = (event) => {
+    const image = scanAuthBrowserImageRef.current;
+    if (!image) return;
+    const rect = image.getBoundingClientRect();
+    const scaleX = 1365 / rect.width;
+    const scaleY = 900 / rect.height;
+    sendTargetAuthBrowserAction({
+      action: 'click',
+      x: Math.round((event.clientX - rect.left) * scaleX),
+      y: Math.round((event.clientY - rect.top) * scaleY),
+    });
+  };
+
+  const typeIntoTargetAuthBrowser = async () => {
+    const text = scanAuthPrompt?.authBrowser?.text || '';
+    if (!text) return;
+    setScanAuthPrompt((current) => current ? {
+      ...current,
+      authBrowser: {
+        ...current.authBrowser,
+        text: '',
+      },
+    } : current);
+    await sendTargetAuthBrowserAction({ action: 'type', text });
+  };
+
+  const finishTargetAuthLogin = async () => {
+    const prompt = scanAuthPrompt;
+    const sessionId = prompt?.authBrowser?.sessionId;
+    if (!prompt?.url || !sessionId || prompt.loading) return;
+    setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
+    try {
+      const session = await api.completeScanAuthSession(sessionId);
+      if (!session?.ready) throw new Error('Login session was not ready');
+      setScanAuthPrompt(null);
+      scan(prompt.url, prompt.preserveName, {
+        skipAuthPrecheck: true,
+        authSessionId: sessionId,
+      });
+    } catch (err) {
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        loading: false,
+        error: err?.message || 'Failed to finish target-site login.',
+      } : current);
+    }
   };
 
   const onKeyDownUrl = (e) => {
     if (e.key === 'Enter') scan();
   };
 
+  const collectNodesInSelectionRect = useCallback((rect) => {
+    const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
+
+    if (useLargeMapSurface) {
+      largeMapVisibleNodesRef.current.forEach((node) => {
+        if (nodeIntersectsSelectionRect(rect, node)) {
+          addNodeAndStackSelection(next, node.id);
+        }
+      });
+      return next;
+    }
+
+    const layout = layoutRef.current;
+    if (layout?.nodes?.size) {
+      layout.nodes.forEach((nodeData) => {
+        if (nodeIntersectsSelectionRect(rect, nodeData)) {
+          addNodeAndStackSelection(next, nodeData.node.id);
+        }
+      });
+    }
+
+    return next;
+  }, [addNodeAndStackSelection, useLargeMapSurface]);
+
   const onPointerDown = (e) => {
     if (!hasMap) return;
     if (e.button !== 0) return;
+    cancelScheduledResetView();
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const nodeContainer = e.target.closest('[data-node-id]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle, .thumbnail-progress-toast, .minimap-navigator');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .canvas-map-header, .topbar-collaborator-menu, .image-capture-toast, .minimap-navigator');
     const isInsidePopover = e.target.closest('.comment-popover-container');
+    const isInsideCommentsDrawer = e.target.closest('.comments-drawer');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isInsideNodeMenu = e.target.closest('.node-menu');
-    const isOnConnection = e.target.closest('.connections-layer');
+    const isOnConnection = e.target.closest('.connection-hit, .connection-line, .connection-glow');
 
     // Close connection menu when clicking outside of it
     if (connectionMenu && !isInsideConnectionMenu) {
@@ -4443,13 +13190,21 @@ export default function App() {
     if (commentingNodeId && !isInsidePopover && !isInsideCard) {
       setCommentingNodeId(null);
       setCommentingNodeSnapshot(null);
+      setSelectedCommentId(null);
+    }
+
+    if (showCommentsPanel && !isInsideCommentsDrawer && !isInsidePopover) {
+      setShowCommentsPanel(false);
+      setCommentingNodeId(null);
+      setCommentingNodeSnapshot(null);
+      setSelectedCommentId(null);
     }
 
     const shiftActive = e.shiftKey || isShiftPressed;
-    if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu || isOnConnection)) return;
-    if (shiftActive && (isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu)) return;
+    if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideCommentsDrawer || isInsideConnectionMenu || isInsideNodeMenu || isOnConnection)) return;
+    if (shiftActive && (isUIControl || isInsidePopover || isInsideCommentsDrawer || isInsideConnectionMenu || isInsideNodeMenu)) return;
 
-    const canStartSelection = shiftActive;
+    const canStartSelection = shiftActive && canEdit();
     if (canStartSelection) {
       const start = getWorldPointFromClient(e.clientX, e.clientY);
       const startNodeId = nodeContainer?.getAttribute('data-node-id') || null;
@@ -4501,22 +13256,7 @@ export default function App() {
       setSelectionBox(rect);
 
       if (rect.w > 2 || rect.h > 2) {
-        const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
-        const layout = layoutRef.current;
-        if (layout?.nodes?.size) {
-          layout.nodes.forEach((nodeData) => {
-            const nx = nodeData.x;
-            const ny = nodeData.y;
-            const nw = nodeData.w;
-            const nh = nodeData.h;
-            const intersects = rect.x <= nx + nw
-              && rect.x + rect.w >= nx
-              && rect.y <= ny + nh
-              && rect.y + rect.h >= ny;
-            if (intersects) next.add(nodeData.node.id);
-          });
-        }
-        setSelectedNodeIds(next);
+        setSelectedNodeIds(collectNodesInSelectionRect(rect));
       }
       return;
     }
@@ -4545,35 +13285,23 @@ export default function App() {
           h: Math.abs(current.y - start.y),
         };
         if (!selectionStartedOnNodeRef.current && (rect.w > 2 || rect.h > 2)) {
-          const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
-          const layout = layoutRef.current;
-          if (layout?.nodes?.size) {
-            layout.nodes.forEach((nodeData) => {
-              const nx = nodeData.x;
-              const ny = nodeData.y;
-              const nw = nodeData.w;
-              const nh = nodeData.h;
-              const intersects = rect.x <= nx + nw
-                && rect.x + rect.w >= nx
-                && rect.y <= ny + nh
-                && rect.y + rect.h >= ny;
-              if (intersects) next.add(nodeData.node.id);
-            });
-          }
-          setSelectedNodeIds(next);
+          setSelectedNodeIds(collectNodesInSelectionRect(rect));
         } else if (selectionStartNodeRef.current && moved < 3) {
           const nodeId = selectionStartNodeRef.current;
+          const targetIds = getNodeStackSelectionIds(nodeId);
           setSelectedNodeIds((prev) => {
             const next = new Set(selectionAdditiveRef.current ? prev : selectionBaseRef.current);
-            if (next.has(nodeId)) {
-              next.delete(nodeId);
+            const allSelected = targetIds.every((id) => next.has(id));
+            if (allSelected) {
+              targetIds.forEach((id) => next.delete(id));
             } else {
-              next.add(nodeId);
+              targetIds.forEach((id) => next.add(id));
             }
             return next;
           });
         } else if (!selectionAdditiveRef.current) {
           setSelectedNodeIds(new Set());
+          setActiveId(null);
         }
       }
       selectionActiveRef.current = false;
@@ -4597,6 +13325,7 @@ export default function App() {
     setIsPanning(false);
     if (wasDragging && moved < 3) {
       setSelectedNodeIds(new Set());
+      setActiveId(null);
     }
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -4627,6 +13356,7 @@ export default function App() {
   const zoomAtClientPoint = useCallback((nextScale, clientX, clientY) => {
     const canvasEl = canvasRef.current;
     if (!canvasEl) return;
+    cancelScheduledResetView();
 
     const { min, max } = getZoomBounds();
     const safeScale = clamp(nextScale, min, max);
@@ -4651,7 +13381,7 @@ export default function App() {
     };
 
     applyTransform({ scale: safeScale, x: nextPan.x, y: nextPan.y });
-  }, [applyTransform, getZoomBounds]);
+  }, [applyTransform, cancelScheduledResetView, getZoomBounds]);
 
   const zoomIn = useCallback(() => {
     const canvas = canvasRef.current;
@@ -4684,174 +13414,345 @@ export default function App() {
     zoomAtClientPoint(nextScale, cx, cy);
   }, [zoomAtClientPoint]);
 
-  const centerHome = useCallback(() => {
-    const canvas = canvasRef.current;
+  const centerHome = useCallback((nextScale = scaleRef.current || 1, { skipPanClamp = true } = {}) => {
     const layout = layoutRef.current;
-    if (!canvas || !layout || layout.nodes.size === 0) return;
+    if (!layout || layout.nodes.size === 0) return false;
 
     const rootId = renderRoot?.id || root?.id;
     let rootNode = rootId ? layout.nodes.get(rootId) : null;
     if (!rootNode) {
       rootNode = Array.from(layout.nodes.values()).find((node) => node.depth === 0) || null;
     }
-    if (!rootNode) return;
+    if (!rootNode) return false;
 
-    const targetX = canvas.clientWidth / 2;
-    const targetY = 60;
-    const scale = scaleRef.current;
+    const nextTransform = getCenteredNodeTransform(rootNode, nextScale);
+    if (!nextTransform) return false;
 
-    const nodeCenterX = rootNode.x + rootNode.w / 2;
-    const nodeTopY = rootNode.y;
+    applyTransform(nextTransform, { skipPanClamp });
+    return true;
+  }, [applyTransform, getCenteredNodeTransform, renderRoot, root]);
+  centerHomeRef.current = centerHome;
 
-    const nextPan = {
-      x: targetX - nodeCenterX * scale,
-      y: targetY - nodeTopY * scale,
-    };
+  const fitCurrentMapToView = useCallback(() => {
+    const canvas = canvasRef.current;
+    const layout = layoutRef.current;
+    const nodes = layout?.nodes;
+    if (!canvas || !nodes || nodes.size === 0) return false;
 
-    applyTransform({ scale, x: nextPan.x, y: nextPan.y });
-  }, [applyTransform, renderRoot, root]);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    nodes.forEach((node) => {
+      minX = Math.min(minX, Number(node.x || 0));
+      minY = Math.min(minY, Number(node.y || 0));
+      maxX = Math.max(maxX, Number(node.x || 0) + Number(node.w || 0));
+      maxY = Math.max(maxY, Number(node.y || 0) + Number(node.h || 0));
+    });
+
+    const nextTransform = getFitBoundsTransform(
+      { minX, minY, maxX, maxY },
+      {
+        canvasWidth: canvas.clientWidth,
+        canvasHeight: canvas.clientHeight,
+        padding: 96,
+        minScale: MIN_SCALE,
+        maxScale: 1,
+      }
+    );
+    if (!nextTransform) return false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+    return true;
+  }, [applyTransform]);
+
+  const fitNodeIdsToView = useCallback((nodeIds, options = {}) => {
+    const ids = [...new Set((nodeIds || []).filter(Boolean))];
+    const canvas = canvasRef.current;
+    const layout = layoutRef.current;
+    const nodes = layout?.nodes;
+    if (!canvas || !nodes || ids.length === 0) return false;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    ids.forEach((nodeId) => {
+      const node = nodes.get(nodeId);
+      if (!node) return;
+      minX = Math.min(minX, Number(node.x || 0));
+      minY = Math.min(minY, Number(node.y || 0));
+      maxX = Math.max(maxX, Number(node.x || 0) + Number(node.w || 0));
+      maxY = Math.max(maxY, Number(node.y || 0) + Number(node.h || 0));
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      return false;
+    }
+
+    const nextTransform = getFitBoundsTransform(
+      { minX, minY, maxX, maxY },
+      {
+        canvasWidth: canvas.clientWidth,
+        canvasHeight: canvas.clientHeight,
+        padding: options.padding ?? 144,
+        minScale: MIN_SCALE,
+        maxScale: options.maxScale ?? 1,
+      }
+    );
+    if (!nextTransform) return false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+    return true;
+  }, [applyTransform]);
+
+  useLayoutEffect(() => {
+    if (!pendingInitialCenterRef.current || useLargeMapSurface) return;
+    if (!mapLayout?.nodes?.size || !canvasRef.current) return;
+    const didCenter = centerHome(1, { skipPanClamp: true });
+    if (didCenter) {
+      pendingInitialCenterRef.current = false;
+    } else {
+      scheduleResetViewRef.current?.(20);
+    }
+  }, [canvasSize.height, canvasSize.width, centerHome, currentMap?.id, mapLayout, useLargeMapSurface]);
+
+  useLayoutEffect(() => {
+    if (!pendingInitialLargeMapCenterRef.current || !useLargeMapSurface) return;
+    if (!largeMapHomeNodeRef.current || !canvasRef.current) {
+      scheduleResetViewRef.current?.(20);
+      return;
+    }
+    const nextTransform = getCenteredNodeTransform(largeMapHomeNodeRef.current, 1);
+    if (!nextTransform) {
+      scheduleResetViewRef.current?.(20);
+      return;
+    }
+    pendingInitialLargeMapCenterRef.current = false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+  }, [
+    applyTransform,
+    canvasSize.height,
+    canvasSize.width,
+    currentMap?.id,
+    getCenteredNodeTransform,
+    largeMapSceneBounds,
+    useLargeMapSurface,
+  ]);
 
   const resetView = useCallback(() => {
-    applyTransform({ scale: 1, x: 0, y: 0 });
-    requestAnimationFrame(() => {
-      centerHome();
-    });
-  }, [applyTransform, centerHome]);
+    cancelScheduledResetView();
+    if (useLargeMapSurface) {
+      pendingInitialLargeMapCenterRef.current = true;
+      centerLargeMapHome(1)
+        .then((didCenter) => {
+          pendingInitialLargeMapCenterRef.current = !didCenter;
+          if (!didCenter) scheduleResetViewRef.current?.(20);
+        })
+        .catch(() => {
+          pendingInitialLargeMapCenterRef.current = true;
+          scheduleResetViewRef.current?.(20);
+        });
+      return;
+    }
 
-  const scheduleResetView = (attempts = 8) => {
+    const didCenter = centerHome(1, { skipPanClamp: true });
+    if (!didCenter) {
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    }
+  }, [applyTransform, cancelScheduledResetView, centerHome, centerLargeMapHome, useLargeMapSurface]);
+
+  const scheduleResetView = useCallback((attempts = 8, activeToken = null) => {
     if (attempts <= 0) return;
+    const token = activeToken ?? (scheduleResetViewTokenRef.current + 1);
+    if (activeToken == null) {
+      scheduleResetViewTokenRef.current = token;
+    }
     setTimeout(() => {
+      if (token !== scheduleResetViewTokenRef.current) return;
+      if (pendingInitialLargeMapCenterRef.current) {
+        if (!canvasRef.current) {
+          scheduleResetViewRef.current?.(attempts - 1, token);
+          return;
+        }
+        const didCenterLargeMap = centerKnownLargeMapHomeRef.current?.(1);
+        if (didCenterLargeMap) {
+          pendingInitialLargeMapCenterRef.current = false;
+          return;
+        }
+        scheduleResetViewRef.current?.(attempts - 1, token);
+        return;
+      }
       if (!layoutRef.current || !canvasRef.current) {
-        scheduleResetView(attempts - 1);
+        scheduleResetViewRef.current?.(attempts - 1, token);
         return;
       }
       if (!layoutRef.current.nodes || layoutRef.current.nodes.size === 0) {
-        scheduleResetView(attempts - 1);
+        scheduleResetViewRef.current?.(attempts - 1, token);
         return;
       }
-      centerHome();
+      if (!pendingInitialCenterRef.current) return;
+      const didCenter = centerHomeRef.current?.();
+      if (didCenter) {
+        pendingInitialCenterRef.current = false;
+      }
     }, 80);
-  };
+  }, []);
 
-  const fitToScreen = () => {
-    if (!canvasRef.current) return;
-    const bounds = worldBounds;
-    if (!bounds) return;
-
-    const mapWidth = bounds.maxX - bounds.minX;
-    const mapHeight = bounds.maxY - bounds.minY;
-    if (mapWidth <= 0 || mapHeight <= 0) return;
-
-    const padding = 80;
-    const viewportWidth = canvasRef.current.clientWidth;
-    const viewportHeight = canvasRef.current.clientHeight;
-    const availableWidth = Math.max(0, viewportWidth - padding * 2);
-    const availableHeight = Math.max(0, viewportHeight - padding * 2);
-
-    const scaleX = availableWidth / mapWidth;
-    const scaleY = availableHeight / mapHeight;
-    const newScale = clamp(Math.min(scaleX, scaleY), MIN_SCALE, 1);
-
-    const mapCenterX = (bounds.minX + bounds.maxX) / 2;
-    const mapCenterY = (bounds.minY + bounds.maxY) / 2;
-    const canvasCenterX = viewportWidth / 2;
-    const canvasCenterY = viewportHeight / 2;
-
-    const nextPan = {
-      x: canvasCenterX - mapCenterX * newScale,
-      y: canvasCenterY - mapCenterY * newScale,
-    };
-
-    applyTransform({ scale: newScale, x: nextPan.x, y: nextPan.y });
-  };
+  useEffect(() => {
+    scheduleResetViewRef.current = scheduleResetView;
+  }, [scheduleResetView]);
 
   // Undo/Redo implementation
-  const saveStateForUndo = (overrideState = null) => {
-    console.log('SAVING STATE FOR UNDO');
+  const saveStateForUndo = useCallback((overrideState = null) => {
     const snapshot = overrideState || { root, orphans, connections, colors, connectionColors };
     setUndoStack(prev => [...prev, JSON.stringify(snapshot)]);
     setRedoStack([]); // Clear redo on new action
-  };
+  }, [colors, connectionColors, connections, orphans, root]);
 
-  const handleUndo = () => {
-    if (isLiveActive) {
-      warnLiveModeUnsupported('Undo is temporarily disabled while live editing is active.');
+  const queueLiveDraftWithUndo = useCallback((draft, overrideState = null) => {
+    if (!isLiveActive || !currentMap?.id) {
+      return { ok: false, error: 'Live editing is not available for this map.' };
+    }
+    const snapshot = overrideState || { root, orphans, connections, colors, connectionColors };
+    const result = submitLiveDraft(draft);
+    if (result.ok && !isCollaborativeLiveEditingRestricted) {
+      saveStateForUndo(snapshot);
+    }
+    return result;
+  }, [
+    colors,
+    connectionColors,
+    connections,
+    currentMap?.id,
+    isCollaborativeLiveEditingRestricted,
+    isLiveActive,
+    orphans,
+    root,
+    saveStateForUndo,
+    submitLiveDraft,
+  ]);
+
+  const handleUndo = useCallback(() => {
+    cancelActiveConnectionInteraction();
+    if (isCollaborativeLiveEditingRestricted) {
+      warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
     }
-    console.log('UNDO CLICKED, stack:', undoStack.length);
     if (undoStack.length === 0) {
-      console.log('Nothing to undo');
+      return;
+    }
+
+    const currentSnapshot = { root, orphans, connections, colors, connectionColors };
+    const lastState = undoStack[undoStack.length - 1];
+    const parsed = normalizeUndoSnapshot(JSON.parse(lastState));
+
+    if (isLiveActive && currentMap?.id) {
+      const restore = buildLiveRestoreDrafts({
+        currentState: currentSnapshot,
+        targetState: parsed,
+      });
+      if (!restore.ok) {
+        warnLiveModeUnsupported(restore.reason || 'Undo is not available for this live change yet.');
+        return;
+      }
+      for (const draft of restore.drafts) {
+        const result = submitLiveDraft(draft);
+        if (!result.ok) {
+          showToast(result.error || 'Failed to queue undo', 'error');
+          return;
+        }
+      }
+      applyCanvasSnapshot(parsed);
+      setRedoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
+      setUndoStack(prev => prev.slice(0, -1));
       return;
     }
 
     // Save current state to redo stack
-    setRedoStack(prev => [...prev, JSON.stringify({ root, orphans, connections, colors, connectionColors })]);
+    setRedoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
 
     // Get last state from undo stack
-    const lastState = undoStack[undoStack.length - 1];
     setUndoStack(prev => prev.slice(0, -1));
 
-    // Restore it
-    const parsed = JSON.parse(lastState);
-    if (parsed.root !== undefined) {
-      setRoot(parsed.root);
-    } else {
-      setRoot(parsed);
-    }
-    if (parsed.orphans !== undefined) {
-      setOrphans(parsed.orphans);
-    }
-    if (parsed.connections !== undefined) {
-      setConnections(parsed.connections);
-    }
-    if (parsed.colors !== undefined) {
-      setColors(parsed.colors || DEFAULT_COLORS);
-    }
-    if (parsed.connectionColors !== undefined) {
-      setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
-    }
-    console.log('UNDO COMPLETE');
-  };
+    applyCanvasSnapshot(parsed);
+  }, [
+    applyCanvasSnapshot,
+    colors,
+    connectionColors,
+    connections,
+    cancelActiveConnectionInteraction,
+    currentMap?.id,
+    isCollaborativeLiveEditingRestricted,
+    isLiveActive,
+    liveUndoRedoDisabledReason,
+    orphans,
+    root,
+    showToast,
+    submitLiveDraft,
+    undoStack,
+    warnLiveModeUnsupported,
+  ]);
 
-  const handleRedo = () => {
-    if (isLiveActive) {
-      warnLiveModeUnsupported('Redo is temporarily disabled while live editing is active.');
+  const handleRedo = useCallback(() => {
+    cancelActiveConnectionInteraction();
+    if (isCollaborativeLiveEditingRestricted) {
+      warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
     }
-    console.log('REDO CLICKED, stack:', redoStack.length);
     if (redoStack.length === 0) {
-      console.log('Nothing to redo');
+      return;
+    }
+
+    const currentSnapshot = { root, orphans, connections, colors, connectionColors };
+    const lastState = redoStack[redoStack.length - 1];
+    const parsed = normalizeUndoSnapshot(JSON.parse(lastState));
+
+    if (isLiveActive && currentMap?.id) {
+      const restore = buildLiveRestoreDrafts({
+        currentState: currentSnapshot,
+        targetState: parsed,
+      });
+      if (!restore.ok) {
+        warnLiveModeUnsupported(restore.reason || 'Redo is not available for this live change yet.');
+        return;
+      }
+      for (const draft of restore.drafts) {
+        const result = submitLiveDraft(draft);
+        if (!result.ok) {
+          showToast(result.error || 'Failed to queue redo', 'error');
+          return;
+        }
+      }
+      applyCanvasSnapshot(parsed);
+      setUndoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
+      setRedoStack(prev => prev.slice(0, -1));
       return;
     }
 
     // Save current state to undo stack
-    setUndoStack(prev => [...prev, JSON.stringify({ root, orphans, connections, colors, connectionColors })]);
+    setUndoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
 
     // Get last state from redo stack
-    const lastState = redoStack[redoStack.length - 1];
     setRedoStack(prev => prev.slice(0, -1));
 
-    // Restore it
-    const parsed = JSON.parse(lastState);
-    if (parsed.root !== undefined) {
-      setRoot(parsed.root);
-    } else {
-      setRoot(parsed);
-    }
-    if (parsed.orphans !== undefined) {
-      setOrphans(parsed.orphans);
-    }
-    if (parsed.connections !== undefined) {
-      setConnections(parsed.connections);
-    }
-    if (parsed.colors !== undefined) {
-      setColors(parsed.colors || DEFAULT_COLORS);
-    }
-    if (parsed.connectionColors !== undefined) {
-      setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
-    }
-    console.log('REDO COMPLETE');
-  };
+    applyCanvasSnapshot(parsed);
+  }, [
+    applyCanvasSnapshot,
+    colors,
+    connectionColors,
+    connections,
+    cancelActiveConnectionInteraction,
+    currentMap?.id,
+    isCollaborativeLiveEditingRestricted,
+    isLiveActive,
+    liveUndoRedoDisabledReason,
+    orphans,
+    redoStack,
+    root,
+    showToast,
+    submitLiveDraft,
+    warnLiveModeUnsupported,
+  ]);
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
@@ -4900,6 +13801,7 @@ export default function App() {
           const next = !prev;
           if (next) {
             setShowReportDrawer(false);
+            setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
             setShowProjectsModal(false);
@@ -4913,6 +13815,7 @@ export default function App() {
           const next = !prev;
           if (next) {
             setShowCommentsPanel(false);
+            setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
             setShowVersionHistoryDrawer(false);
@@ -4928,6 +13831,7 @@ export default function App() {
           if (next) {
             setShowCommentsPanel(false);
             setShowReportDrawer(false);
+            setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
             setShowProjectsModal(false);
@@ -4936,14 +13840,31 @@ export default function App() {
           return next;
         });
       }
+      if (e.key === 'p' || e.key === 'P') {
+        setShowProjectsModal(prev => {
+          const next = !prev;
+          if (next) {
+            setShowCommentsPanel(false);
+            setShowReportDrawer(false);
+            setShowImageReportDrawer(false);
+            setShowProfileDrawer(false);
+            setShowSettingsDrawer(false);
+            setShowVersionHistoryDrawer(false);
+            setShowHistoryModal(false);
+          }
+          return next;
+        });
+      }
       // Select tool with "V"
       if (e.key === 'v' || e.key === 'V') {
+        cancelActiveConnectionInteraction();
         setActiveTool('select');
         setConnectionTool(null);
       }
-      // User Flow tool with "F"
+      // User flow tool with "F"
       if (e.key === 'f' || e.key === 'F') {
         if (canEdit()) {
+          cancelActiveConnectionInteraction();
           setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
           setActiveTool('select');
         }
@@ -4951,16 +13872,14 @@ export default function App() {
       // Crosslink tool with "L"
       if (e.key === 'l' || e.key === 'L') {
         if (canEdit()) {
+          cancelActiveConnectionInteraction();
           setConnectionTool(connectionTool === 'crosslink' ? null : 'crosslink');
           setActiveTool('select');
         }
       }
       // Escape cancels connection tool and closes menus
       if (e.key === 'Escape') {
-        if (connectionTool) {
-          setConnectionTool(null);
-          setDrawingConnection(null);
-        }
+        cancelActiveConnectionInteraction({ clearTool: true });
         if (connectionMenu) {
           setConnectionMenu(null);
         }
@@ -4969,11 +13888,16 @@ export default function App() {
         }
         if (showCommentsPanel) {
           setActiveTool('select');
+          setShowCommentsPanel(false);
           setCommentingNodeId(null); // Close popover when switching tools
           setCommentingNodeSnapshot(null);
+          setSelectedCommentId(null);
         }
         if (showReportDrawer) {
           setShowReportDrawer(false);
+        }
+        if (showImageReportDrawer) {
+          setShowImageReportDrawer(false);
         }
         if (showProfileDrawer) {
           setShowProfileDrawer(false);
@@ -4990,18 +13914,75 @@ export default function App() {
         if (showHistoryModal) {
           setShowHistoryModal(false);
         }
+        if (showViewDropdown) {
+          setShowViewDropdown(false);
+        }
+        if (showColorKey) {
+          setShowColorKey(false);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, cancelActiveConnectionInteraction, zoomAtClientPoint, getZoomBounds]);
 
-  // Smooth wheel handling for pan/zoom
+  useEffect(() => {
+    const handleWindowBlur = () => cancelActiveConnectionInteraction();
+    window.addEventListener('blur', handleWindowBlur);
+    return () => window.removeEventListener('blur', handleWindowBlur);
+  }, [cancelActiveConnectionInteraction]);
+
+  useEffect(() => {
+    if (
+      showCommentsPanel
+      || showReportDrawer
+      || showImageReportDrawer
+      || showProfileDrawer
+      || showSettingsDrawer
+      || showVersionHistoryDrawer
+      || showProjectsModal
+      || showHistoryModal
+      || showShareModal
+      || showCollaborationModal
+      || showExportModal
+      || showCreateMapModal
+      || showSaveMapModal
+      || showImportModal
+      || showAuthModal
+      || showInviteInboxModal
+      || showAccessRequestsInboxModal
+      || showViewDropdown
+      || showImageMenu
+    ) {
+      cancelActiveConnectionInteraction();
+    }
+  }, [
+    cancelActiveConnectionInteraction,
+    showAccessRequestsInboxModal,
+    showAuthModal,
+    showCollaborationModal,
+    showCommentsPanel,
+    showCreateMapModal,
+    showExportModal,
+    showHistoryModal,
+    showImageMenu,
+    showImageReportDrawer,
+    showImportModal,
+    showInviteInboxModal,
+    showProfileDrawer,
+    showProjectsModal,
+    showReportDrawer,
+    showSaveMapModal,
+    showSettingsDrawer,
+    showShareModal,
+    showVersionHistoryDrawer,
+    showViewDropdown,
+  ]);
+
+  // Smooth wheel handling for canvas zoom. Press-drag remains the pan control.
   const wheelStateRef = useRef({
-    dx: 0,
     dy: 0,
-    isZoom: false,
     clientX: 0,
     clientY: 0,
     raf: null,
@@ -5010,329 +13991,847 @@ export default function App() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const wheelState = wheelStateRef.current;
 
     const flushWheel = () => {
-      wheelStateRef.current.raf = null;
+      wheelState.raf = null;
       if (!root) return;
 
-      const { dx, dy: wheelDy, isZoom, clientX, clientY } = wheelStateRef.current;
-      wheelStateRef.current.dx = 0;
-      wheelStateRef.current.dy = 0;
+      const { dy: wheelDy, clientX, clientY } = wheelState;
+      wheelState.dy = 0;
 
-      if (isZoom) {
-        const delta = -wheelDy;
-        const zoomIntensity = 0.002;
-        const currentScale = scaleRef.current;
-        const { min, max } = getZoomBounds();
-        const next = clamp(currentScale * (1 + delta * zoomIntensity), min, max);
-        zoomAtClientPoint(next, clientX, clientY);
-        return;
-      }
-
-      if (dx === 0 && wheelDy === 0) return;
-      panBy(-dx, -wheelDy);
+      if (wheelDy === 0) return;
+      const delta = -wheelDy;
+      const zoomIntensity = 0.002;
+      const currentScale = scaleRef.current;
+      const { min, max } = getZoomBounds();
+      const next = clamp(currentScale * (1 + delta * zoomIntensity), min, max);
+      zoomAtClientPoint(next, clientX, clientY);
     };
 
     const handleWheel = (e) => {
-      // Always preventDefault — the canvas handles all wheel input (zoom + pan).
-      // Letting non-zoom events through causes macOS elastic overscroll, which
-      // shifts getBoundingClientRect() and corrupts subsequent zoom anchors.
+      const wheelTarget = e.target;
+      if (
+        wheelTarget instanceof Element
+        && wheelTarget.closest('.comment-popover, .comment-emoji-popover, .comments-drawer, .mention-dropdown, .canvas-toolbar, .canvas-tool-menu, .zoom-controls, .color-key, .layers-panel, .report-drawer, .account-drawer, .settings-drawer, .minimap-navigator')
+      ) {
+        return;
+      }
+
+      // Always preventDefault — the canvas handles wheel input as zoom.
+      // Letting events through causes macOS elastic overscroll, which shifts
+      // getBoundingClientRect() and corrupts subsequent zoom anchors.
       e.preventDefault();
       if (!root) return;
 
-      const isZoom = e.ctrlKey || e.metaKey;
-      const ws = wheelStateRef.current;
-
       // Normalize deltaMode before accumulating (Firefox mouse wheel uses LINE mode)
       let dy = e.deltaY;
-      let dx = e.deltaX;
-      if (e.deltaMode === 1) { dy *= 20; dx *= 20; }       // DOM_DELTA_LINE
-      else if (e.deltaMode === 2) { dy *= 400; dx *= 400; } // DOM_DELTA_PAGE
+      if (e.deltaMode === 1) { dy *= 20; }       // DOM_DELTA_LINE
+      else if (e.deltaMode === 2) { dy *= 400; } // DOM_DELTA_PAGE
+      if (dy === 0) return;
 
-      // If gesture type changed mid-frame, flush old gesture before accumulating new one
-      if (ws.raf && ws.isZoom !== isZoom && (ws.dx !== 0 || ws.dy !== 0)) {
-        cancelAnimationFrame(ws.raf);
-        ws.raf = null;
-        flushWheel();
-      }
+      wheelState.dy += dy;
+      wheelState.clientX = e.clientX;
+      wheelState.clientY = e.clientY;
 
-      ws.dx += dx;
-      ws.dy += dy;
-      ws.isZoom = isZoom;
-      if (isZoom) {
-        ws.clientX = e.clientX;
-        ws.clientY = e.clientY;
-      }
-
-      if (!ws.raf) {
-        ws.raf = requestAnimationFrame(flushWheel);
+      if (!wheelState.raf) {
+        wheelState.raf = requestAnimationFrame(flushWheel);
       }
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       canvas.removeEventListener('wheel', handleWheel);
-      if (wheelStateRef.current.raf) {
-        cancelAnimationFrame(wheelStateRef.current.raf);
-        wheelStateRef.current.raf = null;
+      if (wheelState.raf) {
+        cancelAnimationFrame(wheelState.raf);
+        wheelState.raf = null;
       }
     };
-  }, [root, panBy, zoomAtClientPoint]);
+  }, [root, zoomAtClientPoint, getZoomBounds]);
+
+  const getUsagePageCount = useCallback(() => {
+    if (!root) return 0;
+    return collectAllNodesWithOrphans(root, orphans)
+      .filter((node) => !isEntitlementLockedNode(node))
+      .length;
+  }, [orphans, root]);
+
+  const recordDownloadUsage = useCallback(async (eventType, meta = {}) => {
+    const idempotencyKey = [
+      'client-download',
+      eventType,
+      currentMap?.id || 'unsaved',
+      Date.now(),
+      Math.random().toString(36).slice(2, 10),
+    ].join(':');
+    const result = await api.recordClientUsage(eventType, {
+      mapId: currentMap?.id || null,
+      pageCount: getUsagePageCount(),
+      ...meta,
+    }, 1, { idempotencyKey });
+    if (result?.entitlements) {
+      setCurrentUser((current) => current ? ({
+        ...current,
+        account: result.entitlements.account || current.account || null,
+        entitlements: result.entitlements,
+      }) : current);
+    }
+    return result;
+  }, [currentMap?.id, getUsagePageCount]);
+
+  const reserveDownloadUsage = useCallback(async (eventType, meta = {}) => {
+    try {
+      await recordDownloadUsage(eventType, meta);
+      return true;
+    } catch (error) {
+      if (
+        error.status === 401
+        || error.code === 'AUTH_REQUIRED'
+        || error.payload?.code === 'AUTH_REQUIRED'
+        || error.message?.includes('Authentication')
+      ) {
+        openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE });
+        return false;
+      }
+      if (handleEntitlementError(error, 'Your plan has reached its download limit.')) {
+        return false;
+      }
+      console.warn('Download usage record error:', error?.message || error);
+      showToast(error?.message || 'Could not confirm download allowance.', 'error');
+      return false;
+    }
+  }, [handleEntitlementError, openAuthModal, recordDownloadUsage, showToast]);
+
+  const runDownloadAction = useCallback(async (action) => {
+    try {
+      await action();
+    } catch (error) {
+      console.error('Download error:', error);
+      showToast(error?.message || 'Download failed', 'error');
+    }
+  }, [showToast]);
 
   const exportJson = () => {
-    if (!root) return;
-    downloadText('sitemap.json', JSON.stringify({ root, colors, connectionColors }, null, 2));
-    showToast('Downloaded JSON');
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: 'json',
+      });
+      const content = JSON.stringify(buildSitemapJsonPayload({
+        root,
+        orphans,
+        connections,
+        colors,
+        connectionColors,
+        rows,
+        metadata,
+      }), null, 2);
+      if (!await reserveDownloadUsage('export_json', {
+        format: 'json',
+        bytes: new Blob([content]).size,
+        rows: rows.length,
+      })) return;
+      downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.json`, content);
+      showToast('Downloaded JSON', 'success');
+    });
+  };
+
+  const getCurrentExportTitle = () => (
+    currentMap?.name || mapName || root?.title || getHostname(root?.url) || 'Untitled Map'
+  );
+
+  const createShareLinkUrl = useCallback(async (permission = sharePermission) => {
+    const { share } = await api.createShare({
+      map_id: currentMap?.id || null,
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      access_level: permission,
+      orientation: mapOrientation,
+    });
+
+    return new URL(
+      buildRouteUrl(createShareRoute(share.id)),
+      window.location.origin
+    ).toString();
+  }, [
+    colors,
+    connectionColors,
+    connections,
+    currentMap?.id,
+    mapOrientation,
+    orphans,
+    root,
+    sharePermission,
+  ]);
+
+  const createExportShareLinkUrl = useCallback(async () => {
+    try {
+      return await createShareLinkUrl(ACCESS_LEVELS.VIEW);
+    } catch (error) {
+      console.warn('Export share link skipped:', error?.message || error);
+      return '';
+    }
+  }, [createShareLinkUrl]);
+
+  const canCreateShareLinksForCurrentMap = useCallback(() => {
+    if (PERMISSION_GATING_UI_ENABLED && isLoggedIn && currentMap?.id && !canOpenShareModalValue) {
+      showToast(shareLinksDisabledReasonValue || 'You do not have permission to create share links for this map.', 'warning');
+      return false;
+    }
+    return true;
+  }, [canOpenShareModalValue, currentMap?.id, isLoggedIn, shareLinksDisabledReasonValue, showToast]);
+
+  const handleShareLinkError = useCallback((error) => {
+    if (
+      error.code === 'AUTH_REQUIRED'
+      || error.payload?.code === 'AUTH_REQUIRED'
+      || error.message?.includes('Authentication')
+    ) {
+      openAuthModal({
+        contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
+      });
+      return true;
+    }
+    if (handleEntitlementError(error, 'Client share links are not available on this plan.')) {
+      return true;
+    }
+    return false;
+  }, [handleEntitlementError, openAuthModal]);
+
+  const exportXml = () => {
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: 'xml',
+      });
+      const content = buildSitemapXml(rows, metadata);
+      if (!await reserveDownloadUsage('export_xml', {
+        format: 'xml',
+        bytes: new Blob([content]).size,
+        rows: rows.length,
+      })) return;
+      downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.xml`, content);
+      showToast('Downloaded XML', 'success');
+    });
+  };
+
+  const exportAiSiteBrief = () => {
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
+
+      const exportTitle = getCurrentExportTitle();
+      const hostname = getHostname(root.url) || 'site';
+      const generatedAt = new Date();
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: 'ai-site-brief',
+      });
+      const mode = root.url ? 'Improve Existing Site' : 'Build New Site';
+      const baseFilename = getSitemapExportFilenameBase(exportTitle, generatedAt);
+      const siteData = buildAiSiteData({
+        root,
+        orphans,
+        connections,
+        colors,
+        connectionColors,
+        rows,
+        mode,
+        hostname,
+        generatedAt: metadata.generatedAt,
+        metadata,
+      });
+
+      const zipBlob = createZipPackageBlob([
+        {
+          path: 'AI_SITE_BRIEF.md',
+          content: buildAiSiteBriefMarkdown({ hostname, mode, rows, generatedAt: metadata.generatedAt }),
+        },
+        {
+          path: 'site-map.json',
+          content: JSON.stringify(siteData, null, 2),
+        },
+        {
+          path: 'sitemap.xml',
+          content: buildSitemapXml(rows, metadata),
+        },
+        {
+          path: 'sitemap.txt',
+          content: buildTxtSitemap(rows),
+        },
+        {
+          path: 'site-index.html',
+          content: buildSiteIndexHtml({
+            rows,
+            metadata,
+            rootUrl: root.url,
+            hostname,
+          }),
+        },
+        {
+          path: 'site-index.md',
+          content: buildSiteIndexMarkdown({
+            rows,
+            metadata,
+            rootUrl: root.url,
+            hostname,
+          }),
+        },
+        {
+          path: 'site-map.csv',
+          content: buildSitemapCsv(rows, metadata),
+        },
+        {
+          path: 'references/README.md',
+          content: '# References\n\nAdd brand guidelines, design system files, reference images, copy docs, content matrices, or screenshots here before sharing this package with an AI code tool.\n',
+        },
+      ]);
+
+      if (!await reserveDownloadUsage('export_ai_site_brief', {
+        format: 'zip',
+        bytes: zipBlob.size,
+        rows: rows.length,
+        packageFiles: 8,
+      })) return;
+      downloadBlob(`${baseFilename}.zip`, zipBlob);
+      showToast('Downloaded AI Site Brief package', 'success');
+    });
   };
 
   const exportCsv = () => {
-    if (!root) return;
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
 
-    // Flatten tree to array with all node data
-    const rows = [];
-    const flattenWithNumber = (node, depth = 0, number = '1') => {
-      rows.push({
-        number,
-        depth,
-        title: (node.title || '').replace(/"/g, '""'),
-        url: node.url || '',
-        hasChildren: node.children?.length > 0 ? 'Yes' : 'No',
-        childCount: node.children?.length || 0,
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: 'csv',
       });
-      (node.children || []).forEach((child, idx) => {
-        flattenWithNumber(child, depth + 1, `${number}.${idx + 1}`);
-      });
-    };
-
-    flattenWithNumber(root, 0, '1');
-
-    // Create CSV content
-    const headers = ['Page Number', 'Depth Level', 'Page Title', 'URL', 'Has Children', 'Child Count'];
-    const csvRows = [
-      headers.join(','),
-      ...rows.map(row => [
-        `"${row.number}"`,
-        row.depth,
-        `"${row.title}"`,
-        `"${row.url}"`,
-        row.hasChildren,
-        row.childCount,
-      ].join(','))
-    ];
-
-    downloadText('sitemap.csv', csvRows.join('\n'));
-    showToast('Downloaded CSV');
+      const content = buildSitemapCsv(rows, metadata);
+      if (!await reserveDownloadUsage('export_csv', {
+        format: 'csv',
+        bytes: new Blob([content]).size,
+        rows: rows.length,
+      })) return;
+      downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.csv`, content);
+      showToast('Downloaded CSV', 'success');
+    });
   };
 
   const exportPdf = async () => {
-    if (!hasMap || !contentRef.current || !canvasRef.current) return;
-
-    // Save current transform state
-    const savedScale = scaleRef.current;
-    const savedPan = { ...panRef.current };
+    if (!hasMap || !root) return;
+    if (!guardAccountCanCreateWork('Downloading')) return;
 
     showToast('Generating PDF...', 'info', true);
 
     try {
-      // Dynamically import dependencies
-      const [{ jsPDF }, { toSvg }] = await Promise.all([
+      const [{ jsPDF }, shareUrl] = await Promise.all([
         import('jspdf'),
-        import('html-to-image'),
+        createExportShareLinkUrl(),
       ]);
-
-      // Reset to 1:1 scale for accurate capture
-      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-      await new Promise(r => setTimeout(r, 200));
-
-      // Capture visual map using same approach as PNG export
-      const content = contentRef.current;
-      const canvas = canvasRef.current;
-      const canvasRect = canvas.getBoundingClientRect();
-      const cards = content.querySelectorAll('[data-node-card="1"]');
-
-      if (!cards.length) {
-        applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const scene = buildExportScene({
+        root,
+        orphans,
+        colors,
+        connectionColors,
+        connections,
+        showThumbnails,
+        orientation: mapOrientation,
+        title: exportTitle,
+        shareUrl,
+        reportStats,
+        reportTypeOptions: REPORT_TYPE_OPTIONS,
+        generatedAt,
+      });
+      if (!scene || !scene.nodes.length) {
         showToast('No content to download', 'warning');
         return;
       }
 
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      cards.forEach(card => {
-        const rect = card.getBoundingClientRect();
-        minX = Math.min(minX, rect.left - canvasRect.left);
-        minY = Math.min(minY, rect.top - canvasRect.top);
-        maxX = Math.max(maxX, rect.right - canvasRect.left);
-        maxY = Math.max(maxY, rect.bottom - canvasRect.top);
-      });
-
-      // Include connector SVGs in bounds
-      const svgs = content.querySelectorAll('.connector-svg');
-      svgs.forEach(svg => {
-        const rect = svg.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          minX = Math.min(minX, rect.left - canvasRect.left);
-          minY = Math.min(minY, rect.top - canvasRect.top);
-          maxX = Math.max(maxX, rect.right - canvasRect.left);
-          maxY = Math.max(maxY, rect.bottom - canvasRect.top);
-        }
-      });
-
-      const padding = 60;
-      const imgWidth = Math.ceil(maxX - minX + padding * 2);
-      const imgHeight = Math.ceil(maxY - minY + padding * 2);
-
-      // Position the content so the map is centered with equal padding
-      const offsetX = -minX + padding;
-      const offsetY = -minY + padding - 80;
-      applyTransform({ scale: 1, x: offsetX, y: offsetY }, { skipPanClamp: true });
-
-      // Hide grid dots for export
-      content.classList.add('export-mode');
-
-      await new Promise(r => setTimeout(r, 200));
-
-      // Capture as SVG for vector quality
-      const svgDataUrl = await toSvg(canvas, {
-        cacheBust: true,
-        backgroundColor: null,
-        width: imgWidth,
-        height: imgHeight,
-        skipFonts: true,
-        style: {
-          width: `${imgWidth}px`,
-          height: `${imgHeight}px`,
-          backgroundColor: 'transparent',
-        },
-        filter: (node) => {
-          if (node.classList?.contains('zoom-controls')) return false;
-          if (node.classList?.contains('color-key')) return false;
-          if (node.classList?.contains('minimap-navigator')) return false;
-          // Exclude cross-origin thumbnail images
-          if (node.tagName === 'IMG' && node.classList?.contains('thumb-img')) return false;
-          return true;
-        },
-      });
-
-      // Restore grid dots and transform state
-      content.classList.remove('export-mode');
-      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
-
-      // Determine PDF orientation based on aspect ratio
-      const isLandscape = imgWidth > imgHeight;
+      const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
+      const pdfScale = getPdfSceneScale(scene);
       const pdf = new jsPDF({
-        orientation: isLandscape ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: 'a4',
+        orientation: scene.width > scene.height ? 'landscape' : 'portrait',
+        unit: 'pt',
+        format: [scene.width * pdfScale, scene.height * pdfScale],
+        compress: true,
+        precision: 12,
       });
 
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
+      await registerExportPdfFonts(pdf);
+      drawExportSceneToPdf(pdf, scene, thumbnailDataUrls, pdfScale);
 
-      // Convert pixels to mm (96 DPI)
-      const pxToMm = 25.4 / 96;
-      const imgWidthMm = imgWidth * pxToMm;
-      const imgHeightMm = imgHeight * pxToMm;
-
-      // Scale to fit page with margins
-      const availableWidth = pageWidth - margin * 2;
-      const availableHeight = pageHeight - margin * 2;
-      const scaleX = availableWidth / imgWidthMm;
-      const scaleY = availableHeight / imgHeightMm;
-      const imgScale = Math.min(scaleX, scaleY, 1);
-
-      const finalWidth = imgWidthMm * imgScale;
-      const finalHeight = imgHeightMm * imgScale;
-
-      // Center the image
-      const xOffset = (pageWidth - finalWidth) / 2;
-      const yOffset = (pageHeight - finalHeight) / 2;
-
-      // Add SVG as image (jsPDF supports SVG data URLs)
-      pdf.addImage(svgDataUrl, 'SVG', xOffset, yOffset, finalWidth, finalHeight);
-
-      const hostname = getHostname(root.url) || 'download';
-      pdf.save(`sitemap-${hostname}.pdf`);
+      const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
+      if (!await reserveDownloadUsage('export_pdf', {
+        format: 'pdf',
+        width: scene.width,
+        height: scene.height,
+        thumbnails: thumbnailDataUrls.size,
+      })) {
+        dismissToast();
+        return;
+      }
+      pdf.save(`${filenameBase}.pdf`);
       showToast('PDF downloaded successfully', 'success');
     } catch (e) {
       console.error('PDF export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
       showToast(`PDF download failed: ${errorMsg}`, 'error');
-      // Restore grid and transform state on error
-      if (contentRef.current) contentRef.current.classList.remove('export-mode');
-      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
     }
   };
 
-  const downloadReportPdf = async () => {
+  const exportSvg = async () => {
+    if (!hasMap || !root) return;
+    if (!guardAccountCanCreateWork('Downloading')) return;
+
+    showToast('Generating SVG...', 'info', true);
+
+    try {
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const shareUrl = await createExportShareLinkUrl();
+      const scene = buildExportScene({
+        root,
+        orphans,
+        colors,
+        connectionColors,
+        connections,
+        showThumbnails,
+        orientation: mapOrientation,
+        title: exportTitle,
+        shareUrl,
+        reportStats,
+        reportTypeOptions: REPORT_TYPE_OPTIONS,
+        generatedAt,
+      });
+      if (!scene || !scene.nodes.length) {
+        showToast('No content to download', 'warning');
+        return;
+      }
+
+      const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
+      const svg = renderEditableExportSvg(scene, thumbnailDataUrls);
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
+      if (!await reserveDownloadUsage('export_svg', {
+        format: 'svg',
+        width: scene.width,
+        height: scene.height,
+        bytes: blob.size,
+        thumbnails: thumbnailDataUrls.size,
+        components: true,
+      })) {
+        dismissToast();
+        return;
+      }
+      downloadBlob(`${filenameBase}.svg`, blob);
+      showToast('SVG downloaded successfully', 'success');
+    } catch (e) {
+      console.error('SVG export error:', e);
+      const errorMsg = e?.message || e?.toString() || 'Unknown error';
+      showToast(`SVG download failed: ${errorMsg}`, 'error');
+    }
+  };
+
+  const downloadReportPdf = async ({ visibleDetails: reportVisibleDetails } = {}) => {
     if (!reportEntries.length) {
       showToast('No report data available', 'warning');
       return;
     }
+    if (!guardAccountCanCreateWork('Downloading')) return;
 
     showToast('Generating report...', 'info', true);
 
     try {
       const [{ jsPDF }] = await Promise.all([import('jspdf')]);
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
       const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
+      await registerExportPdfFonts(pdf);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: reportRows.length,
+        format: 'scan-report',
+      });
+      const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const marginX = 40;
-      let y = 40;
+      const marginX = 42;
+      const contentWidth = pageWidth - marginX * 2;
+      const bodyFontSize = 8;
+      const bodyLineHeight = 10;
+      const detailLineHeight = 7.6;
+      const firstPageTopY = 56;
+      const continuationTopY = 56;
+      const tableHeaderToRowGap = 15;
+      const rowDividerToRowGap = 14;
+      const titleToDetailsGap = 9;
+      const textColor = '#1e293b';
+      const mutedColor = '#64748b';
+      const borderColor = '#cbd5e1';
+      const softBgColor = '#f8fafc';
+      const panelBgColor = '#ffffff';
+      const linkColor = '#4f46e5';
+      const urlPattern = /^https?:\/\//i;
 
-      pdf.setFontSize(18);
-      pdf.text('Scan report', marginX, y);
-      y += 22;
+      const setFont = (style = 'normal', size = bodyFontSize) => {
+        const fonts = pdf.getFontList?.() || {};
+        if (fonts.Sora) pdf.setFont('Sora', style === 'bold' ? 'bold' : 'normal');
+        else pdf.setFont('helvetica', style === 'bold' ? 'bold' : 'normal');
+        pdf.setFontSize(size);
+      };
 
-      pdf.setFontSize(11);
-      pdf.text(`Total pages: ${reportStats.total}`, marginX, y);
-      y += 16;
+      const hexToRgb = (color) => {
+        if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return null;
+        return [
+          parseInt(color.slice(1, 3), 16),
+          parseInt(color.slice(3, 5), 16),
+          parseInt(color.slice(5, 7), 16),
+        ];
+      };
 
-      const statLines = [
-        `Orphans: ${reportStats.orphanPages}`,
-        `Duplicates: ${reportStats.duplicates}`,
-        `Broken links: ${reportStats.brokenLinks}`,
-        `Inactive: ${reportStats.inactivePages}`,
-        `Errors: ${reportStats.errorPages}`,
-        `Missing: ${reportStats.missing}`,
-      ];
+      const setTextColor = (color) => {
+        const rgb = hexToRgb(color);
+        if (rgb) pdf.setTextColor(...rgb);
+        else pdf.setTextColor(color);
+      };
 
-      statLines.forEach((line) => {
-        pdf.text(line, marginX, y);
-        y += 14;
-      });
+      const setDrawColor = (color) => {
+        const rgb = hexToRgb(color);
+        if (rgb) pdf.setDrawColor(...rgb);
+        else pdf.setDrawColor(color);
+      };
 
-      y += 8;
-      pdf.setFontSize(10);
-      pdf.text('Page', marginX, y);
-      pdf.text('Title', marginX + 50, y);
-      pdf.text('Issues', marginX + 220, y);
-      pdf.text('URL', marginX + 310, y);
-      y += 14;
+      const setFillColor = (color) => {
+        const rgb = hexToRgb(color);
+        if (rgb) pdf.setFillColor(...rgb);
+        else pdf.setFillColor(color);
+      };
 
-      reportRows.forEach((row) => {
-        const issues = row.types
-          .map((type) => {
-            const option = REPORT_TYPE_OPTIONS.find((opt) => opt.key === type);
-            return option ? option.label : type;
-          })
-          .join(', ');
-        const title = row.title || row.url || '';
-        const urlLines = pdf.splitTextToSize(row.url || '', 240);
-        const rowHeight = Math.max(12, urlLines.length * 12);
+      const normalizeLinkUrl = (value = '') => {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        return urlPattern.test(raw) ? raw : `https://${raw}`;
+      };
 
-        if (y + rowHeight > pageHeight - 40) {
-          pdf.addPage();
-          y = 40;
+      const formatDisplayUrl = (value = '') => (
+        String(value || '')
+          .trim()
+          .replace(/^https?:\/\//i, '')
+          .replace(/^www\./i, '')
+          .replace(/\/+$/g, '')
+      );
+
+      const siteUrl = root?.url || currentMap?.root?.url || lastScanUrl || urlInput || reportRows.find((row) => row.url)?.url || '';
+      const siteDisplayUrl = formatDisplayUrl(siteUrl);
+
+      const wrapText = (value, width) => {
+        const text = String(value || '');
+        if (!text) return [];
+        const initialLines = pdf.splitTextToSize(text, width).flatMap((line) => String(line).split('\n'));
+        return initialLines.flatMap((line) => {
+          if ((pdf.getTextWidth?.(line) || 0) <= width) return [line];
+          const chunks = [];
+          let current = '';
+          Array.from(line).forEach((char) => {
+            const next = `${current}${char}`;
+            if (current && (pdf.getTextWidth?.(next) || 0) > width) {
+              chunks.push(current);
+              current = char;
+            } else {
+              current = next;
+            }
+          });
+          if (current) chunks.push(current);
+          return chunks;
+        });
+      };
+
+      const ensureSpace = (heightNeeded) => {
+        if (y + heightNeeded <= pageHeight - 48) return;
+        pdf.addPage();
+        y = continuationTopY;
+        drawTableHeader();
+      };
+
+      const drawLinkedLines = (lines, x, startY, lineHeight, url, maxWidth, size = bodyFontSize) => {
+        const linkUrl = normalizeLinkUrl(url);
+        setFont('normal', size);
+        setTextColor(linkColor);
+        lines.forEach((line, index) => {
+          const lineY = startY + index * lineHeight;
+          pdf.text(line, x, lineY);
+          if (linkUrl && typeof pdf.link === 'function') {
+            const linkWidth = Math.min(maxWidth, Math.max(1, pdf.getTextWidth?.(line) || line.length * size * 0.5));
+            pdf.link(x, lineY - lineHeight + 2, linkWidth, lineHeight, { url: linkUrl });
+          }
+        });
+      };
+
+      const drawCreatedWithBrand = () => {
+        const logoWidth = 42;
+        const logoX = pageWidth - marginX - logoWidth;
+        const logoY = firstPageTopY - 8;
+        setFont('normal', 6.5);
+        setTextColor(mutedColor);
+        const createdText = 'Created with';
+        const createdWidth = pdf.getTextWidth?.(createdText) || 50;
+        pdf.text(createdText, logoX - createdWidth - 5, logoY + 8);
+        drawVellicLogoPdf(pdf, logoX, logoY, logoWidth);
+        if (typeof pdf.link === 'function') {
+          pdf.link(logoX, logoY, logoWidth, 14, { url: metadata.sourceUrl });
         }
+      };
 
-        pdf.text(row.number || '--', marginX, y);
-        pdf.text(title.slice(0, 28), marginX + 50, y);
-        pdf.text(issues.slice(0, 40), marginX + 220, y);
-        pdf.text(urlLines, marginX + 310, y);
-        y += rowHeight + 6;
+      const drawHeader = () => {
+        let headerY = firstPageTopY;
+        drawCreatedWithBrand();
+        setFont('bold', 9);
+        setTextColor(mutedColor);
+        pdf.text('Scan report & findings', marginX, headerY);
+        headerY += 17;
+        setFont('bold', 16);
+        setTextColor(textColor);
+        const titleLines = wrapText(reportTitle || exportTitle || 'Untitled Map', contentWidth - 150);
+        titleLines.forEach((line, index) => {
+          pdf.text(line, marginX, headerY + index * 18);
+        });
+        headerY += ((Math.max(1, titleLines.length) - 1) * 18) + 9;
+        if (siteDisplayUrl) {
+          setFont('normal', 7.2);
+          const siteLines = wrapText(siteDisplayUrl, contentWidth - 150);
+          drawLinkedLines(siteLines, marginX, headerY, 9.5, siteUrl, contentWidth - 150, 7.2);
+          headerY += siteLines.length * 9.5;
+        }
+        return headerY + 15;
+      };
+
+      const alwaysShowReportStatKeys = new Set([
+        'orphanPages',
+        'duplicates',
+        'brokenLinks',
+        'inactivePages',
+        'errorPages',
+        'missing',
+      ]);
+      const reportPdfStatOrder = [
+        'subdomains',
+        'orphanPages',
+        'errorPages',
+        'missing',
+        'duplicates',
+        'inactivePages',
+        'missingTitle',
+        'shortTitle',
+        'longTitle',
+        'missingDescription',
+        'shortDescription',
+        'longDescription',
+        'missingH1',
+        'brokenLinks',
+        'files',
+        'authenticatedPages',
+      ];
+      const reportPdfStatOrderSet = new Set(reportPdfStatOrder);
+      const reportTypeOptionByKey = new Map(REPORT_TYPE_OPTIONS.map((option) => [option.key, option]));
+      const orderedReportTypeOptions = [
+        ...reportPdfStatOrder.map((key) => reportTypeOptionByKey.get(key)).filter(Boolean),
+        ...REPORT_TYPE_OPTIONS.filter((option) => option.key !== 'standard' && !reportPdfStatOrderSet.has(option.key)),
+      ];
+      const statLines = orderedReportTypeOptions
+        .filter((option) => alwaysShowReportStatKeys.has(option.key) || reportStats[option.key] > 0)
+        .map((option) => ({ ...option, value: reportStats[option.key] || 0 }));
+
+      const drawStats = () => {
+        const gridColumns = 5;
+        const cardGap = 5;
+        const panelPadding = 10;
+        const totalBlockHeight = 21;
+        const cardWidth = (contentWidth - panelPadding * 2 - cardGap * (gridColumns - 1)) / gridColumns;
+        const cardHeight = 24;
+        const rowCount = Math.max(1, Math.ceil(statLines.length / gridColumns));
+        const panelHeight = panelPadding + totalBlockHeight + 3 + (rowCount * cardHeight) + ((rowCount - 1) * cardGap) + panelPadding;
+        const panelTop = y;
+
+        setDrawColor(borderColor);
+        setFillColor(panelBgColor);
+        pdf.setLineWidth(0.7);
+        pdf.roundedRect(marginX, panelTop, contentWidth, panelHeight, 7, 7, 'FD');
+
+        setFont('bold', 15);
+        setTextColor(textColor);
+        pdf.text(String(reportStats.total || reportRows.length || 0), marginX + panelPadding, panelTop + 18);
+        setFont('normal', 6.5);
+        setTextColor(mutedColor);
+        pdf.text('Total pages', marginX + panelPadding, panelTop + 28);
+
+        const cardsTop = panelTop + panelPadding + totalBlockHeight + 3;
+        statLines.forEach((stat, index) => {
+          const col = index % gridColumns;
+          const row = Math.floor(index / gridColumns);
+          const x = marginX + panelPadding + col * (cardWidth + cardGap);
+          const cardY = cardsTop + row * (cardHeight + cardGap);
+          setDrawColor(borderColor);
+          setFillColor(softBgColor);
+          pdf.setLineWidth(0.65);
+          pdf.roundedRect(x, cardY, cardWidth, cardHeight, 4, 4, 'FD');
+          setFont('bold', 5.8);
+          setTextColor(mutedColor);
+          const label = wrapText(stat.label, cardWidth - 12)[0] || stat.label;
+          pdf.text(label, x + 6, cardY + 8.5);
+          setFont('bold', 9.5);
+          setTextColor(textColor);
+          pdf.text(String(stat.value), x + 6, cardY + 19);
+        });
+        y += panelHeight + 18;
+      };
+
+      const tableColumns = {
+        page: { x: marginX, w: 42 },
+        details: { x: marginX + 54, w: 324 },
+        findings: { x: marginX + 408, w: contentWidth - 408 },
+      };
+      const detailLabelWidth = 72;
+      const detailValueGap = 9;
+      const detailValueWidth = tableColumns.details.w - detailLabelWidth - detailValueGap;
+      const detailLabelFontSize = 7.2;
+      const detailValueFontSize = 6.6;
+
+      function drawTableHeader() {
+        y += 5;
+        setFont('bold', 8.5);
+        setTextColor(mutedColor);
+        setDrawColor(borderColor);
+        pdf.setLineWidth(0.7);
+        pdf.text('Page', tableColumns.page.x, y);
+        pdf.text('Details', tableColumns.details.x, y);
+        pdf.text('Findings', tableColumns.findings.x, y);
+        y += 9;
+        pdf.line(marginX, y, marginX + contentWidth, y);
+        y += tableHeaderToRowGap;
+      }
+
+      let y = drawHeader();
+      drawStats();
+      drawTableHeader();
+
+      const typeLookup = new Map(REPORT_TYPE_OPTIONS.map((option) => [option.key, option.label]));
+      reportRows.forEach((row) => {
+        const findingLabels = getReportFindingTypes(row).map((type) => typeLookup.get(type) || type);
+        const findingsText = findingLabels.length ? findingLabels.join(', ') : 'None';
+        const title = row.title || row.url || 'Untitled page';
+        const detailRows = [
+          row.url ? { key: 'url', label: 'URL', value: row.url, link: row.url } : null,
+          ...getReportDetailRows(row, reportVisibleDetails),
+        ].filter(Boolean);
+
+        setFont('normal', bodyFontSize);
+        const pageLines = wrapText(row.number || '--', tableColumns.page.w);
+        const titleLines = wrapText(title, tableColumns.details.w);
+        const findingLines = wrapText(findingsText, tableColumns.findings.w);
+        const mainLineCount = Math.max(pageLines.length, titleLines.length, findingLines.length, 1);
+        const preparedDetails = detailRows.map((detail) => {
+          setFont('bold', detailLabelFontSize);
+          const labelLines = wrapText(`${detail.label}:`, detailLabelWidth);
+          setFont('normal', detailValueFontSize);
+          const valueLines = wrapText(String(detail.value || ''), detailValueWidth);
+          return {
+            ...detail,
+            labelLines,
+            valueLines,
+            height: Math.max(labelLines.length, valueLines.length) * detailLineHeight + 1,
+          };
+        });
+
+        const drawDetailItem = (detail, startY) => {
+          const labelX = tableColumns.details.x + detailLabelWidth;
+          const valueX = labelX + detailValueGap;
+          setFont('bold', detailLabelFontSize);
+          setTextColor(textColor);
+          detail.labelLines.forEach((line, lineIndex) => {
+            const labelY = startY + lineIndex * detailLineHeight;
+            pdf.text(line, labelX, labelY, { align: 'right' });
+            pdf.text(line, labelX - 0.16, labelY, { align: 'right' });
+          });
+          if (detail.link || urlPattern.test(String(detail.value || ''))) {
+            detail.valueLines.forEach((line, lineIndex) => {
+              drawLinkedLines([line], valueX, startY + lineIndex * detailLineHeight, detailLineHeight, detail.link || detail.value, detailValueWidth, detailValueFontSize);
+            });
+          } else {
+            setFont('normal', detailValueFontSize);
+            setTextColor(textColor);
+            detail.valueLines.forEach((line, lineIndex) => {
+              pdf.text(line, valueX, startY + lineIndex * detailLineHeight);
+            });
+          }
+        };
+
+        ensureSpace(mainLineCount * bodyLineHeight + 22);
+
+        const rowTop = y;
+        setFont('normal', bodyFontSize);
+        setTextColor(textColor);
+        pdf.text(pageLines, tableColumns.page.x, y);
+        setFont('bold', bodyFontSize);
+        pdf.text(titleLines, tableColumns.details.x, y);
+        pdf.text(findingLines, tableColumns.findings.x, y);
+        y += mainLineCount * bodyLineHeight + titleToDetailsGap;
+
+        preparedDetails.forEach((detail) => {
+          ensureSpace(detail.height + 2);
+          drawDetailItem(detail, y);
+          y += detail.height + 1;
+        });
+
+        ensureSpace(10);
+        y += 4;
+        setDrawColor(borderColor);
+        pdf.setLineWidth(0.7);
+        pdf.line(marginX, y, marginX + contentWidth, y);
+        y += rowDividerToRowGap;
+
+        if (typeof pdf.link === 'function' && row.url && !preparedDetails.some((detail) => detail.key === 'url')) {
+          pdf.link(tableColumns.details.x, rowTop - 9, tableColumns.details.w, mainLineCount * bodyLineHeight, { url: normalizeLinkUrl(row.url) });
+        }
       });
 
-      pdf.save('scan-report.pdf');
+      try {
+        await recordDownloadUsage('export_report_pdf', {
+          format: 'pdf',
+          rows: reportRows.length,
+          reportPages: reportStats.total,
+        });
+      } catch (usageError) {
+        console.warn('Report download usage record skipped:', usageError?.message || usageError);
+      }
+      pdf.save(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.pdf`);
       showToast('Report downloaded', 'success');
     } catch (error) {
       console.error('Report download error:', error);
@@ -5340,117 +14839,75 @@ export default function App() {
     }
   };
 
-  const exportSiteIndex = () => {
-    if (!root) return;
+  const exportSiteIndex = (format = 'doc') => {
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
 
-    const hostname = getHostname(root.url) || 'sitemap';
-
-    // Build page list
-    const rows = [];
-    const flattenForDoc = (node, number = '1', depth = 0) => {
-      const indent = '    '.repeat(depth);
-      rows.push({
-        number,
-        title: node.title || 'Untitled',
-        url: node.url || '',
-        indent,
-        depth,
+      const formatConfigByKey = {
+        doc: {
+          extension: 'doc',
+          mimeType: 'application/msword',
+          label: 'DOC',
+          build: buildSiteIndexHtml,
+        },
+        txt: {
+          extension: 'txt',
+          mimeType: 'text/plain;charset=utf-8',
+          label: 'TXT sitemap',
+          build: ({ rows }) => buildTxtSitemap(rows),
+        },
+        html: {
+          extension: 'html',
+          mimeType: 'text/html;charset=utf-8',
+          label: 'HTML',
+          build: buildSiteIndexHtml,
+        },
+        md: {
+          extension: 'md',
+          mimeType: 'text/markdown;charset=utf-8',
+          label: 'Markdown',
+          build: buildSiteIndexMarkdown,
+        },
+      };
+      const normalizedFormat = Object.prototype.hasOwnProperty.call(formatConfigByKey, format)
+        ? format
+        : 'doc';
+      const formatConfig = formatConfigByKey[normalizedFormat];
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const hostname = getHostname(root.url) || 'sitemap';
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: `site-index-${normalizedFormat}`,
       });
-      (node.children || []).forEach((child, idx) => {
-        flattenForDoc(child, `${number}.${idx + 1}`, depth + 1);
+      const content = formatConfig.build({
+        rows,
+        metadata,
+        rootUrl: root.url,
+        hostname,
       });
-    };
-    flattenForDoc(root);
-
-    // Create HTML content that Word/Google Docs/TextEdit can open
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Site Index - ${hostname}</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
-    h1 { color: #6366f1; margin-bottom: 5px; }
-    .subtitle { color: #64748b; margin-bottom: 30px; }
-    .meta { color: #94a3b8; font-size: 12px; margin-bottom: 20px; }
-    table { border-collapse: collapse; width: 100%; }
-    th { background: #f1f5f9; text-align: left; padding: 10px; font-size: 12px; color: #475569; border-bottom: 2px solid #e2e8f0; }
-    td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-    .num { color: #94a3b8; font-size: 12px; white-space: nowrap; }
-    .title { color: #1e293b; }
-    .url { color: #6366f1; font-size: 12px; word-break: break-all; }
-    .indent-1 { padding-left: 20px; }
-    .indent-2 { padding-left: 40px; }
-    .indent-3 { padding-left: 60px; }
-    .indent-4 { padding-left: 80px; }
-    .indent-5 { padding-left: 100px; }
-  </style>
-</head>
-<body>
-  <h1>Site Index</h1>
-  <p class="subtitle">${hostname}</p>
-  <p class="meta">Root URL: ${root.url}<br>Total Pages: ${totalNodes}<br>Generated: ${new Date().toLocaleString()}</p>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 60px;">#</th>
-        <th>Page Title</th>
-        <th style="width: 40%;">URL</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows.map(row => `
-        <tr>
-          <td class="num">${row.number}</td>
-          <td class="title indent-${Math.min(row.depth, 5)}">${row.title}</td>
-          <td class="url">${row.url}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
-</body>
-</html>
-    `.trim();
-
-    // Download as .doc (HTML format is compatible with Word)
-    const blob = new Blob([htmlContent], { type: 'application/msword' });
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = `site-index-${hostname}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    // Delay URL revocation to allow download to start
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-    showToast('Site Index downloaded', 'success');
+      const blob = new Blob([content], { type: formatConfig.mimeType });
+      if (!await reserveDownloadUsage('export_site_index', {
+        format: normalizedFormat,
+        bytes: blob.size,
+        rows: rows.length,
+      })) return;
+      downloadBlob(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.${formatConfig.extension}`, blob);
+      showToast(`Site Index ${formatConfig.label} downloaded`, 'success');
+    });
   };
 
   const copyShareLink = async (permission = sharePermission) => {
-    if (PERMISSION_GATING_UI_ENABLED && isLoggedIn && currentMap?.id && !canManageShares()) {
-      showToast('You do not have permission to create share links for this map.', 'warning');
-      return;
-    }
+    if (!guardAccountCanCreateWork('Share link creation')) return;
+    if (!canCreateShareLinksForCurrentMap()) return;
     try {
-      // Create share via API
-      const { share } = await api.createShare({
-        map_id: currentMap?.id || null,
-        root,
-        orphans,
-        connections,
-        colors,
-        connectionColors,
-        expires_in_days: 30, // Share links expire in 30 days
-      });
+      const shareUrl = await createShareLinkUrl(permission);
 
-      // Create shareable URL with access level (preserve current pathname)
-      const shareUrl = new URL(window.location.href);
-      shareUrl.searchParams.set('share', share.id);
-      shareUrl.searchParams.set('access', permission);
-
-      await navigator.clipboard.writeText(shareUrl.toString());
+      await navigator.clipboard.writeText(shareUrl);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
       setHasCreatedShareLink(true);
@@ -5460,156 +14917,141 @@ export default function App() {
                         permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
       showToast(`Link copied (${permLabel})`, 'success');
     } catch (e) {
-      // If not logged in, fall back to localStorage
-      if (e.message?.includes('Authentication')) {
-        const shareId = `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const shareData = { root, orphans, connections, colors, connectionColors, createdAt: Date.now() };
-        localStorage.setItem(shareId, JSON.stringify(shareData));
-        const shareUrl = new URL(window.location.href);
-        shareUrl.searchParams.set('share', shareId);
-        shareUrl.searchParams.set('access', permission);
-        await navigator.clipboard.writeText(shareUrl.toString());
-        setLinkCopied(true);
-        setTimeout(() => setLinkCopied(false), 2000);
-        setHasCreatedShareLink(true);
-        setCurrentShareAccess(permission);
-
-        const permLabel = permission === ACCESS_LEVELS.VIEW ? 'view-only' :
-                          permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
-        showToast(`Link copied (${permLabel}, temporary)`, 'success');
-      } else {
-        showToast(e.message || 'Failed to create share link', 'error');
-      }
+      if (handleShareLinkError(e)) return;
+      showToast(e.message || 'Failed to create share link', 'error');
     }
   };
 
-  const sendShareEmail = () => {
+  const sendShareEmail = async () => {
     if (!shareEmails.trim()) {
-      showToast('Please enter email addresses');
+      showToast('Please enter email addresses', 'warning');
       return;
     }
-    const subject = encodeURIComponent('Check out this sitemap');
-    const body = encodeURIComponent(`I wanted to share this sitemap with you.\n\nView it here: ${window.location.origin}`);
+    if (!guardAccountCanCreateWork('Share link creation')) return;
+    if (!canCreateShareLinksForCurrentMap()) return;
 
-    // Open mailto in NEW window - don't navigate away from app
-    window.open(`mailto:${shareEmails}?subject=${subject}&body=${body}`, '_blank');
+    try {
+      const shareUrl = await createShareLinkUrl(sharePermission);
+      const subject = encodeURIComponent('Check out this sitemap');
+      const body = encodeURIComponent(`I wanted to share this sitemap with you.\n\nView it here: ${shareUrl}`);
 
-    showToast('Email client opened!');
-    setShowShareModal(false);
-    setShareEmails('');
+      const mailtoUrl = `mailto:${shareEmails}?subject=${subject}&body=${body}`;
+      window.location.href = mailtoUrl;
+      setHasCreatedShareLink(true);
+      setCurrentShareAccess(sharePermission);
+      showToast('Invite email ready', 'success');
+      setShareEmails('');
+    } catch (e) {
+      if (handleShareLinkError(e)) return;
+      showToast(e.message || 'Failed to create share link', 'error');
+    }
   };
 
   const exportPng = async () => {
-    if (!hasMap || !contentRef.current || !canvasRef.current) return;
-
-    // Save current transform state
-    const savedScale = scaleRef.current;
-    const savedPan = { ...panRef.current };
+    if (!hasMap || !root) return;
+    if (!guardAccountCanCreateWork('Downloading')) return;
 
     try {
-      showToast('Generating PNG...', 'info', true);
-
-      // Reset to 1:1 scale for accurate capture
-      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-
-      // Wait for React to re-render
-      await new Promise(r => setTimeout(r, 200));
-
-      const { toPng } = await import('html-to-image');
-
-      const content = contentRef.current;
-      const canvas = canvasRef.current;
-      const canvasRect = canvas.getBoundingClientRect();
-
-      // Find bounds of all cards
-      const cards = content.querySelectorAll('[data-node-card="1"]');
-      if (!cards.length) {
-        applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const baseScene = buildExportScene({
+        root,
+        orphans,
+        colors,
+        connectionColors,
+        connections,
+        showThumbnails,
+        orientation: mapOrientation,
+        title: exportTitle,
+        reportStats,
+        reportTypeOptions: REPORT_TYPE_OPTIONS,
+        generatedAt,
+      });
+      if (!baseScene || !baseScene.nodes.length) {
         showToast('No content to download', 'warning');
         return;
       }
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      cards.forEach(card => {
-        const rect = card.getBoundingClientRect();
-        minX = Math.min(minX, rect.left - canvasRect.left);
-        minY = Math.min(minY, rect.top - canvasRect.top);
-        maxX = Math.max(maxX, rect.right - canvasRect.left);
-        maxY = Math.max(maxY, rect.bottom - canvasRect.top);
+      const pngLimitReason = getPngExportLimitReason(baseScene, {
+        pixelRatio: PNG_EXPORT_PIXEL_RATIO,
       });
+      if (pngLimitReason) {
+        showToast(pngLimitReason, 'warning');
+        return;
+      }
 
-      // Include connector SVGs in bounds
-      const svgs = content.querySelectorAll('.connector-svg');
-      svgs.forEach(svg => {
-        const rect = svg.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          minX = Math.min(minX, rect.left - canvasRect.left);
-          minY = Math.min(minY, rect.top - canvasRect.top);
-          maxX = Math.max(maxX, rect.right - canvasRect.left);
-          maxY = Math.max(maxY, rect.bottom - canvasRect.top);
-        }
+      showToast('Generating PNG...', 'info', true);
+      const shareUrl = await createExportShareLinkUrl();
+      const scene = buildExportScene({
+        root,
+        orphans,
+        colors,
+        connectionColors,
+        connections,
+        showThumbnails,
+        orientation: mapOrientation,
+        title: exportTitle,
+        shareUrl,
+        reportStats,
+        reportTypeOptions: REPORT_TYPE_OPTIONS,
+        generatedAt,
       });
-
-      const padding = 60;
-      const exportWidth = Math.ceil(maxX - minX + padding * 2);
-      const exportHeight = Math.ceil(maxY - minY + padding * 2);
-
-      // Position the content so the map is centered with equal padding on all sides
-      const offsetX = -minX + padding;
-      const offsetY = -minY + padding - 80; // -80 to account for content top: 80px in CSS
-      applyTransform({ scale: 1, x: offsetX, y: offsetY }, { skipPanClamp: true });
-
-      // Hide grid dots for export
-      content.style.setProperty('--export-mode', '1');
-      content.classList.add('export-mode');
-
-      await new Promise(r => setTimeout(r, 200));
-
-      // Capture the canvas element directly with transparent background
-      const dataUrl = await toPng(canvas, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: null, // Transparent background
-        width: exportWidth,
-        height: exportHeight,
-        skipFonts: true,
-        style: {
-          width: `${exportWidth}px`,
-          height: `${exportHeight}px`,
-          backgroundColor: 'transparent',
-        },
-        filter: (node) => {
-          // Exclude zoom controls, color key, and grid from export
-          if (node.classList?.contains('zoom-controls')) return false;
-          if (node.classList?.contains('color-key')) return false;
-          if (node.classList?.contains('minimap-navigator')) return false;
-          // Exclude cross-origin thumbnail images
-          if (node.tagName === 'IMG' && node.classList?.contains('thumb-img')) return false;
-          return true;
-        },
+      const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
+      const pngExport = await renderExportSceneToPngBlob(scene, thumbnailDataUrls, {
+        pixelRatio: PNG_EXPORT_PIXEL_RATIO,
       });
-
-      // Restore grid dots
-      content.classList.remove('export-mode');
-
-      // Download
-      const link = document.createElement('a');
-      link.download = `sitemap-${getHostname(root.url) || 'download'}-${Date.now()}.png`;
-      link.href = dataUrl;
-      link.click();
-
+      const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
+      if (!await reserveDownloadUsage('export_png', {
+        format: 'png',
+        width: pngExport.width,
+        height: pngExport.height,
+        bytes: pngExport.blob.size,
+        pixelRatio: pngExport.pixelRatio,
+        thumbnails: thumbnailDataUrls.size,
+      })) {
+        dismissToast();
+        return;
+      }
+      downloadBlob(`${filenameBase}.png`, pngExport.blob);
       showToast('PNG downloaded successfully', 'success');
     } catch (e) {
       console.error('PNG export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
       showToast(`PNG download failed: ${errorMsg}`, 'error');
-      // Restore grid dots on error
-      if (contentRef.current) contentRef.current.classList.remove('export-mode');
-    } finally {
-      // Restore original transform state
-      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
     }
   };
+
+  const pngExportUnavailableReason = useMemo(() => {
+    if (!showExportModal || !hasMap || !root) return '';
+    const scene = buildExportScene({
+      root,
+      orphans,
+      colors,
+      connectionColors,
+      connections,
+      showThumbnails,
+      orientation: mapOrientation,
+      title: currentMap?.name || mapName || root?.title || getHostname(root?.url) || 'Untitled Map',
+      reportStats,
+      reportTypeOptions: REPORT_TYPE_OPTIONS,
+    });
+    if (!scene || !scene.nodes.length) return '';
+    return getPngExportLimitReason(scene, {
+      pixelRatio: PNG_EXPORT_PIXEL_RATIO,
+    });
+  }, [
+    showExportModal,
+    hasMap,
+    root,
+    orphans,
+    colors,
+    connectionColors,
+    connections,
+    showThumbnails,
+    mapOrientation,
+    currentMap?.name,
+    mapName,
+    reportStats,
+  ]);
 
   const updateCommentsForNode = (nodeId, updater) => {
     let updated = false;
@@ -5641,19 +15083,42 @@ export default function App() {
   };
 
   // Add a comment to a node
-  const addCommentToNode = (nodeId, commentText, parentCommentId = null) => {
+  const addCommentToNode = async (nodeId, commentText, parentCommentId = null) => {
+    if (!commentText.trim()) return;
+
+    if (useBackendComments && currentMap?.id) {
+      try {
+        await api.createMapComment(currentMap.id, {
+          nodeId,
+          parentCommentId,
+          text: commentText.trim(),
+        });
+        trackEvent('comment_created', {
+          map_id: String(currentMap.id),
+          reply: parentCommentId ? 'true' : 'false',
+          mentions: extractCommentMentions(commentText).length,
+        });
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Create map comment error:', error);
+        showToast(error.message || 'Failed to add comment', 'error');
+      }
+      return;
+    }
+
     if (isLiveActive) {
       warnLiveModeUnsupported('Comments are not live-synced yet. Leave live editing before editing comments.');
       return;
     }
-    if (!commentText.trim()) return;
 
     const newComment = {
       id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       text: commentText.trim(),
       author: currentUser?.name || 'Anonymous',
+      authorUserId: currentUser?.id || null,
+      authorEmail: currentUser?.email || null,
       createdAt: new Date().toISOString(),
-      mentions: (commentText.match(/@(\w+)/g) || []).map(m => m.slice(1)),
+      mentions: extractCommentMentions(commentText),
       completed: false,
       completedBy: null,
       completedAt: null,
@@ -5683,8 +15148,113 @@ export default function App() {
     updateCommentsForNode(nodeId, (comments) => [...comments, newComment]);
   };
 
+  const updateCommentText = async (nodeId, commentId, commentText) => {
+    const trimmedText = String(commentText || '').trim();
+    if (!trimmedText) return;
+
+    if (useBackendComments && currentMap?.id) {
+      try {
+        await api.updateMapComment(currentMap.id, commentId, {
+          text: trimmedText,
+        });
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Update map comment text error:', error);
+        showToast(error.message || 'Failed to update comment', 'error');
+      }
+      return;
+    }
+
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comment edits are not live-synced yet.');
+      return;
+    }
+
+    const updateTextInComments = (comments) => comments.map((comment) => {
+      if (sameId(comment.id, commentId)) {
+        return {
+          ...comment,
+          text: trimmedText,
+          mentions: extractCommentMentions(trimmedText),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      if (comment.replies?.length > 0) {
+        return { ...comment, replies: updateTextInComments(comment.replies) };
+      }
+      return comment;
+    });
+
+    saveStateForUndo();
+    updateCommentsForNode(nodeId, updateTextInComments);
+  };
+
+  const setCommentsCompleted = async (nodeId, commentIds, completed) => {
+    const targetIds = Array.from(new Set((commentIds || []).map((id) => String(id))));
+    if (targetIds.length === 0) return;
+
+    if (useBackendComments && currentMap?.id) {
+      try {
+        await Promise.all(targetIds.map((commentId) => (
+          api.updateMapComment(currentMap.id, commentId, {
+            completed: !!completed,
+          })
+        )));
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Set map comments completed error:', error);
+        showToast(error.message || 'Failed to update comments', 'error');
+      }
+      return;
+    }
+
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comment state changes are not live-synced yet.');
+      return;
+    }
+
+    const targetIdSet = new Set(targetIds);
+    const completedAt = completed ? new Date().toISOString() : null;
+    const completedBy = completed ? (currentUser?.name || 'Anonymous') : null;
+    const setCompletedInComments = (comments) => comments.map((comment) => {
+      const nextComment = targetIdSet.has(String(comment.id))
+        ? {
+          ...comment,
+          completed: !!completed,
+          completedBy,
+          completedAt,
+        }
+        : comment;
+      if (nextComment.replies?.length > 0) {
+        return { ...nextComment, replies: setCompletedInComments(nextComment.replies) };
+      }
+      return nextComment;
+    });
+
+    saveStateForUndo();
+    updateCommentsForNode(nodeId, setCompletedInComments);
+  };
+
   // Toggle completed state on a comment
-  const toggleCommentCompleted = (nodeId, commentId) => {
+  const toggleCommentCompleted = async (nodeId, commentId) => {
+    if (useBackendComments && currentMap?.id) {
+      const currentComment = findCommentInThread(savedMapCommentsByNode[nodeId] || [], commentId);
+      if (!currentComment) return;
+      try {
+        await api.updateMapComment(currentMap.id, commentId, {
+          completed: !currentComment.completed,
+        });
+        trackEvent(currentComment.completed ? 'comment_reopened' : 'comment_resolved', {
+          map_id: String(currentMap.id),
+        });
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Toggle map comment error:', error);
+        showToast(error.message || 'Failed to update comment', 'error');
+      }
+      return;
+    }
+
     if (isLiveActive) {
       warnLiveModeUnsupported('Comment state changes are not live-synced yet.');
       return;
@@ -5712,7 +15282,18 @@ export default function App() {
   };
 
   // Delete a comment from a node
-  const deleteComment = (nodeId, commentId) => {
+  const deleteComment = async (nodeId, commentId) => {
+    if (useBackendComments && currentMap?.id) {
+      try {
+        await api.deleteMapComment(currentMap.id, commentId);
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Delete map comment error:', error);
+        showToast(error.message || 'Failed to delete comment', 'error');
+      }
+      return;
+    }
+
     if (isLiveActive) {
       warnLiveModeUnsupported('Comment deletion is not live-synced yet.');
       return;
@@ -5731,6 +15312,30 @@ export default function App() {
 
     saveStateForUndo();
     updateCommentsForNode(nodeId, deleteFromComments);
+  };
+
+  const deleteAllCommentsForNode = async (nodeId) => {
+    if (useBackendComments && currentMap?.id) {
+      const topLevelComments = savedMapCommentsByNode[nodeId] || getNodeById(nodeId)?.comments || [];
+      const topLevelIds = topLevelComments.map((comment) => comment?.id).filter(Boolean);
+      if (topLevelIds.length === 0) return;
+      try {
+        await Promise.all(topLevelIds.map((commentId) => api.deleteMapComment(currentMap.id, commentId)));
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Delete all map comments error:', error);
+        showToast(error.message || 'Failed to delete comments', 'error');
+      }
+      return;
+    }
+
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comment deletion is not live-synced yet.');
+      return;
+    }
+
+    saveStateForUndo();
+    updateCommentsForNode(nodeId, () => []);
   };
 
   const applyAnnotationsInTree = (tree, idSet, updater) => {
@@ -5803,9 +15408,9 @@ export default function App() {
     if (!nodeId) return null;
     const layoutNode = layoutRef.current?.nodes?.get(nodeId);
     if (layoutNode?.node) return layoutNode.node;
-    const rootMatch = findNodeById(root, nodeId);
+    const rootMatch = findNodeById(renderRoot, nodeId);
     if (rootMatch) return rootMatch;
-    for (const orphan of orphans) {
+    for (const orphan of visibleOrphans) {
       const match = findNodeById(orphan, nodeId);
       if (match) return match;
     }
@@ -5816,37 +15421,58 @@ export default function App() {
     ? (getNodeById(nodeMenu.nodeId)?.annotations?.status || 'none')
     : 'none';
 
-  // Navigate to a node - pan canvas to center the node and optionally zoom
-  const navigateToNode = (nodeId) => {
-    const layout = layoutRef.current;
-    if (!nodeId || !layout || !canvasRef.current) return;
-    const nodeData = layout.nodes.get(nodeId);
-    if (!nodeData) return;
+  const resolveCommentPopoverPosition = useCallback((nodeId, options = {}) => {
+    if (!canvasRef.current) return null;
 
-    // Calculate center of canvas, offset left if comments panel is open
-    // Comments panel is 320px wide, so offset by half that (160px)
-    const panelOffset = showCommentsPanel ? 160 : 0;
-    const canvas = canvasRef.current;
-    const canvasCenterX = (canvas.clientWidth / 2) - panelOffset;
-    const canvasCenterY = canvas.clientHeight / 2;
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    if (options.mode === 'drawer') {
+      const drawerRect = document.querySelector('.comments-drawer')?.getBoundingClientRect();
+      const drawerPosition = getCommentPopoverDrawerPosition({ canvasRect, drawerRect });
+      if (drawerPosition) return drawerPosition;
+    }
 
-    const nodeCenterX = nodeData.x + nodeData.w / 2;
-    const nodeCenterY = nodeData.y + nodeData.h / 2;
+    const safeNodeId = escapeCssSelectorValue(nodeId);
+    const nodeCardElement = contentRef.current?.querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`);
+    const nodeElement = nodeCardElement
+      || contentRef.current?.querySelector(`.sitemap-node-positioned[data-node-id="${safeNodeId}"]`);
+    let nodeRect = nodeElement?.getBoundingClientRect() || null;
 
-    const nextScale = scaleRef.current < 0.8 ? 1 : scaleRef.current;
-    const nextPan = {
-      x: canvasCenterX - nodeCenterX * nextScale,
-      y: canvasCenterY - nodeCenterY * nextScale,
-    };
+    if (!nodeRect) {
+      const layoutNode = layoutRef.current?.nodes?.get(nodeId);
+      if (layoutNode) {
+        const scaleValue = scaleRef.current || scale || 1;
+        const panValue = panRef.current || pan || { x: 0, y: 0 };
+        const nodeX = layoutNode.x ?? 0;
+        const nodeY = layoutNode.y ?? 0;
+        const nodeW = layoutNode.w ?? LAYOUT.NODE_W;
+        const nodeH = layoutNode.h ?? (showThumbnails ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED);
+        nodeRect = {
+          left: canvasRect.left + panValue.x + nodeX * scaleValue,
+          right: canvasRect.left + panValue.x + (nodeX + nodeW) * scaleValue,
+          top: canvasRect.top + panValue.y + nodeY * scaleValue,
+          bottom: canvasRect.top + panValue.y + (nodeY + nodeH) * scaleValue,
+          width: nodeW * scaleValue,
+          height: nodeH * scaleValue,
+        };
+      }
+    }
 
-    applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
-  };
+    return getCommentPopoverPosition({
+      nodeRect,
+      canvasRect,
+      forceSide: options.forceSide,
+    });
+  }, [pan, scale, showThumbnails]);
 
-  // Open comment popover positioned next to a node
-  const openCommentPopover = (nodeOrId) => {
+  // Open comment popover anchored to a node in canvas screen space.
+  const openCommentPopover = (nodeOrId, options = {}) => {
     if (!canvasRef.current) return;
     const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
     if (!nodeId) return;
+    markMentionCommentsRead((entry) => sameId(entry.nodeId, nodeId));
+    if (useBackendComments && currentMap?.id) {
+      loadSavedMapComments(currentMap.id);
+    }
     if (typeof nodeOrId === 'object') {
       setCommentingNodeSnapshot(nodeOrId);
     } else {
@@ -5854,62 +15480,110 @@ export default function App() {
       setCommentingNodeSnapshot(resolvedNode || null);
     }
 
-    let nodeX = null;
-    let nodeY = null;
-    let nodeW = LAYOUT.NODE_W;
-    let nodeRect = null;
-    const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
+    const nextAnchor = { mode: options.mode || 'node', forceSide: options.forceSide || null };
+    const popoverPosition = resolveCommentPopoverPosition(nodeId, nextAnchor);
+    if (!popoverPosition) return;
 
-    if (nodeElement) {
-      const nodeWrapper = nodeElement.closest('.sitemap-node-positioned');
-      if (nodeWrapper) {
-        const wrapperLeft = parseFloat(nodeWrapper.style.left);
-        const wrapperTop = parseFloat(nodeWrapper.style.top);
-        if (Number.isFinite(wrapperLeft)) nodeX = wrapperLeft;
-        if (Number.isFinite(wrapperTop)) nodeY = wrapperTop;
-      }
-      nodeRect = nodeElement.getBoundingClientRect();
-    }
-
-    if (nodeX === null || nodeY === null) {
-      const layoutNode = layoutRef.current?.nodes?.get(nodeId);
-      if (layoutNode) {
-        nodeX = layoutNode.x ?? 0;
-        nodeY = layoutNode.y ?? 0;
-        nodeW = layoutNode.w ?? LAYOUT.NODE_W;
-      }
-    }
-
-    if (nodeX === null || nodeY === null) return;
-    const popoverWidth = 320;
-    const gap = 16;
-
-    // Get the node's screen position to check if popover fits on right
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-
-    // Check if there's enough room on the right side of the node (in screen space)
-    const rightSpaceAvailable = nodeRect
-      ? (canvasRect.right - nodeRect.right)
-      : (() => {
-        const scaleValue = scaleRef.current || scale || 1;
-        const screenRight = canvasRect.left + panRef.current.x + (nodeX + nodeW) * scaleValue;
-        return canvasRect.right - screenRight;
-      })();
-    const needsLeftPosition = rightSpaceAvailable < (popoverWidth + gap);
-
-    // Calculate popover position in canvas coordinates
-    const side = needsLeftPosition ? 'left' : 'right';
-    const popoverX = side === 'right'
-      ? nodeX + nodeW + gap
-      : nodeX - popoverWidth - gap;
-
-    setCommentPopoverPos({ x: popoverX, y: nodeY, side });
+    setCommentPopoverAnchor(nextAnchor);
+    setCommentPopoverPos(popoverPosition);
+    setSelectedCommentId(options.commentId || null);
     setCommentingNodeId(nodeId);
+  };
+
+  const openCommentPopoverFromDrawer = (nodeId, commentId) => {
+    if (!canvasRef.current || !nodeId) return;
+    const nextAnchor = { mode: 'drawer', forceSide: null };
+    const resolvedNode = getNodeById(nodeId);
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const drawerRect = document.querySelector('.comments-drawer')?.getBoundingClientRect();
+    const focusTarget = getCommentDrawerNodeFocusTarget({ canvasRect, drawerRect });
+
+    markMentionCommentsRead((entry) => sameId(entry.nodeId, nodeId));
+    if (useBackendComments && currentMap?.id) {
+      loadSavedMapComments(currentMap.id);
+    }
+
+    if (focusTarget) {
+      focusNodeById(nodeId, focusTarget);
+    }
+
+    setSelectedCommentId(commentId || null);
+    setCommentPopoverAnchor(nextAnchor);
+    setCommentingNodeSnapshot(resolvedNode || null);
+    setCommentingNodeId(nodeId);
+
+    const updateDrawerPosition = () => {
+      const nextPosition = resolveCommentPopoverPosition(nodeId, nextAnchor);
+      if (nextPosition) {
+        setCommentPopoverPos(nextPosition);
+      }
+    };
+
+    updateDrawerPosition();
+    requestAnimationFrame(() => {
+      updateDrawerPosition();
+      requestAnimationFrame(updateDrawerPosition);
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!commentingNodeId) return;
+    const nextPosition = resolveCommentPopoverPosition(commentingNodeId, commentPopoverAnchor);
+    if (!nextPosition) return;
+    setCommentPopoverPos((prev) => (
+      prev.x === nextPosition.x && prev.y === nextPosition.y && prev.side === nextPosition.side
+        ? prev
+        : nextPosition
+    ));
+  }, [
+    canvasSize.height,
+    canvasSize.width,
+    commentPopoverAnchor,
+    commentingNodeId,
+    resolveCommentPopoverPosition,
+    showCommentsPanel,
+  ]);
+
+  useEffect(() => {
+    if (showCommentsPanel) return;
+    setSelectedCommentId(null);
+    if (commentPopoverAnchor.mode === 'drawer') {
+      setCommentingNodeId(null);
+      setCommentingNodeSnapshot(null);
+    }
+  }, [commentPopoverAnchor.mode, showCommentsPanel]);
+
+  const handleActivitySelect = async (event) => {
+    if (!event) return;
+
+    const versionId = event.payload?.versionId || (event.entityType === 'version' ? event.entityId : null);
+    if (versionId && currentMap?.id) {
+      let version = mapVersions.find((entry) => sameId(entry.id, versionId));
+      if (!version) {
+        const reloaded = await loadMapVersions(currentMap.id);
+        version = (reloaded || []).find((entry) => sameId(entry.id, versionId));
+      }
+      if (version) {
+        restoreVersion(version);
+        return;
+      }
+    }
+
+    const nodeId = event.payload?.nodeId || (event.entityType === 'node' ? event.entityId : null);
+    if (nodeId) {
+      focusNodeById(nodeId);
+      if (event.eventScope === 'comment') {
+        setTimeout(() => openCommentPopover(nodeId), 220);
+      }
+      return;
+    }
+
+    showToast('No linked snapshot is available for this activity item yet.', 'info');
   };
 
   const openNodeMenu = (nodeId, event) => {
     if (!nodeId || !event) return;
-    if (!canEdit() && !canComment()) return;
+    if (!canEdit()) return;
     if (!contentRef.current) return;
     event.preventDefault();
     event.stopPropagation();
@@ -5928,10 +15602,13 @@ export default function App() {
     const menuX = (event.clientX - contentRect.left) / scaleValue;
     const menuY = (event.clientY - contentRect.top) / scaleValue;
 
-    const hasSelection = selectedNodeIds?.has(nodeId);
-    const targetIds = hasSelection ? Array.from(selectedNodeIds) : [nodeId];
+    const stackTargetIds = getNodeStackSelectionIds(nodeId);
+    const hasSelection = stackTargetIds.some((id) => selectedNodeIds?.has(id));
+    const targetIds = hasSelection
+      ? Array.from(new Set([...Array.from(selectedNodeIds || []), ...stackTargetIds]))
+      : stackTargetIds;
     if (!hasSelection) {
-      setSelectedNodeIds(new Set([nodeId]));
+      setSelectedNodeIds(new Set(stackTargetIds));
     }
 
     setNodeMenu({
@@ -5948,6 +15625,12 @@ export default function App() {
       suppressNodeClickRef.current = false;
       return;
     }
+    if (isEntitlementLockedNode(node)) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      openPlansModal('locked-node');
+      return;
+    }
     const shiftActive = event?.shiftKey || isShiftPressed;
     if (activeTool === 'comments' && !shiftActive) {
       openCommentPopover(node);
@@ -5960,19 +15643,99 @@ export default function App() {
     );
     if (interactiveTarget) return;
 
+    const targetIds = getNodeStackSelectionIds(node.id);
     if (shiftActive) {
+      if (!canEdit()) return;
       setSelectedNodeIds((prev) => {
         const next = new Set(prev);
-        if (next.has(node.id)) {
-          next.delete(node.id);
+        const allSelected = targetIds.every((id) => next.has(id));
+        if (allSelected) {
+          targetIds.forEach((id) => next.delete(id));
         } else {
-          next.add(node.id);
+          targetIds.forEach((id) => next.add(id));
         }
         return next;
       });
     } else {
-      setSelectedNodeIds(new Set([node.id]));
+      setSelectedNodeIds(new Set(targetIds));
+      setActiveId(null);
     }
+  };
+
+  const openLargeMapNodeMenu = (nodeId, event) => {
+    if (!nodeId || !event) return;
+    if (!canEdit()) return;
+    if (!contentRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (connectionMenu) {
+      setConnectionMenu(null);
+    }
+
+    const contentRect = contentRef.current.getBoundingClientRect();
+    const stackTargetIds = getNodeStackSelectionIds(nodeId);
+    const hasSelection = stackTargetIds.some((id) => selectedNodeIds?.has(id));
+    const targetIds = hasSelection
+      ? Array.from(new Set([...Array.from(selectedNodeIds || []), ...stackTargetIds]))
+      : stackTargetIds;
+    if (!hasSelection) {
+      setSelectedNodeIds(new Set(stackTargetIds));
+    }
+
+    setNodeMenu({
+      nodeId,
+      x: event.clientX - contentRect.left,
+      y: event.clientY - contentRect.top,
+      targetIds,
+    });
+  };
+
+  const handleLargeMapNodeDoubleClick = (nodeData) => {
+    if (!nodeData || !canvasRef.current) return;
+    if (isEntitlementLockedNode(nodeData.node || nodeData)) {
+      openPlansModal('locked-node');
+      return;
+    }
+    const canvas = canvasRef.current;
+    const nextScale = scaleRef.current < 0.95 ? 1 : Math.min(1.6, scaleRef.current * 1.2);
+    const nextPan = {
+      x: canvas.clientWidth / 2 - (nodeData.x + nodeData.w / 2) * nextScale,
+      y: canvas.clientHeight / 2 - (nodeData.y + nodeData.h / 2) * nextScale,
+    };
+    applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
+  };
+
+  const handleLargeMapNodeExpand = async (sceneNode) => {
+    if (!sceneNode?.id || !currentMap?.id) return;
+    if (isEntitlementLockedNode(sceneNode.node || sceneNode)) {
+      openPlansModal('locked-node');
+      return;
+    }
+    try {
+      const response = await api.getMapNode(currentMap.id, sceneNode.id);
+      const node = response?.node || sceneNode;
+      mergeLargeMapNodeCache(node, { preserveExistingAssetsOnEmpty: false });
+      const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || '';
+      if (directAssetUrl) {
+        viewFullScreenshot(directAssetUrl, true, node.id || sceneNode.id, 'full');
+        return;
+      }
+      const sourceUrl = node.url || sceneNode.url;
+      if (sourceUrl) {
+        viewFullScreenshot(sourceUrl, false, null, 'full');
+      }
+    } catch (error) {
+      showToast(error.message || 'Failed to load image for this page', 'error');
+    }
+  };
+
+  const handleLargeMapNodeViewImage = (source, isDirectImage, nodeId, captureType) => {
+    if (isDirectImage) {
+      viewFullScreenshot(source, true, nodeId, captureType);
+      return;
+    }
+    handleLargeMapNodeExpand({ id: nodeId, url: source });
   };
 
   // ========== CONNECTION LINE FUNCTIONS ==========
@@ -6046,14 +15809,13 @@ export default function App() {
     return nearest;
   };
 
-  // Validate if a connection can be created
-  const canCreateConnection = (type, sourceNodeId, targetNodeId) => {
+  const canCreateConnectionInList = (connectionList, type, sourceNodeId, targetNodeId) => {
     // No self-connections
     if (sourceNodeId === targetNodeId) return false;
 
     if (type === 'userflow') {
       // Only one line per direction between two nodes
-      return !connections.some(c =>
+      return !connectionList.some(c =>
         c.type === 'userflow' &&
         c.sourceNodeId === sourceNodeId &&
         c.targetNodeId === targetNodeId
@@ -6062,7 +15824,7 @@ export default function App() {
 
     if (type === 'crosslink') {
       // Only one crosslink between any two nodes (either direction)
-      return !connections.some(c =>
+      return !connectionList.some(c =>
         c.type === 'crosslink' &&
         ((c.sourceNodeId === sourceNodeId && c.targetNodeId === targetNodeId) ||
           (c.sourceNodeId === targetNodeId && c.targetNodeId === sourceNodeId))
@@ -6072,10 +15834,16 @@ export default function App() {
     return true;
   };
 
+  // Validate if a connection can be created
+  const canCreateConnection = (type, sourceNodeId, targetNodeId) => (
+    canCreateConnectionInList(connections, type, sourceNodeId, targetNodeId)
+  );
+
   // Handle mousedown on an anchor point - start drawing connection
   const handleAnchorMouseDown = (nodeId, anchor, e) => {
     e.preventDefault();
     if (!connectionTool) return;
+    cancelActiveConnectionInteraction();
 
     const pos = getAnchorPosition(nodeId, anchor);
     if (!pos) return;
@@ -6084,7 +15852,7 @@ export default function App() {
     document.body.style.userSelect = 'none';
     document.body.style.webkitUserSelect = 'none';
 
-    setDrawingConnection({
+    const nextDrawingConnection = {
       type: connectionTool,
       sourceNodeId: nodeId,
       sourceAnchor: anchor,
@@ -6092,12 +15860,15 @@ export default function App() {
       startY: pos.y,
       currentX: pos.x,
       currentY: pos.y,
-    });
+    };
+    drawingConnectionRef.current = nextDrawingConnection;
+    setDrawingConnection(nextDrawingConnection);
   };
 
   // Handle mousemove while drawing a connection
   const handleConnectionMouseMove = (e) => {
-    if (!drawingConnection || !contentRef.current) return;
+    const activeDrawingConnection = drawingConnectionRef.current || drawingConnection;
+    if (!activeDrawingConnection || !contentRef.current) return;
 
     // Convert screen coordinates to canvas coordinates
     const contentRect = contentRef.current.getBoundingClientRect();
@@ -6110,30 +15881,36 @@ export default function App() {
     const snapTarget = findNearestAnchor(
       mouseX,
       mouseY,
-      drawingConnection.sourceNodeId,
-      drawingConnection.type
+      activeDrawingConnection.sourceNodeId,
+      activeDrawingConnection.type
     );
 
-    setDrawingConnection(prev => ({
-      ...prev,
-      currentX: snapTarget ? snapTarget.x : mouseX,
-      currentY: snapTarget ? snapTarget.y : mouseY,
-      snapTarget, // { nodeId, anchor, x, y } or null
-    }));
+    setDrawingConnection(prev => {
+      if (!prev) return null;
+      const nextDrawingConnection = {
+        ...prev,
+        currentX: snapTarget ? snapTarget.x : mouseX,
+        currentY: snapTarget ? snapTarget.y : mouseY,
+        snapTarget, // { nodeId, anchor, x, y } or null
+      };
+      drawingConnectionRef.current = nextDrawingConnection;
+      return nextDrawingConnection;
+    });
   };
 
   // Handle mouseup - finish or cancel drawing
   const handleConnectionMouseUp = (e) => {
-    if (!drawingConnection) return;
+    const activeDrawingConnection = drawingConnectionRef.current || drawingConnection;
+    if (!activeDrawingConnection) return;
 
     // Use snapTarget if available (magnetic snap), otherwise check DOM element
     let targetNodeId = null;
     let targetAnchorType = null;
 
-    if (drawingConnection.snapTarget) {
+    if (activeDrawingConnection.snapTarget) {
       // Use the magnetically snapped target
-      targetNodeId = drawingConnection.snapTarget.nodeId;
-      targetAnchorType = drawingConnection.snapTarget.anchor;
+      targetNodeId = activeDrawingConnection.snapTarget.nodeId;
+      targetAnchorType = activeDrawingConnection.snapTarget.anchor;
     } else {
       // Fallback: check if mouse is directly over an anchor element
       const targetAnchor = e.target.closest('.anchor-point');
@@ -6146,16 +15923,16 @@ export default function App() {
     }
 
     if (targetNodeId && targetAnchorType && canCreateConnection(
-      drawingConnection.type,
-      drawingConnection.sourceNodeId,
+      activeDrawingConnection.type,
+      activeDrawingConnection.sourceNodeId,
       targetNodeId
     )) {
       // Create the connection
       const newConnection = {
         id: 'conn_' + Math.random().toString(36).slice(2, 9),
-        type: drawingConnection.type,
-        sourceNodeId: drawingConnection.sourceNodeId,
-        sourceAnchor: drawingConnection.sourceAnchor,
+        type: activeDrawingConnection.type,
+        sourceNodeId: activeDrawingConnection.sourceNodeId,
+        sourceAnchor: activeDrawingConnection.sourceAnchor,
         targetNodeId: targetNodeId,
         targetAnchor: targetAnchorType,
         comments: [],
@@ -6163,7 +15940,7 @@ export default function App() {
       };
 
       if (isLiveActive && currentMap?.id) {
-        const result = submitLiveDraft({
+        const result = queueLiveDraftWithUndo({
           type: 'link.add',
           payload: {
             linkId: newConnection.id,
@@ -6175,24 +15952,49 @@ export default function App() {
         if (!result.ok) {
           showToast(result.error || 'Failed to queue connection', 'error');
         } else {
-          showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} queued`, 'success');
+          showToast(`${activeDrawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} queued`, 'success');
         }
       } else {
         saveStateForUndo();
-        setConnections(prev => [...prev, newConnection]);
-        showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} created`, 'success');
+        setConnections(prev => (
+          canCreateConnectionInList(
+            prev,
+            newConnection.type,
+            newConnection.sourceNodeId,
+            newConnection.targetNodeId
+          )
+            ? [...prev, newConnection]
+            : prev
+        ));
+        showToast(`${activeDrawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} created`, 'success');
       }
     }
 
     // Re-enable text selection
-    document.body.style.userSelect = '';
+    resetConnectionInteractionStyles();
+    drawingConnectionRef.current = null;
     setDrawingConnection(null);
   };
+
+  const isDrawingConnectionActive = !!drawingConnection;
+  useEffect(() => {
+    if (!isDrawingConnectionActive) return undefined;
+    const handleDocumentMouseMove = (event) => handleConnectionMouseMove(event);
+    const handleDocumentMouseUp = (event) => handleConnectionMouseUp(event);
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  // Handlers read the active draft from refs; the listed values cover snap/layout changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connections, isDrawingConnectionActive, mapLayout, scale, showThumbnails]);
 
   // Delete a connection
   const deleteConnection = (connectionId) => {
     if (isLiveActive && currentMap?.id) {
-      const result = submitLiveDraft({
+      const result = queueLiveDraftWithUndo({
         type: 'link.delete',
         payload: { linkId: connectionId },
       });
@@ -6227,14 +16029,459 @@ export default function App() {
     });
   };
 
-  // Start dragging a connection endpoint to reconnect
-  const handleEndpointDragMoveDoc = useRef(null);
-  const handleEndpointDragEndDoc = useRef(null);
+  useEffect(() => {
+    if (!isLocalFigmaCaptureHost || !figmaCaptureState || authLoading) return;
+    if (appliedFigmaCaptureStateRef.current === figmaCaptureKey) return;
+    if (!isLoggedIn) return;
+
+    const clearCaptureModals = () => {
+      setShowCreateMapModal(false);
+      setShowImportModal(false);
+      setImportPageLimitModal(null);
+      setShowAuthModal(false);
+      setShowProfileDrawer(false);
+      setShowSettingsDrawer(false);
+      setShowVersionHistoryDrawer(false);
+      setShowReportDrawer(false);
+      setShowImageReportDrawer(false);
+      setShowCommentsPanel(false);
+      setShowViewDropdown(false);
+      setShowColorKey(false);
+      setShowImageMenu(false);
+      setConnectionMenu(null);
+      setNodeMenu(null);
+      setEditModalNode(null);
+      setDeleteConfirmNode(null);
+      setShowVersionEditPrompt(false);
+      setConfirmModal(null);
+      setPromptModal(null);
+      setPlansModal(null);
+      setGuestScanPrompt(null);
+      setScanLimitPrompt(null);
+      setScanAuthPrompt(null);
+      setEntitlementLockModal(null);
+      setScreenshotDownloadUpsell(null);
+      setShowCancelConfirm(false);
+      setShowStopConfirm(false);
+      setIsStoppingScan(false);
+      setScanErrorMessage('');
+      setScanLimitProgressNote('');
+      setShowMinimap(false);
+      setSelectedNodeIds(new Set());
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS });
+      setCommentingNodeId(null);
+      setCommentingNodeSnapshot(null);
+      setCommentPopoverPos({ x: 0, y: 0, side: 'right' });
+      setCommentPopoverAnchor({ mode: 'node' });
+      setSelectedCommentId(null);
+      setFigmaCaptureCommentsByNode(null);
+      setFigmaCaptureExpandedCommentIds(null);
+      setToast(null);
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = null;
+      }
+    };
+
+    const applyScanProgressState = ({
+      cancelConfirm = false,
+      stopConfirm = false,
+      errorMessage = '',
+      limitNote = '',
+    } = {}) => {
+      clearCaptureModals();
+      setUrlInput(currentMap?.url || root?.url || 'https://example.com');
+      setLoading(!errorMessage);
+      setScanErrorMessage(errorMessage);
+      setScanLimitProgressNote(limitNote);
+      setScanMessage('Scanning site structure...');
+      setScanProgress({ scanned: 9, mapped: 3, queued: 14 });
+      setScanElapsed(92);
+      setShowCancelConfirm(cancelConfirm);
+      setShowStopConfirm(stopConfirm);
+      setIsStoppingScan(false);
+    };
+
+    if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'home') {
+      if (figmaCaptureState === 'home-start') {
+        appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+        setWelcomeModalDismissedForSession(true);
+        setWelcomeDontShowAgain(false);
+        return;
+      }
+
+      if (figmaCaptureState === 'create-map') {
+        appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+        openCreateMapFlow();
+        return;
+      }
+
+      if (figmaCaptureState === 'add-home-page') {
+        appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+        startBlankMapCreation(null, 'Figma Capture Map', '');
+        return;
+      }
+    }
+
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'map' || !currentMap?.id || !root) {
+      return;
+    }
+
+    const closeCompetingPanels = () => {
+      clearCaptureModals();
+    };
+
+    const canvasNodes = collectAllNodesWithOrphans(root, orphans);
+    const focusNode = canvasNodes.find((node) => node?.id && node.id !== root.id) || root;
+    const secondaryNode = canvasNodes.find((node) => node?.id && node.id !== root.id && node.id !== focusNode?.id) || focusNode;
+    const layoutNode = mapLayout?.nodes?.get(focusNode?.id);
+    const targetConnection = Array.isArray(connections) ? connections.find(Boolean) : null;
+    const userFlowConnection = Array.isArray(connections)
+      ? connections.find((connection) => connection?.type === 'userflow')
+      : null;
+    const crosslinkConnection = Array.isArray(connections)
+      ? connections.find((connection) => connection?.type === 'crosslink' && !connection.autoRoute)
+        || connections.find((connection) => connection?.type === 'crosslink')
+      : null;
+    const fitConnectionNodes = (connection, options = {}) => {
+      if (!connection) return false;
+      return fitNodeIdsToView([connection.sourceNodeId, connection.targetNodeId], options);
+    };
+    const fitWorkspaceNodes = (nodeIds, options = {}) => {
+      if (!Array.isArray(nodeIds) || nodeIds.length === 0) return false;
+      return fitNodeIdsToView(nodeIds, options);
+    };
+    const captureCommentsByNode = buildFigmaCaptureCommentsByNode({ focusNode, secondaryNode });
+
+    if (figmaCaptureState === 'comments') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowCommentsPanel(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'comments-drawer-collapsed') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setFigmaCaptureCommentsByNode(captureCommentsByNode);
+      setFigmaCaptureExpandedCommentIds([]);
+      setSelectedCommentId('figma-comment-collapsed');
+      setShowCommentsPanel(true);
+      fitWorkspaceNodes([focusNode?.id, secondaryNode?.id], { padding: 160, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'comments-drawer-expanded') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setFigmaCaptureCommentsByNode(captureCommentsByNode);
+      setFigmaCaptureExpandedCommentIds(['figma-comment-collapsed']);
+      setSelectedCommentId('figma-comment-collapsed');
+      setShowCommentsPanel(true);
+      fitWorkspaceNodes([focusNode?.id, secondaryNode?.id], { padding: 160, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'page-details') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setEditModalMode('edit');
+      setEditModalNode(root);
+      return;
+    }
+
+    if (figmaCaptureState === 'add-page') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setEditModalMode('add');
+      setEditModalNode({ id: '', url: '', title: '', parentId: ORPHAN_PARENT_ID, children: [] });
+      return;
+    }
+
+    if (figmaCaptureState === 'comment-popover' && focusNode) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      window.setTimeout(() => openCommentPopover(focusNode), 250);
+      return;
+    }
+
+    if (figmaCaptureState === 'profile-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowProfileDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'settings-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowSettingsDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'version-history-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowVersionHistoryDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'report-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowReportDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'image-report-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowImageReportDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'image-menu') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowImageMenu(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'layers-menu') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowViewDropdown(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'legend-menu') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowColorKey(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'orientation-menu') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowSettingsDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'node-menu' && focusNode) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setSelectedNodeIds(new Set([focusNode.id]));
+      setNodeMenu({
+        nodeId: focusNode.id,
+        targetIds: [focusNode.id],
+        x: (layoutNode?.x || 420) + 220,
+        y: (layoutNode?.y || 180) + 72,
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'connection-menu' && targetConnection) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      const sourcePos = getAnchorPosition(targetConnection.sourceNodeId, targetConnection.sourceAnchor || 'right');
+      const targetPos = getAnchorPosition(targetConnection.targetNodeId, targetConnection.targetAnchor || 'left');
+      setConnectionMenu({
+        connectionId: targetConnection.id,
+        x: sourcePos && targetPos ? (sourcePos.x + targetPos.x) / 2 : 760,
+        y: sourcePos && targetPos ? (sourcePos.y + targetPos.y) / 2 : 320,
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'connectors-map' && secondaryNode) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS, userFlows: true, crossLinks: true, brokenLinks: false });
+      setSelectedNodeIds(new Set([
+        userFlowConnection?.sourceNodeId,
+        userFlowConnection?.targetNodeId,
+        crosslinkConnection?.sourceNodeId,
+        crosslinkConnection?.targetNodeId,
+      ].filter(Boolean)));
+      fitWorkspaceNodes([
+        userFlowConnection?.sourceNodeId,
+        userFlowConnection?.targetNodeId,
+        crosslinkConnection?.sourceNodeId,
+        crosslinkConnection?.targetNodeId,
+      ].filter(Boolean), { padding: 176, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'flow-connector' && userFlowConnection) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS, userFlows: true, crossLinks: false, brokenLinks: false });
+      setSelectedNodeIds(new Set([userFlowConnection.sourceNodeId, userFlowConnection.targetNodeId].filter(Boolean)));
+      fitConnectionNodes(userFlowConnection, { padding: 176, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'crosslink-connector' && crosslinkConnection) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS, userFlows: false, crossLinks: true, brokenLinks: false });
+      setSelectedNodeIds(new Set([crosslinkConnection.sourceNodeId, crosslinkConnection.targetNodeId].filter(Boolean)));
+      fitConnectionNodes(crosslinkConnection, { padding: 176, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'viewfinder') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowMinimap(true);
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS, userFlows: true, crossLinks: true, brokenLinks: false });
+      fitCurrentMapToView();
+      return;
+    }
+
+    if (figmaCaptureState === 'plans-modal') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setPlansModal({ context: 'figma-capture' });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-progress') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      applyScanProgressState();
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-cancel-confirm') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      applyScanProgressState({ cancelConfirm: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-stop-confirm') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      applyScanProgressState({ stopConfirm: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-error') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      applyScanProgressState({ errorMessage: 'The scan could not continue because the site blocked the request.' });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-limit-modal') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      clearCaptureModals();
+      setScanLimitPrompt({
+        url: currentMap?.url || root?.url || 'https://example.com',
+        preserveName: false,
+        prompt: {
+          mode: 'guest',
+          requestedPages: 60,
+          allowedPages: 15,
+          remaining: 15,
+          capped: true,
+          capReason: 'guest_limit',
+        },
+        authFlow: {},
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'entitlement-lock-modal') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setEntitlementLockModal({
+        title: 'Plan limit reached',
+        message: 'This workspace action is locked on the current plan. Upgrade to continue.',
+        actionLabel: 'View plan options',
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-auth-modal') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setScanAuthPrompt({
+        loading: false,
+        interactiveLoginSupported: false,
+        authCount: 3,
+        url: currentMap?.url || root?.url || 'https://example.com',
+        sampleUrls: [
+          'https://example.com/account',
+          'https://example.com/billing',
+          'https://example.com/settings',
+        ],
+        authBrowser: null,
+        error: '',
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'screenshot-download-upsell') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setScreenshotDownloadUpsell({
+        scope: 'selected',
+        count: 12,
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'toast-success') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setToast({ message: 'Map synced to Figma', type: 'success', persistent: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'toast-warning') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setToast({ message: 'Scan stopped. Showing current results.', type: 'warning', persistent: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'toast-error') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setToast({ message: 'Failed to capture thumbnails', type: 'error', persistent: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'toast-loading') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setToast({ message: 'Preparing image download...', type: 'loading', persistent: true });
+    }
+  // Local-only Figma capture states are guarded by figmaCaptureKey; action
+  // callbacks are intentionally read only when a new capture state is applied.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    authLoading,
+    connections,
+    currentMap?.id,
+    currentRoute?.search,
+    currentRoute?.section,
+    currentRoute?.surface,
+    figmaCaptureKey,
+    figmaCaptureState,
+    fitCurrentMapToView,
+    fitNodeIdsToView,
+    isLocalFigmaCaptureHost,
+    isLoggedIn,
+    mapLayout,
+    orphans,
+    root,
+  ]);
 
   const handleEndpointDragStart = (e, conn, endpoint) => {
     e.preventDefault();
     e.stopPropagation();
     if (!contentRef.current) return;
+    cancelActiveConnectionInteraction();
 
     // Set styles immediately
     document.body.style.userSelect = 'none';
@@ -6251,9 +16498,7 @@ export default function App() {
     const fixedPos = getAnchorPosition(fixedNodeId, fixedAnchor);
 
     if (!fixedPos) {
-      document.body.style.userSelect = '';
-      document.body.style.webkitUserSelect = '';
-      document.body.style.cursor = '';
+      resetConnectionInteractionStyles();
       return;
     }
 
@@ -6279,21 +16524,22 @@ export default function App() {
 
       const snap = findNearestAnchor(mx, my, fixedNodeId, conn.type);
 
-      setDraggingEndpoint(prev => prev ? {
-        ...prev,
-        currentX: snap ? snap.x : mx,
-        currentY: snap ? snap.y : my,
-        snapTarget: snap,
-      } : null);
+      setDraggingEndpoint(prev => {
+        if (!prev) return null;
+        const nextDraggingEndpoint = {
+          ...prev,
+          currentX: snap ? snap.x : mx,
+          currentY: snap ? snap.y : my,
+          snapTarget: snap,
+        };
+        draggingEndpointRef.current = nextDraggingEndpoint;
+        return nextDraggingEndpoint;
+      });
     };
 
     handleEndpointDragEndDoc.current = () => {
-      document.removeEventListener('mousemove', handleEndpointDragMoveDoc.current);
-      document.removeEventListener('mouseup', handleEndpointDragEndDoc.current);
-
-      document.body.style.userSelect = '';
-      document.body.style.webkitUserSelect = '';
-      document.body.style.cursor = '';
+      detachEndpointDragListeners();
+      resetConnectionInteractionStyles();
 
       setDraggingEndpoint(prev => {
         if (!prev) return null;
@@ -6303,7 +16549,7 @@ export default function App() {
         if (snap) {
           if (isLiveActive && currentMap?.id) {
             const existingConnection = connections.find((connection) => connection.id === connId);
-            const result = submitLiveDraft({
+            const result = queueLiveDraftWithUndo({
               type: 'link.update',
               payload: {
                 linkId: connId,
@@ -6337,7 +16583,7 @@ export default function App() {
           }
         } else {
           if (isLiveActive && currentMap?.id) {
-            const result = submitLiveDraft({
+            const result = queueLiveDraftWithUndo({
               type: 'link.delete',
               payload: { linkId: connId },
             });
@@ -6355,18 +16601,21 @@ export default function App() {
 
         return null;
       });
+      draggingEndpointRef.current = null;
     };
 
     // Attach listeners BEFORE setting state
     document.addEventListener('mousemove', handleEndpointDragMoveDoc.current);
     document.addEventListener('mouseup', handleEndpointDragEndDoc.current);
 
+    draggingEndpointRef.current = newDraggingState;
     setDraggingEndpoint(newDraggingState);
   };
 
   // Keep these for the content div fallback
   const handleEndpointDragMove = (e) => {
-    if (!draggingEndpoint || !contentRef.current) return;
+    const activeDraggingEndpoint = draggingEndpointRef.current || draggingEndpoint;
+    if (!activeDraggingEndpoint || !contentRef.current) return;
 
     const contentRect = contentRef.current.getBoundingClientRect();
     const mouseX = (e.clientX - contentRect.left) / scale;
@@ -6375,26 +16624,32 @@ export default function App() {
     const snapTarget = findNearestAnchor(
       mouseX,
       mouseY,
-      draggingEndpoint.fixedNodeId,
-      draggingEndpoint.type
+      activeDraggingEndpoint.fixedNodeId,
+      activeDraggingEndpoint.type
     );
 
-    setDraggingEndpoint(prev => ({
-      ...prev,
-      currentX: snapTarget ? snapTarget.x : mouseX,
-      currentY: snapTarget ? snapTarget.y : mouseY,
-      snapTarget,
-    }));
+    setDraggingEndpoint(prev => {
+      if (!prev) return null;
+      const nextDraggingEndpoint = {
+        ...prev,
+        currentX: snapTarget ? snapTarget.x : mouseX,
+        currentY: snapTarget ? snapTarget.y : mouseY,
+        snapTarget,
+      };
+      draggingEndpointRef.current = nextDraggingEndpoint;
+      return nextDraggingEndpoint;
+    });
   };
 
   const handleEndpointDragEnd = () => {
-    if (!draggingEndpoint) return;
+    const activeDraggingEndpoint = draggingEndpointRef.current || draggingEndpoint;
+    if (!activeDraggingEndpoint) return;
 
-    const { connectionId, endpoint, snapTarget } = draggingEndpoint;
+    const { connectionId, endpoint, snapTarget } = activeDraggingEndpoint;
 
     if (snapTarget) {
       if (isLiveActive && currentMap?.id) {
-        const result = submitLiveDraft({
+        const result = queueLiveDraftWithUndo({
           type: 'link.update',
           payload: {
             linkId: connectionId,
@@ -6437,7 +16692,7 @@ export default function App() {
       }
     } else {
       if (isLiveActive && currentMap?.id) {
-        const result = submitLiveDraft({
+        const result = queueLiveDraftWithUndo({
           type: 'link.delete',
           payload: { linkId: connectionId },
         });
@@ -6453,9 +16708,9 @@ export default function App() {
       }
     }
 
-    document.body.style.userSelect = '';
-    document.body.style.webkitUserSelect = '';
-    document.body.style.cursor = '';
+    detachEndpointDragListeners();
+    resetConnectionInteractionStyles();
+    draggingEndpointRef.current = null;
     setDraggingEndpoint(null);
   };
 
@@ -6474,78 +16729,6 @@ export default function App() {
     if (distToSource <= threshold) return 'source';
     if (distToTarget <= threshold) return 'target';
     return null;
-  };
-
-  const getConnectionsAtAnchor = (nodeId, anchor, asSource) => {
-    return connections.filter(conn =>
-      asSource
-        ? (conn.sourceNodeId === nodeId && conn.sourceAnchor === anchor)
-        : (conn.targetNodeId === nodeId && conn.targetAnchor === anchor)
-    );
-  };
-
-  const getAnchorSpacing = useCallback((count, anchor) => {
-    if (count <= 1) return 0;
-    const axisLength = (anchor === 'top' || anchor === 'bottom')
-      ? (LAYOUT.NODE_W - 24)
-      : (getNodeH(showThumbnails) - 24);
-    const computed = axisLength / Math.max(count - 1, 1);
-    const maxSpacing = count > 12 ? 12 : 16;
-    const minSpacing = count > 12 ? 2 : 6;
-    return Math.max(minSpacing, Math.min(maxSpacing, computed));
-  }, [showThumbnails]);
-
-  const getAnchorOffset = (conn, nodeId, anchor, isSource) => {
-    const shared = getConnectionsAtAnchor(nodeId, anchor, isSource);
-    if (shared.length <= 1) return { x: 0, y: 0 };
-
-    const index = shared.findIndex(c => c.id === conn.id);
-    const spacing = getAnchorSpacing(shared.length, anchor);
-    const offset = (index - (shared.length - 1) / 2) * spacing;
-
-    return (anchor === 'top' || anchor === 'bottom')
-      ? { x: offset, y: 0 }
-      : { x: 0, y: offset };
-  };
-
-  // Generate curved SVG path for a connection
-  const generateConnectionPath = (conn) => {
-    const baseStart = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
-    const baseEnd = getAnchorPosition(conn.targetNodeId, conn.targetAnchor);
-
-    if (!baseStart || !baseEnd) return '';
-
-    const srcOffset = getAnchorOffset(conn, conn.sourceNodeId, conn.sourceAnchor, true);
-    const tgtOffset = getAnchorOffset(conn, conn.targetNodeId, conn.targetAnchor, false);
-
-    const startPos = { x: baseStart.x + srcOffset.x, y: baseStart.y + srcOffset.y };
-    const endPos = { x: baseEnd.x + tgtOffset.x, y: baseEnd.y + tgtOffset.y };
-
-    // Calculate control points for smooth bezier curve
-    const dx = Math.abs(endPos.x - startPos.x);
-    const dy = Math.abs(endPos.y - startPos.y);
-    const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
-
-    let ctrl1 = { ...startPos };
-    let ctrl2 = { ...endPos };
-
-    // Offset control points based on anchor direction
-    switch (conn.sourceAnchor) {
-      case 'top': ctrl1.y -= offset; break;
-      case 'right': ctrl1.x += offset; break;
-      case 'bottom': ctrl1.y += offset; break;
-      case 'left': ctrl1.x -= offset; break;
-      default: break;
-    }
-    switch (conn.targetAnchor) {
-      case 'top': ctrl2.y -= offset; break;
-      case 'right': ctrl2.x += offset; break;
-      case 'bottom': ctrl2.y += offset; break;
-      case 'left': ctrl2.x -= offset; break;
-      default: break;
-    }
-
-    return `M ${startPos.x} ${startPos.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endPos.x} ${endPos.y}`;
   };
 
   const getBestAnchorPair = useCallback((sourceId, targetId) => {
@@ -6568,6 +16751,103 @@ export default function App() {
     if (!best) return null;
     return { sourceAnchor: best.sourceAnchor, targetAnchor: best.targetAnchor };
   }, [getAnchorPosition]);
+
+  const getRenderedConnectionAnchors = useCallback((conn) => {
+    if (!conn) return null;
+    if (conn.sourceAnchor && conn.targetAnchor) {
+      return {
+        sourceAnchor: conn.sourceAnchor,
+        targetAnchor: conn.targetAnchor,
+      };
+    }
+    if (conn.type === 'crosslink' && conn.autoRoute) {
+      return getBestAnchorPair(conn.sourceNodeId, conn.targetNodeId);
+    }
+    return null;
+  }, [getBestAnchorPair]);
+
+  const getConnectionEndpointsAtAnchor = (nodeId, anchor) => {
+    return connections.reduce((matches, conn) => {
+      if (conn.type !== 'userflow' && conn.type !== 'crosslink') return matches;
+      const anchors = getRenderedConnectionAnchors(conn);
+      if (!anchors) return matches;
+      if (conn.sourceNodeId === nodeId && anchors.sourceAnchor === anchor) {
+        matches.push({ connectionId: conn.id, endpoint: 'source' });
+      }
+      if (conn.targetNodeId === nodeId && anchors.targetAnchor === anchor) {
+        matches.push({ connectionId: conn.id, endpoint: 'target' });
+      }
+      return matches;
+    }, []);
+  };
+
+  const getLayoutConnectorEndpointsAtAnchor = (nodeId, anchor) => (
+    layoutConnectorEndpointReservations.get(getAnchorReservationKey(nodeId, anchor)) || []
+  );
+
+  const getAnchorSpacing = useCallback((count, anchor) => {
+    if (count <= 1) return 0;
+    const axisLength = (anchor === 'top' || anchor === 'bottom')
+      ? (LAYOUT.NODE_W - 24)
+      : (getNodeH(showThumbnails) - 24);
+    const computed = axisLength / Math.max(count - 1, 1);
+    const maxSpacing = count > 12 ? 12 : 16;
+    const minSpacing = count > 12 ? 2 : 6;
+    return Math.max(minSpacing, Math.min(maxSpacing, computed));
+  }, [showThumbnails]);
+
+  const getAnchorOffset = (conn, nodeId, anchor, endpoint) => {
+    const shared = getConnectionEndpointsAtAnchor(nodeId, anchor);
+    const layoutEndpointReservations = getLayoutConnectorEndpointsAtAnchor(nodeId, anchor);
+    const storedIndex = shared.findIndex((entry) => (
+      entry.connectionId === conn.id && entry.endpoint === endpoint
+    ));
+    const relationshipCount = shared.length + (storedIndex >= 0 ? 0 : 1);
+    const connectionCount = relationshipCount + layoutEndpointReservations.length;
+    if (connectionCount <= 1) return { x: 0, y: 0 };
+
+    const index = storedIndex >= 0 ? storedIndex : shared.length;
+    const spacing = getAnchorSpacing(connectionCount, anchor);
+    const reservedOffsets = layoutEndpointReservations.map((entry) => Number(entry.offset || 0));
+    const availableOffsets = Array.from({ length: connectionCount }, (_, slotIndex) => (
+      (slotIndex - (connectionCount - 1) / 2) * spacing
+    )).filter((slotOffset) => (
+      reservedOffsets.every((reservedOffset) => (
+        Math.abs(slotOffset - reservedOffset) > LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+      ))
+    ));
+    const fallbackEdgeIndex = Math.max(0, index - availableOffsets.length);
+    const fallbackDirection = fallbackEdgeIndex % 2 === 0 ? -1 : 1;
+    const fallbackMagnitude = ((connectionCount - 1) / 2 + Math.ceil((fallbackEdgeIndex + 1) / 2)) * spacing;
+    const offset = availableOffsets[index] ?? (fallbackDirection * fallbackMagnitude);
+
+    return (anchor === 'top' || anchor === 'bottom')
+      ? { x: offset, y: 0 }
+      : { x: 0, y: offset };
+  };
+
+  // Generate curved SVG path for a connection
+  const generateConnectionPath = (conn) => {
+    const baseStart = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
+    const baseEnd = getAnchorPosition(conn.targetNodeId, conn.targetAnchor);
+
+    if (!baseStart || !baseEnd) return '';
+
+    const srcOffset = getAnchorOffset(conn, conn.sourceNodeId, conn.sourceAnchor, 'source');
+    const tgtOffset = getAnchorOffset(conn, conn.targetNodeId, conn.targetAnchor, 'target');
+
+    const geometry = buildConnectorBezier({
+      start: baseStart,
+      end: baseEnd,
+      sourceAnchor: conn.sourceAnchor,
+      targetAnchor: conn.targetAnchor,
+      sourceOffset: srcOffset,
+      targetOffset: tgtOffset,
+      useTerminalSegment: conn.type === 'userflow',
+    });
+
+    return geometry?.path || '';
+  };
 
   // ========== END CONNECTION LINE FUNCTIONS ==========
 
@@ -6666,9 +16946,9 @@ export default function App() {
       return;
     }
     // Check orphans
-    const orphanToDelete = orphans.find(o => o.id === id);
+    const orphanToDelete = orphans.find(o => findNodeById(o, id));
     if (orphanToDelete) {
-      setDeleteConfirmNode(orphanToDelete);
+      setDeleteConfirmNode(findNodeById(orphanToDelete, id));
     }
   };
 
@@ -6678,7 +16958,7 @@ export default function App() {
     const id = deleteConfirmNode.id;
 
     if (isLiveActive && currentMap?.id) {
-      const result = submitLiveDraft({
+      const result = queueLiveDraftWithUndo({
         type: 'node.delete',
         payload: { nodeId: id },
       });
@@ -6692,8 +16972,20 @@ export default function App() {
     }
 
     // Check if it's an orphan
-    if (orphans.some(o => o.id === id)) {
-      setOrphans(prev => prev.filter(o => o.id !== id));
+    if (orphans.some(o => findNodeById(o, id))) {
+      saveStateForUndo();
+      setOrphans((prev) => {
+        const next = structuredClone(prev);
+        const topLevelIndex = next.findIndex((orphan) => orphan.id === id);
+        if (topLevelIndex !== -1) {
+          next.splice(topLevelIndex, 1);
+          return next;
+        }
+        for (const orphan of next) {
+          if (removeNodeFromTreeById(orphan, id)) return next;
+        }
+        return prev;
+      });
       setDeleteConfirmNode(null);
       return;
     }
@@ -6741,7 +17033,37 @@ export default function App() {
     return null;
   };
 
-  const openEditModal = (node) => {
+  const openEditModal = async (node) => {
+    duplicateSourceNodeIdRef.current = null;
+    if (useLargeMapSurface && currentMap?.id && node?.id) {
+      const fetchToken = largeMapEditFetchTokenRef.current + 1;
+      largeMapEditFetchTokenRef.current = fetchToken;
+      const cachedNode = largeMapNodeCacheRef.current.get(String(node.id));
+      const fallbackNode = mergeLargeMapNodeSnapshot(cachedNode, node, {
+        preserveExistingAssetsOnEmpty: true,
+      }) || node;
+      setEditModalMode('edit');
+      setEditModalNode(buildLargeMapEditModalNode(fallbackNode, { detailsVersion: 'cached' }));
+      try {
+        const response = await api.getMapNode(currentMap.id, node.id);
+        if (largeMapEditFetchTokenRef.current !== fetchToken) return;
+        const fetchedNode = mergeLargeMapNodeSnapshot(fallbackNode, response?.node, {
+          preserveExistingAssetsOnEmpty: false,
+        }) || fallbackNode;
+        mergeLargeMapNodeCache(fetchedNode, { preserveExistingAssetsOnEmpty: false });
+        setEditModalNode((current) => {
+          if (!current || !sameId(current.id, node.id)) return current;
+          return buildLargeMapEditModalNode(fetchedNode, { detailsVersion: 'loaded' });
+        });
+      } catch (error) {
+        console.warn('Failed to load large-map node details', error);
+        if (largeMapEditFetchTokenRef.current === fetchToken) {
+          showToast(error?.message || 'Some page details could not be loaded', 'warning');
+        }
+      }
+      return;
+    }
+
     const orphanRoot = findOrphanTreeRoot(node.id);
     if (orphanRoot) {
       const orphanParent = findParent(orphanRoot, node.id);
@@ -6764,6 +17086,7 @@ export default function App() {
   };
 
   const duplicateNode = (node) => {
+    duplicateSourceNodeIdRef.current = node?.id || null;
     const orphanRoot = findOrphanTreeRoot(node.id);
     if (orphanRoot) {
       const orphanParent = findParent(orphanRoot, node.id);
@@ -6784,7 +17107,7 @@ export default function App() {
       ...node,
       id: undefined, // Will get a new ID
       title: `${node.title} (Copy)`,
-      parentId: parent?.id || '',
+      parentId: getDuplicateNodeDefaultParentId({ node, parent, rootNode: root }),
     });
     setEditModalMode('duplicate');
   };
@@ -6795,8 +17118,16 @@ export default function App() {
     const status = incoming?.status ?? existing?.status ?? 'none';
     const tags = Array.isArray(incoming?.tags) ? incoming.tags : (existing?.tags || []);
     const note = typeof incoming?.note === 'string' ? incoming.note : (existing?.note || '');
+    const existingMeta = existing?.meta && typeof existing.meta === 'object' && !Array.isArray(existing.meta)
+      ? existing.meta
+      : {};
+    const incomingMeta = incoming?.meta && typeof incoming.meta === 'object' && !Array.isArray(incoming.meta)
+      ? incoming.meta
+      : {};
     const meta = {
-      createdAt: existing?.meta?.createdAt || incoming?.meta?.createdAt || now,
+      ...existingMeta,
+      ...incomingMeta,
+      createdAt: existingMeta.createdAt || incomingMeta.createdAt || now,
       updatedAt: now,
     };
     return { status, tags, note, meta };
@@ -6809,6 +17140,23 @@ export default function App() {
     if (currentStatus === 'moved' || currentStatus === 'deleted' || currentStatus === 'to_delete') return;
     node.annotations = buildAnnotations({ status: 'moved' }, node.annotations);
   };
+
+  const buildMoveRootChanges = (node) => {
+    if (!shouldAutoMarkMoved) return null;
+    if (!hasAssignedUrl(node)) return null;
+    const currentStatus = node?.annotations?.status || 'none';
+    if (currentStatus === 'moved' || currentStatus === 'deleted' || currentStatus === 'to_delete') return null;
+    return {
+      annotations: buildAnnotations({ status: 'moved' }, node.annotations),
+    };
+  };
+
+  const uploadNodeImageAsset = useCallback(async ({ nodeId, imageDataUrl }) => {
+    if (!currentMap?.id) {
+      throw new Error('Save this map before uploading image files.');
+    }
+    return api.uploadMapNodeAsset(currentMap.id, { nodeId, imageDataUrl });
+  }, [currentMap?.id]);
 
   const saveNodeChanges = (updatedNode) => {
     // Helper to find parent in a tree
@@ -6867,10 +17215,17 @@ export default function App() {
     const isCurrentlyOrphan = !!findOrphanTreeRoot(updatedNode.id);
     const parentSelection = normalizeParentSelection(updatedNode.parentId);
     const newParentId = parentSelection.resolvedParentId;
+    const existingHomeNode = collectAllNodesWithOrphans(root, orphans)
+      .find((node) => node?.pageType === PAGE_TYPE_HOME && (editModalMode !== 'edit' || node.id !== updatedNode.id));
+
+    if (updatedNode.pageType === PAGE_TYPE_HOME && existingHomeNode) {
+      showToast('Home page type can only be used once', 'warning');
+      return;
+    }
 
     if (isLiveActive && currentMap?.id) {
-      const submitLiveNodeChange = (draft, successMessage) => {
-        const result = submitLiveDraft(draft);
+      const submitLiveNodeChange = (draft, successMessage, snapshot = null) => {
+        const result = queueLiveDraftWithUndo(draft, snapshot);
         if (!result.ok) {
           showToast(result.error || 'Failed to stage live edit', 'error');
           return false;
@@ -6915,7 +17270,7 @@ export default function App() {
 
         const nextAnnotations = buildAnnotations(updatedNode.annotations, currentNode.annotations);
         const changes = {};
-        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'description', 'metaTags'];
+        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl', 'description', 'metaTags', 'canonicalUrl', 'seoMetadata'];
         fields.forEach((field) => {
           const nextValue = updatedNode[field];
           const currentValue = currentNode[field];
@@ -6949,12 +17304,17 @@ export default function App() {
         } else {
           const now = new Date().toISOString();
           const nextNode = {
+            ...updatedNode,
             url: updatedNode.url || '',
             title: updatedNode.title || 'New Page',
-            pageType: updatedNode.pageType || 'page',
+            pageType: updatedNode.pageType || PAGE_TYPE_PAGE,
             thumbnailUrl: updatedNode.thumbnailUrl || '',
+            thumbnailFullUrl: updatedNode.thumbnailFullUrl || '',
+            fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
             description: updatedNode.description || '',
-            metaTags: updatedNode.metaTags || {},
+            metaTags: updatedNode.metaTags || '',
+            canonicalUrl: updatedNode.canonicalUrl || '',
+            seoMetadata: updatedNode.seoMetadata || {},
             annotations: buildAnnotations(updatedNode.annotations, {
               status: 'none',
               tags: [],
@@ -6983,7 +17343,13 @@ export default function App() {
             }
           }
 
-          submitLiveNodeChange({
+          const duplicateSourceNodeId = editModalMode === 'duplicate'
+            ? duplicateSourceNodeIdRef.current
+            : null;
+          if (editModalMode === 'duplicate') {
+            queueCreatedNodeViewReveal(nextNode.id, duplicateSourceNodeId);
+          }
+          const submitted = submitLiveNodeChange({
             type: 'node.add',
             payload: {
               nodeId: nextNode.id,
@@ -6992,6 +17358,12 @@ export default function App() {
               node: nextNode,
             },
           }, editModalMode === 'duplicate' ? 'Copy queued' : 'Page queued');
+          if (editModalMode === 'duplicate') {
+            duplicateSourceNodeIdRef.current = null;
+            if (!submitted && pendingCreatedNodeViewRef.current?.nodeId === nextNode.id) {
+              pendingCreatedNodeViewRef.current = null;
+            }
+          }
           return;
         }
       }
@@ -7020,8 +17392,12 @@ export default function App() {
             url: updatedNode.url,
             pageType: updatedNode.pageType,
             thumbnailUrl: updatedNode.thumbnailUrl,
+            thumbnailFullUrl: updatedNode.thumbnailFullUrl,
+            fullScreenshotUrl: updatedNode.fullScreenshotUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
+            canonicalUrl: updatedNode.canonicalUrl,
+            seoMetadata: updatedNode.seoMetadata,
             annotations: buildAnnotations(updatedNode.annotations, removedNode.annotations),
           });
           maybeMarkNodeMoved(removedNode);
@@ -7061,8 +17437,12 @@ export default function App() {
               url: updatedNode.url,
               pageType: updatedNode.pageType,
               thumbnailUrl: updatedNode.thumbnailUrl,
+              thumbnailFullUrl: updatedNode.thumbnailFullUrl,
+              fullScreenshotUrl: updatedNode.fullScreenshotUrl,
               description: updatedNode.description,
               metaTags: updatedNode.metaTags,
+              canonicalUrl: updatedNode.canonicalUrl,
+              seoMetadata: updatedNode.seoMetadata,
               annotations: buildAnnotations(updatedNode.annotations, target.annotations),
             });
 
@@ -7111,8 +17491,12 @@ export default function App() {
             url: updatedNode.url,
             pageType: updatedNode.pageType,
             thumbnailUrl: updatedNode.thumbnailUrl,
+            thumbnailFullUrl: updatedNode.thumbnailFullUrl,
+            fullScreenshotUrl: updatedNode.fullScreenshotUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
+            canonicalUrl: updatedNode.canonicalUrl,
+            seoMetadata: updatedNode.seoMetadata,
             annotations: buildAnnotations(updatedNode.annotations, target.annotations),
           });
 
@@ -7164,6 +17548,8 @@ export default function App() {
       };
 
       saveStateForUndo();
+      queueCreatedNodeViewReveal(newNode.id, duplicateSourceNodeIdRef.current);
+      duplicateSourceNodeIdRef.current = null;
 
       const newParentInOrphans = findNodeInOrphans(newParentId);
 
@@ -7202,10 +17588,14 @@ export default function App() {
       const newNodeData = {
         url: updatedNode.url || '',
         title: updatedNode.title || 'New Page',
-        pageType: updatedNode.pageType || 'page',
+        pageType: !root ? PAGE_TYPE_HOME : (updatedNode.pageType || PAGE_TYPE_PAGE),
         thumbnailUrl: updatedNode.thumbnailUrl || '',
+        thumbnailFullUrl: updatedNode.thumbnailFullUrl || '',
+        fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
         description: updatedNode.description || '',
-        metaTags: updatedNode.metaTags || {},
+        metaTags: updatedNode.metaTags || '',
+        canonicalUrl: updatedNode.canonicalUrl || '',
+        seoMetadata: updatedNode.seoMetadata || {},
         annotations: buildAnnotations(updatedNode.annotations, {
           status: 'none',
           tags: [],
@@ -7219,7 +17609,9 @@ export default function App() {
       if (!root) { // This is the first page, so it becomes the root.
         const newRoot = { ...newNodeData, id: 'root' };
         const mapNameToUse = pendingMapCreation?.name || currentMap?.name || mapName || 'Untitled Map';
-        const projectIdToUse = pendingMapCreation?.projectId || currentMap?.project_id || null;
+        const projectIdToUse = normalizeProjectSelection(
+          pendingMapCreation?.projectId || currentMap?.project_id || null
+        );
         const mapNotesToUse = pendingMapCreation?.notes || currentMap?.notes || '';
 
         const mapToSave = {
@@ -7233,11 +17625,29 @@ export default function App() {
         };
 
         api.saveMap(mapToSave)
-          .then(({ map }) => {
+          .then(async ({ map, initialVersion }) => {
             setRoot(newRoot);
             setCurrentMap(map);
+            navigateToRoute(createMapRoute(map.id));
             setMapName(map.name);
+            resetAutosaveTracking({
+              snapshot: serializeMapAutosaveSnapshot({
+                name: map.name,
+                root: newRoot,
+                orphans: [],
+                connections: [],
+                colors: DEFAULT_COLORS,
+                connectionColors: DEFAULT_CONNECTION_COLORS,
+                project_id: map?.project_id || null,
+              }),
+            });
             setPendingMapCreation(null);
+            if (initialVersion) {
+              setMapVersions([initialVersion]);
+              setLatestVersionId(initialVersion.id);
+            }
+            pendingInitialCenterRef.current = true;
+            scheduleResetViewRef.current?.();
 
             setProjects(prev => {
               let updated = prev.map(p => ({
@@ -7272,6 +17682,8 @@ export default function App() {
               return updated;
             });
 
+            await loadMapVersions(map.id);
+            await loadMapActivity(map.id, { silent: true, allowToast: false });
             showToast('Map created and first page added!', 'success');
           })
           .catch(e => {
@@ -7321,169 +17733,47 @@ export default function App() {
   // ========== DRAG & DROP ==========
 
   const moveNode = (nodeId, newParentId, insertIndex) => {
-    if (isLiveActive) {
-      warnLiveModeUnsupported('Drag-to-reparent is disabled in live editing until structural moves are supported.');
-      return;
-    }
     if (!root || nodeId === root.id) return;
     if (nodeId === newParentId) return;
-    const sourceMeta = forestIndex.nodes.get(nodeId);
-    const targetMeta = forestIndex.nodes.get(newParentId);
-    if (!sourceMeta) return;
-    if (!canMoveNode(nodeId, newParentId)) return;
+    const sourceNode = getNodeById(nodeId);
+    const rootChanges = buildMoveRootChanges(sourceNode);
 
-    const getTreeRootById = (treeRootId, rootTree, orphanTrees) => {
-      if (!treeRootId) return null;
-      if (rootTree?.id === treeRootId) return rootTree;
-      return orphanTrees.find(o => o.id === treeRootId) || null;
-    };
-
-    const sourceTreeRoot = getTreeRootById(sourceMeta.treeRootId, root, orphans);
-    const targetTreeRoot = targetMeta
-      ? getTreeRootById(targetMeta.treeRootId, root, orphans)
-      : null;
-    if (!sourceTreeRoot) return;
-
-    // Prevent dropping into a descendant within the same tree
-    if (targetMeta && sourceMeta.treeRootId === targetMeta.treeRootId) {
-      if (isDescendantOf(sourceTreeRoot, newParentId, nodeId)) return;
-    }
-
-    const removeFromTree = (tree, targetId) => {
-      if (!tree?.children?.length) return null;
-      const idx = tree.children.findIndex(c => c.id === targetId);
-      if (idx !== -1) {
-        return tree.children.splice(idx, 1)[0];
+    if (isLiveActive && currentMap?.id) {
+      const result = queueLiveDraftWithUndo({
+        type: 'node.move',
+        payload: {
+          nodeId,
+          targetParentId: newParentId,
+          insertIndex,
+          rootChanges,
+          markMovedPositionChanges: shouldAutoMarkMoved,
+        },
+      });
+      if (!result.ok) {
+        showToast(result.error || 'Failed to move branch', 'error');
       }
-      for (const child of tree.children) {
-        const removed = removeFromTree(child, targetId);
-        if (removed) return removed;
-      }
-      return null;
-    };
-
-    const clearTreeFlags = (node) => {
-      if (!node) return;
-      if (node.subdomainRoot) node.subdomainRoot = false;
-      if (node.orphanType === 'orphan' || node.orphanType === 'subdomain') {
-        delete node.orphanType;
-      }
-      node.children?.forEach(clearTreeFlags);
-    };
-
-    const applyTreeTypeFlags = (node, treeType) => {
-      if (!node) return;
-      if (treeType === 'subdomain') {
-        node.orphanType = 'subdomain';
-        node.subdomainRoot = false;
-      } else if (treeType === 'orphan') {
-        node.orphanType = 'orphan';
-        node.subdomainRoot = false;
-      }
-      node.children?.forEach((child) => applyTreeTypeFlags(child, treeType));
-    };
-
-    const purgeNodeFromTree = (tree, targetId) => {
-      if (!tree?.children?.length) return;
-      tree.children = tree.children.filter((child) => child.id !== targetId);
-      tree.children.forEach((child) => purgeNodeFromTree(child, targetId));
-    };
-
-    const applyRootFlags = (node, type) => {
-      if (!node) return;
-      if (type === 'subdomain') {
-        node.subdomainRoot = true;
-        if (!node.orphanType || node.orphanType === 'orphan') node.orphanType = 'subdomain';
-      } else {
-        node.subdomainRoot = false;
-        if (!node.orphanType || node.orphanType === 'subdomain') node.orphanType = 'orphan';
-      }
-    };
-
-    saveStateForUndo();
-
-    let nextRoot = structuredClone(root);
-    let nextOrphans = structuredClone(orphans);
-
-    const getMutableTreeRoot = (treeRootId) => (
-      treeRootId === nextRoot?.id
-        ? nextRoot
-        : nextOrphans.find(o => o.id === treeRootId)
-    );
-
-    const sourceTree = getMutableTreeRoot(sourceMeta.treeRootId);
-    if (!sourceTree) return;
-
-    let removedNode = null;
-    let oldParent = null;
-    let oldIndex = -1;
-
-    if (sourceTree.id === nodeId) {
-      // Removing an orphan/subdomain tree root
-      if (sourceTree.id === nextRoot?.id) return;
-      const idx = nextOrphans.findIndex(o => o.id === nodeId);
-      if (idx === -1) return;
-      removedNode = nextOrphans.splice(idx, 1)[0];
-    } else {
-      oldParent = findParent(sourceTree, nodeId);
-      if (oldParent) {
-        oldIndex = oldParent.children.findIndex(c => c.id === nodeId);
-      }
-      removedNode = removeFromTree(sourceTree, nodeId);
-    }
-
-    if (!removedNode) return;
-
-    maybeMarkNodeMoved(removedNode);
-
-    if (nextRoot) purgeNodeFromTree(nextRoot, nodeId);
-    nextOrphans = nextOrphans.filter((orphan) => orphan.id !== nodeId);
-    nextOrphans.forEach((orphan) => purgeNodeFromTree(orphan, nodeId));
-
-    if (newParentId === ORPHAN_CONTAINER_ID || newParentId === SUBDOMAIN_CONTAINER_ID) {
-      const isSubdomain = newParentId === SUBDOMAIN_CONTAINER_ID;
-      const orderedRoots = nextOrphans.filter(o => !!o.subdomainRoot === isSubdomain);
-      const rootIds = orderedRoots.map(o => o.id);
-      const fullIndex = (() => {
-        if (rootIds.length === 0) return nextOrphans.length;
-        if (insertIndex >= rootIds.length) {
-          const lastId = rootIds[rootIds.length - 1];
-          const lastIdx = nextOrphans.findIndex(o => o.id === lastId);
-          return lastIdx === -1 ? nextOrphans.length : lastIdx + 1;
-        }
-        const targetId = rootIds[insertIndex];
-        const targetIdx = nextOrphans.findIndex(o => o.id === targetId);
-        return targetIdx === -1 ? nextOrphans.length : targetIdx;
-      })();
-
-      clearTreeFlags(removedNode);
-      applyRootFlags(removedNode, isSubdomain ? 'subdomain' : 'orphan');
-      nextOrphans.splice(fullIndex, 0, removedNode);
-      setRoot(nextRoot);
-      setOrphans(nextOrphans);
       return;
     }
 
-    const targetTree = targetTreeRoot ? getMutableTreeRoot(targetMeta.treeRootId) : null;
-    if (!targetTree) return;
-    const newParent = findNodeById(targetTree, newParentId);
-    if (!newParent) return;
-
-    let adjustedIndex = insertIndex;
-    if (targetMeta && sourceMeta.treeRootId === targetMeta.treeRootId && oldParent?.id === newParentId && oldIndex !== -1) {
-      if (oldIndex < insertIndex) adjustedIndex = insertIndex - 1;
+    const result = applyBranchMoveToMap({
+      root,
+      orphans,
+      nodeId,
+      targetParentId: newParentId,
+      insertIndex,
+      rootChanges,
+      markMovedPositionChanges: shouldAutoMarkMoved,
+      orphanContainerId: ORPHAN_CONTAINER_ID,
+      subdomainContainerId: SUBDOMAIN_CONTAINER_ID,
+    });
+    if (!result.ok) {
+      if (result.error) showToast(result.error, 'warning');
+      return;
     }
 
-    clearTreeFlags(removedNode);
-    if (targetMeta?.treeType === 'orphan' || targetMeta?.treeType === 'subdomain') {
-      applyTreeTypeFlags(removedNode, targetMeta.treeType);
-    }
-
-    newParent.children = newParent.children || [];
-    newParent.children.splice(adjustedIndex, 0, removedNode);
-
-    setRoot(nextRoot);
-    setOrphans(nextOrphans);
+    saveStateForUndo();
+    setRoot(result.root);
+    setOrphans(result.orphans);
   };
 
   // Calculate all valid drop zones based on current DOM positions
@@ -7534,6 +17824,7 @@ export default function App() {
       // Get depth from the positioned wrapper element
       const positionedWrapper = card.closest('[data-depth]');
       const depth = parseInt(positionedWrapper?.getAttribute('data-depth') || '0', 10);
+      const useHorizontalMapDropZones = mapOrientation === MAP_ORIENTATIONS.HORIZONTAL;
 
       // Root-level orphans/subdomains: allow sibling zones using container targets
       if (!parent && nodeMeta.treeType !== 'root') {
@@ -7545,33 +17836,57 @@ export default function App() {
 
         if (displayIndex !== -1) {
           const insertIndexBefore = displayCount - displayIndex;
-          zones.push({
-            type: 'sibling-root',
-            layout: 'horizontal',
-            parentId: containerId,
-            index: insertIndexBefore,
-            x: rect.left - 24,
-            y: rect.top + rect.height / 2,
-            allowed: canMoveNode(draggedNodeId, containerId),
-          });
-          if (displayIndex === displayCount - 1) {
-            const insertIndexAfter = displayCount - (displayIndex + 1);
+          if (useHorizontalMapDropZones) {
+            zones.push({
+              type: 'sibling-root',
+              layout: 'vertical',
+              parentId: containerId,
+              index: insertIndexBefore,
+              x: rect.left + rect.width / 2,
+              y: rect.top - 28,
+              allowed: canMoveNode(draggedNodeId, containerId),
+            });
+          } else {
             zones.push({
               type: 'sibling-root',
               layout: 'horizontal',
               parentId: containerId,
-              index: insertIndexAfter,
-              x: rect.right + 24,
+              index: insertIndexBefore,
+              x: rect.left - 24,
               y: rect.top + rect.height / 2,
               allowed: canMoveNode(draggedNodeId, containerId),
             });
+          }
+          if (displayIndex === displayCount - 1) {
+            const insertIndexAfter = displayCount - (displayIndex + 1);
+            if (useHorizontalMapDropZones) {
+              zones.push({
+                type: 'sibling-root',
+                layout: 'vertical',
+                parentId: containerId,
+                index: insertIndexAfter,
+                x: rect.left + rect.width / 2,
+                y: rect.bottom + 28,
+                allowed: canMoveNode(draggedNodeId, containerId),
+              });
+            } else {
+              zones.push({
+                type: 'sibling-root',
+                layout: 'horizontal',
+                parentId: containerId,
+                index: insertIndexAfter,
+                x: rect.right + 24,
+                y: rect.top + rect.height / 2,
+                allowed: canMoveNode(draggedNodeId, containerId),
+              });
+            }
           }
         }
       }
 
       // Add sibling drop zones (before this node)
       // Level 1 (depth=1) uses horizontal layout, Level 2+ (depth>1) uses vertical
-      if (depth === 1 && parent) {
+      if (depth === 1 && parent && !useHorizontalMapDropZones) {
         // Horizontal layout (Level 1) - drop zones to left/right
         zones.push({
           type: 'sibling',
@@ -7594,8 +17909,8 @@ export default function App() {
             allowed: canMoveNode(draggedNodeId, parent.id),
           });
         }
-      } else if (depth > 1 && parent) {
-        // Vertical layout (Level 2+) - drop zones above/below ONLY
+      } else if (depth > 0 && parent) {
+        // Vertical sibling layout - drop zones above/below ONLY
         zones.push({
           type: 'sibling',
           layout: 'vertical',
@@ -7624,13 +17939,18 @@ export default function App() {
       // Position below the card with GAP_STACK_Y spacing, center of the zone
       if (!node.children?.length) {
         const childZoneHeight = 200; // Use collapsed height as reference
+        const childZoneWidth = 288;
         zones.push({
           type: 'child',
-          layout: 'vertical',
+          layout: useHorizontalMapDropZones ? 'horizontal' : 'vertical',
           parentId: nodeId,
           index: 0,
-          x: rect.left + rect.width / 2,
-          y: rect.bottom + 60 + childZoneHeight / 2, // Top of zone at rect.bottom + 60
+          x: useHorizontalMapDropZones
+            ? rect.right + 60 + childZoneWidth / 2
+            : rect.left + rect.width / 2,
+          y: useHorizontalMapDropZones
+            ? rect.top + rect.height / 2
+            : rect.bottom + 60 + childZoneHeight / 2,
           allowed: canMoveNode(draggedNodeId, nodeId),
         });
       }
@@ -7697,6 +18017,29 @@ export default function App() {
     return nearest;
   };
 
+  const getDndCursorPoint = (event) => {
+    const delta = event?.delta || { x: 0, y: 0 };
+    const activatorEvent = event?.activatorEvent;
+    const touch = activatorEvent?.touches?.[0] || activatorEvent?.changedTouches?.[0];
+    const clientX = typeof activatorEvent?.clientX === 'number' ? activatorEvent.clientX : touch?.clientX;
+    const clientY = typeof activatorEvent?.clientY === 'number' ? activatorEvent.clientY : touch?.clientY;
+
+    if (typeof clientX === 'number' && typeof clientY === 'number') {
+      return {
+        x: clientX + delta.x,
+        y: clientY + delta.y,
+      };
+    }
+
+    const activatorRect = event?.active?.rect?.current?.initial;
+    if (!activatorRect) return null;
+
+    return {
+      x: activatorRect.left + activatorRect.width / 2 + delta.x,
+      y: activatorRect.top + activatorRect.height / 2 + delta.y,
+    };
+  };
+
   // dnd-kit drag handlers
   const handleDndDragStart = (event) => {
     const { active } = event;
@@ -7710,20 +18053,17 @@ export default function App() {
   };
 
   const handleDndDragMove = (event) => {
-    const { active, delta } = event;
+    const { active } = event;
     if (!active) return;
 
-    const activatorRect = active.rect.current.initial;
-    if (!activatorRect) return;
-
-    const currentX = activatorRect.left + activatorRect.width / 2 + delta.x;
-    const currentY = activatorRect.top + activatorRect.height / 2 + delta.y;
+    const cursorPoint = getDndCursorPoint(event);
+    if (!cursorPoint) return;
 
     // Store cursor position for proximity filtering
-    setDragCursor({ x: currentX, y: currentY });
+    setDragCursor(cursorPoint);
 
     // Find nearest drop zone
-    const nearest = findNearestDropZone(currentX, currentY, active.id, 80, { includeDisabled: true });
+    const nearest = findNearestDropZone(cursorPoint.x, cursorPoint.y, active.id, 80, { includeDisabled: true });
     setActiveDropZone(nearest);
   };
 
@@ -7731,14 +18071,10 @@ export default function App() {
     const { active } = event;
     const draggedNodeId = active.id;
 
-    // Get final pointer position from the event
-    // dnd-kit provides activatorEvent which has the original pointer position
-    // We need to calculate final position from delta
-    const delta = event.delta || { x: 0, y: 0 };
-    const activatorRect = active.rect.current.initial;
-    if (activatorRect) {
-      const finalX = activatorRect.left + activatorRect.width / 2 + delta.x;
-      const finalY = activatorRect.top + activatorRect.height / 2 + delta.y;
+    const cursorPoint = getDndCursorPoint(event);
+    if (cursorPoint) {
+      const finalX = cursorPoint.x;
+      const finalY = cursorPoint.y;
 
       // Find nearest drop zone
       const dropZone = findNearestDropZone(finalX, finalY, draggedNodeId, 80);
@@ -7789,7 +18125,7 @@ export default function App() {
     const snapshot = colorEditSnapshotRef.current;
     if (snapshot && hasColorSnapshotChanged(snapshot)) {
       if (isLiveActive && currentMap?.id) {
-        const result = submitLiveDraft({
+        const result = queueLiveDraftWithUndo({
           type: 'metadata.update',
           payload: {
             changes: {
@@ -7797,7 +18133,7 @@ export default function App() {
               connectionColors: { ...connectionColors },
             },
           },
-        });
+        }, snapshot);
         if (!result.ok) {
           showToast(result.error || 'Failed to queue color changes', 'error');
         }
@@ -7812,9 +18148,9 @@ export default function App() {
     currentMap?.id,
     hasColorSnapshotChanged,
     isLiveActive,
+    queueLiveDraftWithUndo,
     saveStateForUndo,
     showToast,
-    submitLiveDraft,
   ]);
 
   const beginColorEdit = useCallback(() => {
@@ -7829,76 +18165,145 @@ export default function App() {
   }, [commitColorUndoIfChanged, root, orphans, connections, colors, connectionColors]);
 
   const getMoveBlockReason = useCallback((sourceId, targetParentId) => {
-    if (!sourceId || !targetParentId) return 'Select a valid drop target.';
-    const sourceMeta = forestIndex.nodes.get(sourceId);
-    if (!sourceMeta) return null;
-
-    if (targetParentId === ORPHAN_CONTAINER_ID) {
-      if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
-        return 'Subdomain page with a URL can only move within its own subdomain.';
-      }
-      return null;
-    }
-
-    if (targetParentId === SUBDOMAIN_CONTAINER_ID && sourceMeta.hasUrl) {
-      return 'Subdomain root requires a blank URL.';
-    }
-
-    const targetMeta = forestIndex.nodes.get(targetParentId);
-    if (!targetMeta) return null;
-
-    const targetTree = forestIndex.trees.get(targetMeta.treeRootId);
-    if (!targetTree) return null;
-
-    if (targetTree.type === 'subdomain' && sourceMeta.hasUrl && sourceMeta.treeType !== 'subdomain') {
-      return 'Pages with URLs can’t be moved under a subdomain. Clear the URL first.';
-    }
-
-    if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
-      if (sourceMeta.treeRootId !== targetMeta.treeRootId) {
-        return 'Subdomain page with a URL can only move within its own subdomain.';
-      }
-    }
-
-    return null;
-  }, [forestIndex]);
+    return getBranchMoveBlockReason({
+      root,
+      orphans,
+      nodeId: sourceId,
+      targetParentId,
+      orphanContainerId: ORPHAN_CONTAINER_ID,
+      subdomainContainerId: SUBDOMAIN_CONTAINER_ID,
+    });
+  }, [orphans, root]);
 
   // Centralized drag/move rules for tree movement
   const canMoveNode = useCallback((sourceId, targetParentId) => {
-    if (!sourceId || !targetParentId) return false;
-    const sourceMeta = forestIndex.nodes.get(sourceId);
-    if (!sourceMeta) return false;
+    return !getMoveBlockReason(sourceId, targetParentId);
+  }, [getMoveBlockReason]);
 
-    // Subdomain pages with URLs are locked to their own subdomain tree
-    if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
-      const targetMeta = forestIndex.nodes.get(targetParentId);
-      return !!targetMeta && sourceMeta.treeRootId === targetMeta.treeRootId;
-    }
+  const getImportPageLimitBlock = useCallback((pageCount) => {
+    const safePageCount = Math.max(0, Math.floor(Number(pageCount || 0)));
+    const entitlements = currentUser?.entitlements || null;
+    const activePageLimit = entitlements?.limits?.activePages
+      || entitlements?.meters?.activePages
+      || entitlements?.meters?.crawlPages
+      || null;
+    if (!isLoggedIn || !activePageLimit || activePageLimit.unlimited) return null;
 
-    // Any node without an assigned URL can be dragged anywhere
-    if (!sourceMeta.hasUrl) return true;
+    const availablePages = Math.max(0, Math.floor(Number(activePageLimit.remaining || 0)));
+    if (safePageCount <= availablePages) return null;
 
-    // Container-level drops (root-level orphan/subdomain)
-    if (targetParentId === ORPHAN_CONTAINER_ID) return true;
-    if (targetParentId === SUBDOMAIN_CONTAINER_ID) return !sourceMeta.hasUrl;
+    return {
+      pageCount: safePageCount,
+      availablePages,
+      planName: entitlements?.plan?.name || 'current plan',
+      canManageBilling: isPrimaryBillingOwner,
+    };
+  }, [currentUser?.entitlements, isLoggedIn, isPrimaryBillingOwner]);
 
-    const targetMeta = forestIndex.nodes.get(targetParentId);
-    if (!targetMeta) return false;
-
-    const targetTree = forestIndex.trees.get(targetMeta.treeRootId);
-    if (!targetTree) return false;
-
-    if (targetTree.type === 'subdomain' && sourceMeta.hasUrl && sourceMeta.treeType !== 'subdomain') {
+  const applyImportedMap = (imported, {
+    originalPageCount = null,
+    partial = false,
+    defaultName = '',
+  } = {}) => {
+    if (!imported?.root) {
+      showToast('Could not build sitemap from URLs', 'error');
       return false;
     }
 
-    // Root/Orphan/Subdomain-without-URL can move anywhere else
+    const importedRoot = stripImportedImageState(imported.root);
+    const importedOrphans = (imported.orphans || []).map(stripImportedImageState);
+    const importedConnections = imported.connections || [];
+    const importedColors = imported.colors || DEFAULT_COLORS;
+    const importedConnectionColors = imported.connectionColors || DEFAULT_CONNECTION_COLORS;
+    const importedPageCount = Math.max(1,
+      countNodes(importedRoot)
+      + importedOrphans.reduce((total, orphan) => total + countNodes(orphan), 0)
+    );
+    const sourceCount = Math.max(importedPageCount, Math.floor(Number(originalPageCount || importedPageCount)));
+    const entitlementMeta = partial ? {
+      capped: true,
+      limitReached: true,
+      source: 'import',
+      partialReason: 'import_page_limit',
+      allowedPages: importedPageCount,
+      visiblePageLimit: importedPageCount,
+      visiblePageCount: importedPageCount,
+      requestedPages: sourceCount,
+      sourcePageCount: sourceCount,
+      lockedPageEstimate: Math.max(0, sourceCount - importedPageCount),
+    } : null;
+    const displayImported = partial
+      ? addScanLimitGhosts(importedRoot, importedOrphans, entitlementMeta)
+      : { root: importedRoot, orphans: importedOrphans };
+    const nextRoot = displayImported.root;
+    const nextOrphans = displayImported.orphans || [];
+
+    setRoot(nextRoot);
+    setOrphans(nextOrphans);
+    setConnections(importedConnections);
+    setColors(importedColors);
+    setConnectionColors(importedConnectionColors);
+    setScanMeta(partial ? {
+      brokenLinks: [],
+      partial: true,
+      partialReason: 'import_page_limit',
+      scanDiagnostics: null,
+      entitlement: entitlementMeta,
+    } : { brokenLinks: [] });
+    setCurrentMap(null);
+    navigateToRoute(createAppHomeRoute());
+    setIsImportedMap(true);
+    setDraftVersionFromSnapshot({
+      root: nextRoot,
+      orphans: nextOrphans,
+      connections: importedConnections,
+      colors: importedColors,
+      connectionColors: importedConnectionColors,
+    }, 'Updated');
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    queueNormalMapInitialCenter({
+      pendingInitialCenterRef,
+      pendingInitialLargeMapCenterRef,
+      scheduleResetViewRef,
+      attempts: 20,
+    });
+    setUrlInput(nextRoot.url || '');
+    setMapName(defaultName || imported.defaultMapName || '');
+    setShowImportModal(false);
+    showToast(
+      partial
+        ? `Imported ${formatEntitlementCount(importedPageCount)} of ${formatEntitlementCount(sourceCount)} pages from ${imported.parseType}`
+        : `Imported ${formatEntitlementCount(importedPageCount)} pages from ${imported.parseType}`,
+      partial ? 'warning' : 'success'
+    );
     return true;
-  }, [forestIndex]);
+  };
+
+  const requireImportAuth = useCallback(() => {
+    if (isLoggedIn) return true;
+    setShowImportModal(false);
+    setBlankUploadDragActive(false);
+    openAuthModal({
+      contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
+      initialView: 'signup',
+    });
+    return false;
+  }, [isLoggedIn, openAuthModal]);
+
+  const openImportModalFlow = useCallback(() => {
+    if (!requireImportAuth()) return;
+    setShowImportModal(true);
+  }, [requireImportAuth]);
+
+  const openBlankUploadPicker = useCallback(() => {
+    if (!requireImportAuth()) return;
+    blankUploadInputRef.current?.click();
+  }, [requireImportAuth]);
 
   // Process imported file (shared by both browse and drag-drop)
   const processImportFile = async (file) => {
     if (!file) return;
+    if (!requireImportAuth()) return;
 
     setImportLoading(true);
 
@@ -7906,64 +18311,35 @@ export default function App() {
       const text = await file.text();
       // Use file extension - don't rely on file.type which is often empty for XML
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      let urls = [];
-      let parseType = '';
+      const imported = parseImportFileContent(text, ext);
+      const defaultMapName = deriveImportedMapNameFromFileName(file.name);
 
-      if (ext === 'xml') {
-        // Could be sitemap or RSS/Atom
-        if (text.includes('<rss') || text.includes('<feed')) {
-          urls = parseRssAtom(text);
-          parseType = 'RSS/Atom';
-        } else {
-          urls = parseXmlSitemap(text);
-          parseType = 'XML Sitemap';
-        }
-      } else if (ext === 'rss' || ext === 'atom') {
-        urls = parseRssAtom(text);
-        parseType = 'RSS/Atom';
-      } else if (ext === 'html' || ext === 'htm') {
-        urls = parseHtml(text);
-        parseType = 'HTML';
-      } else if (ext === 'csv') {
-        urls = parseCsv(text);
-        parseType = 'CSV';
-      } else if (ext === 'md' || ext === 'markdown') {
-        urls = parseMarkdown(text);
-        parseType = 'Markdown';
-      } else {
-        urls = parsePlainText(text);
-        parseType = 'Text';
-      }
-
-      console.log(`Parsed ${parseType}: found ${urls.length} URLs`);
-
-      if (urls.length === 0) {
-        showToast(`No URLs found in ${parseType} file`, 'error');
+      if (!imported?.root) {
+        showToast(`No URLs found in ${imported?.parseType || 'file'}`, 'error');
         setImportLoading(false);
         return;
       }
 
-      const tree = buildTreeFromUrls(urls);
-      if (tree) {
-        setRoot(tree);
-        setOrphans([]); // Clear orphans when importing new URLs
-        setCurrentMap(null);
-        setIsImportedMap(true); // Mark as imported - scanning won't work
-        setDraftVersionFromSnapshot({
-          root: tree,
-          orphans: [],
-          connections: [],
-          colors: DEFAULT_COLORS,
-          connectionColors: DEFAULT_CONNECTION_COLORS,
-        }, 'Updated');
-        applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-        setUrlInput(tree.url || '');
-        setMapName('');
+      const importedPageCount = Math.max(1,
+        countNodes(imported.root)
+        + (imported.orphans || []).reduce((total, orphan) => total + countNodes(orphan), 0)
+      );
+      const importLimitBlock = getImportPageLimitBlock(importedPageCount);
+
+      if (importLimitBlock) {
+        setImportPageLimitModal({
+          ...importLimitBlock,
+          fileName: file.name || 'Imported file',
+          defaultMapName,
+          parseType: imported.parseType || 'file',
+          imported: { ...imported, defaultMapName },
+        });
         setShowImportModal(false);
-        showToast(`Imported ${urls.length} URLs from ${parseType}`, 'success');
-      } else {
-        showToast('Could not build sitemap from URLs', 'error');
+        setImportLoading(false);
+        return;
       }
+
+      applyImportedMap({ ...imported, defaultMapName }, { defaultName: defaultMapName });
     } catch (err) {
       console.error('Import error:', err);
       showToast(`Import failed: ${err.message || 'Unknown error'}`, 'error');
@@ -7975,6 +18351,7 @@ export default function App() {
   // Handle file selection via browse button
   const handleFileImport = async (e) => {
     const file = e.target.files?.[0];
+    setBlankUploadDragActive(false);
     await processImportFile(file);
     e.target.value = ''; // Reset input for re-selection
   };
@@ -7984,6 +18361,7 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-over');
+    setBlankUploadDragActive(false);
     const file = e.dataTransfer.files?.[0];
     await processImportFile(file);
   };
@@ -7993,6 +18371,7 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.classList.add('drag-over');
+    setBlankUploadDragActive(true);
   };
 
   // Handle drag leave
@@ -8000,13 +18379,298 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-over');
+    setBlankUploadDragActive(false);
   };
 
   const zoomBounds = getZoomBounds();
+  const showInviteAcceptGate = currentRoute?.surface === ROUTE_SURFACES.APP
+    && currentRoute?.section === 'invite_accept';
+  const showMapAccessGate = (
+    currentRoute?.surface === ROUTE_SURFACES.APP
+      && currentRoute?.section === 'map'
+      && !isBillingReturnRoute
+      && (!currentMap?.id || !sameId(currentMap.id, currentRoute?.mapId))
+      && (
+        !!routeMapGateState
+        || !isLoggedIn
+        || authLoading
+        || !!pendingInviteForCurrentRoute
+      )
+  ) || (
+    currentRoute?.surface === ROUTE_SURFACES.SHARE
+      && !!routeMapGateState
+  );
+  const isWelcomeModalEligible = currentRoute?.surface === ROUTE_SURFACES.APP
+    && (currentRoute?.section === 'home' || currentRoute?.section === 'map')
+    && !showInviteAcceptGate
+    && !showMapAccessGate
+    && !isBillingReturnRoute
+    && !shouldStartScanFromPrefill(currentRoute);
+  const showWelcomeModal = isWelcomeModalEligible
+    && !welcomeModalDismissedForSession
+    && (!isLoggedIn || !welcomeModalHidden);
 
-  // Show landing page or app
-  if (showLanding) {
-    return <LandingPage onLaunchApp={() => setShowLanding(false)} />;
+  const dismissWelcomeModal = useCallback(() => {
+    if (isLoggedIn && welcomeDontShowAgain) {
+      writeWelcomeModalHidden(true);
+      setWelcomeModalHidden(true);
+    }
+    setWelcomeModalDismissedForSession(true);
+    setWelcomeDontShowAgain(false);
+  }, [isLoggedIn, welcomeDontShowAgain]);
+
+  const closeSaveMapModal = useCallback(() => {
+    setShowSaveMapModal(false);
+    setCreateMapMode(false);
+    setCreateMapDefaults(null);
+    setPendingCreateAfterSave(null);
+    setPendingLogoutAfterSave(false);
+    setDuplicateMapConfig(null);
+    setPendingLoadMap(null);
+  }, []);
+
+  const discardUnsavedMapAndLoadPending = useCallback(async () => {
+    const mapToLoad = pendingLoadMap;
+    if (!mapToLoad) {
+      closeSaveMapModal();
+      return;
+    }
+
+    setShowSaveMapModal(false);
+    setCreateMapMode(false);
+    setCreateMapDefaults(null);
+    setPendingCreateAfterSave(null);
+    setPendingLogoutAfterSave(false);
+    setDuplicateMapConfig(null);
+    setPendingLoadMap(null);
+    clearLoadedMapView();
+
+    try {
+      if (mapToLoad.root) {
+        loadMap(mapToLoad);
+      } else if (mapToLoad.id) {
+        await loadSavedMapById(mapToLoad.id);
+      }
+    } catch (error) {
+      showToast(error.message || 'Failed to load map', 'error');
+    }
+  }, [clearLoadedMapView, closeSaveMapModal, loadMap, loadSavedMapById, pendingLoadMap, showToast]);
+
+  const handleSaveMapModalCancel = useCallback(() => {
+    if (pendingLoadMap && hasMap && !currentMap?.id) {
+      discardUnsavedMapAndLoadPending();
+      return;
+    }
+    closeSaveMapModal();
+  }, [closeSaveMapModal, currentMap?.id, discardUnsavedMapAndLoadPending, hasMap, pendingLoadMap]);
+
+  const saveMapModalCancelLabel = pendingLoadMap && hasMap && !currentMap?.id ? "Don't save" : 'Cancel';
+
+  const saveMapModalProjectId = createMapMode
+    ? createMapDefaults?.projectId || null
+    : duplicateMapConfig?.projectId || null;
+  const saveMapModalName = createMapMode
+    ? createMapDefaults?.name ?? ''
+    : duplicateMapConfig
+      ? duplicateMapConfig.name || ''
+      : currentMap?.name || mapName || root?.title || undefined;
+  const saveMapModalNotes = createMapMode
+    ? createMapDefaults?.notes ?? ''
+    : currentMap?.notes || '';
+  const saveMapModalKey = [
+    createMapMode ? 'create' : (duplicateMapConfig ? 'duplicate' : 'save'),
+    saveMapModalProjectId || 'none',
+    saveMapModalName || 'untitled',
+  ].join(':');
+  const canvasRenderScale = scaleRef.current || scale || 1;
+  const canvasRenderPan = panRef.current || pan;
+  const canvasGridMetrics = getCanvasGridMetrics(canvasRenderScale);
+  const canvasGridSize = canvasGridMetrics.size;
+  const canvasGridDotRadius = canvasGridMetrics.dotRadius;
+  const scanLockedByArchive = Boolean(currentUser?.entitlements?.archived);
+  const archiveScanTitle = 'New scans are locked while this account is archived';
+  const showAppHomeGrid = !hasMap
+    && currentRoute?.surface === ROUTE_SURFACES.APP
+    && currentRoute?.section === 'home';
+  const showInviteAcceptCanvas = !hasMap && showInviteAcceptGate;
+  const showShareLoadingCanvas = !hasMap
+    && currentRoute?.surface === ROUTE_SURFACES.SHARE
+    && !showMapAccessGate;
+  const showBlankHome = !hasMap && currentRoute?.surface !== ROUTE_SURFACES.SHARE && !showInviteAcceptGate;
+  const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);
+  const showTopbarScanBar = !showInviteAcceptGate
+    && !showMapAccessGate
+    && currentRoute?.surface !== ROUTE_SURFACES.SHARE
+    && (
+      isDefaultWorkspaceScanModalVisible
+      || (isUnsavedScannedMap && !!root?.url)
+    );
+
+  const renderCompletedConnection = (conn) => {
+    const path = generateConnectionPath(conn);
+    if (!path) return null;
+    const isUserFlow = conn.type === 'userflow';
+    const isCrosslink = conn.type === 'crosslink';
+    const crosslinkGhosted = isCrosslink && isCrosslinkGhosted(conn);
+    const color = isUserFlow
+      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
+    const isHovered = hoveredConnection === conn.id;
+    const baseWidth = 2;
+    const lineWidth = isHovered ? baseWidth + 1 : baseWidth;
+    const baseOpacity = isCrosslink && crosslinkGhosted ? 0.4 : 1;
+    const lineOpacity = isHovered
+      ? (isCrosslink && crosslinkGhosted ? 0.4 : 1)
+      : baseOpacity;
+    const glowOpacity = isHovered
+      ? (isCrosslink && crosslinkGhosted ? 0.24 : 0.6)
+      : 0;
+
+    return (
+      <g key={conn.id}>
+        <path
+          className="connection-hit"
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth={16}
+          strokeOpacity={0}
+          strokeLinecap="round"
+          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+          onMouseEnter={() => setHoveredConnection(conn.id)}
+          onMouseLeave={(e) => {
+            setHoveredConnection(null);
+            e.currentTarget.style.cursor = 'pointer';
+          }}
+          onMouseMove={(e) => {
+            if (!contentRef.current) return;
+            const contentRect = contentRef.current.getBoundingClientRect();
+            const mouseX = (e.clientX - contentRect.left) / scale;
+            const mouseY = (e.clientY - contentRect.top) / scale;
+            const nearEndpoint = isNearEndpoint(mouseX, mouseY, conn, 32);
+            e.currentTarget.style.cursor = nearEndpoint ? 'grab' : 'pointer';
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!contentRef.current) return;
+            const contentRect = contentRef.current.getBoundingClientRect();
+            const clickX = (e.clientX - contentRect.left) / scale;
+            const clickY = (e.clientY - contentRect.top) / scale;
+            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
+            if (nearEndpoint) {
+              handleEndpointDragStart(e, conn, nearEndpoint);
+            }
+          }}
+          onClick={(e) => {
+            if (!contentRef.current) return;
+            const contentRect = contentRef.current.getBoundingClientRect();
+            const clickX = (e.clientX - contentRect.left) / scale;
+            const clickY = (e.clientY - contentRect.top) / scale;
+            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
+            if (!nearEndpoint) {
+              handleConnectionClick(e, conn);
+            }
+          }}
+        />
+        <path
+          className="connection-glow"
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth={lineWidth + 2}
+          strokeOpacity={glowOpacity}
+          strokeLinecap="round"
+          strokeDasharray={isUserFlow ? 'none' : '8 6'}
+          filter="url(#connection-glow)"
+          style={{ pointerEvents: 'none' }}
+        />
+        <path
+          className="connection-line"
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth={lineWidth}
+          strokeLinecap="round"
+          strokeDasharray={isUserFlow ? 'none' : '8 6'}
+          markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+          strokeOpacity={lineOpacity}
+          style={{ pointerEvents: 'none' }}
+        />
+      </g>
+    );
+  };
+
+  const renderDrawingConnectionPreview = () => {
+    if (!drawingConnection) return null;
+    const { startX, startY, currentX, currentY, sourceAnchor, type } = drawingConnection;
+    const isUserFlow = type === 'userflow';
+    const color = isUserFlow
+      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
+    const pathD = buildConnectorBezier({
+      start: { x: startX, y: startY },
+      end: { x: currentX, y: currentY },
+      sourceAnchor,
+      targetAnchor: drawingConnection.snapTarget?.anchor,
+      useTerminalSegment: isUserFlow,
+    })?.path || '';
+
+    return (
+      <path
+        d={pathD}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeDasharray={isUserFlow ? 'none' : '8 6'}
+        strokeOpacity={0.8}
+        strokeLinecap="round"
+        markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+      />
+    );
+  };
+
+  const renderDraggingEndpointPreview = () => {
+    if (!draggingEndpoint) return null;
+    const { fixedX, fixedY, fixedAnchor, currentX, currentY, endpoint, type } = draggingEndpoint;
+    const isUserFlow = type === 'userflow';
+    const color = isUserFlow
+      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
+    const startX = endpoint === 'source' ? currentX : fixedX;
+    const startY = endpoint === 'source' ? currentY : fixedY;
+    const endX = endpoint === 'source' ? fixedX : currentX;
+    const endY = endpoint === 'source' ? fixedY : currentY;
+    const pathD = buildConnectorBezier({
+      start: { x: startX, y: startY },
+      end: { x: endX, y: endY },
+      sourceAnchor: endpoint === 'source' ? draggingEndpoint.snapTarget?.anchor : fixedAnchor,
+      targetAnchor: endpoint === 'source' ? fixedAnchor : draggingEndpoint.snapTarget?.anchor,
+      useTerminalSegment: isUserFlow,
+    })?.path || '';
+
+    return (
+      <path
+        d={pathD}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeDasharray={isUserFlow ? 'none' : '8 6'}
+        strokeOpacity={0.8}
+        strokeLinecap="round"
+        markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+      />
+    );
+  };
+
+  if (isBillingReturnFromBillingWindow) {
+    return (
+      <div className="app">
+        <div className="canvas">
+          <StatusAlert tone="loading">Returning to Vellic...</StatusAlert>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -8018,30 +18682,25 @@ export default function App() {
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
+        appHome={showAppHomeGrid}
+        floating={showShareLoadingCanvas || showInviteAcceptCanvas}
+        showScanBar={showTopbarScanBar}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}
         scanOptionsRef={scanOptionsRef}
         onToggleScanOptions={() => setShowScanOptions(v => !v)}
         onScanOptionChange={(key) => setScanOptions(prev => ({ ...prev, [key]: !prev[key] }))}
-        scanLayerAvailability={scanLayerAvailability}
+        scanLayerAvailability={effectiveScanLayerAvailability}
         scanLayerVisibility={scanLayerVisibility}
         onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
-        scanDepth={scanDepth}
-        onScanDepthChange={(value) => {
-          const cleaned = value.replace(/[^\d]/g, '');
-          if (!cleaned) {
-            setScanDepth('');
-            return;
-          }
-          const nextValue = Math.min(Number(cleaned), 8);
-          setScanDepth(String(nextValue));
-        }}
         onScan={scan}
-        scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
-        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
-        optionsDisabled={!urlInput.trim() || hasMap}
+        scanLabel={canTopbarRescan ? 'Update' : 'Scan'}
+        scanDisabled={isDefaultWorkspaceScanModalVisible || loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !canTopbarRescan)}
+        scanTitle={isDefaultWorkspaceScanModalVisible ? 'Scan in progress' : scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasEntitlementRescanUpgrade ? "Rescan with current plan limits" : hasTopbarRescanChanges ? "Update scan with changed options" : "Change scan options to update"}
+        scanControlsDisabled={isDefaultWorkspaceScanModalVisible || loading}
+        optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
-        showClearUrl={!hasMap && !!urlInput.trim()}
+        showClearUrl={!!urlInput.trim()}
         mapName={mapName}
         isEditingMapName={isEditingMapName}
         onMapNameChange={(e) => setMapName(e.target.value)}
@@ -8055,139 +18714,254 @@ export default function App() {
           }
         }}
         onMapNameClick={startMapNameEdit}
-        sharedTitle={root?.title || 'Shared Sitemap'}
-        onCreateMap={async () => {
-          if (!currentUser) {
-            showToast('Please sign in to create a new map', 'warning');
-            setShowAuthModal(true);
-            return;
-          }
-          const hasUnsavedMap = hasMap && !currentMap?.id;
-          if (hasUnsavedMap) {
-            const wantsSave = await showConfirm({
-              title: 'Save current map?',
-              message: 'You have an unsaved map. Save it before creating a new one?',
-              confirmText: 'Save',
-              cancelText: "Don't Save",
-            });
-            if (wantsSave) {
-              setPendingCreateAfterSave(true);
-              setCreateMapMode(false);
-              setShowSaveMapModal(true);
-              return;
-            }
-            const cleared = await clearCanvas();
-            if (cleared) setShowCreateMapModal(true);
-            return;
-          }
-          setShowCreateMapModal(true);
-        }}
-        onImportFile={() => setShowImportModal(true)}
+        onMapLogoClick={currentRoute?.surface === ROUTE_SURFACES.SHARE ? leaveSharedMap : (currentMap?.id ? clearCanvas : undefined)}
+        collaborators={titleCollaborators}
+        sharedTitle={root?.title || 'Shared sitemap'}
+        onCreateMap={() => openCreateMapFlow()}
+        onImportFile={openImportModalFlow}
+        onShowInvites={handleShowInviteInbox}
+        onShowAccessRequests={handleShowAccessRequestsInbox}
         onShowProjects={handleShowProjects}
         onShowHistory={handleShowHistory}
+        pendingInviteCount={pendingMapInvites.length}
+        pendingAccessRequestCount={pendingAccessRequests.length}
       />
 
       <div
-        className={`canvas ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
+        className={`canvas ${hasMap ? 'has-map' : ''} ${showAppHomeGrid || showInviteAcceptCanvas ? 'app-home' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
         ref={canvasRef}
+        style={{
+          '--canvas-pan-x': `${canvasRenderPan.x || 0}px`,
+          '--canvas-pan-y': `${canvasRenderPan.y || 0}px`,
+          '--canvas-grid-size': `${canvasGridSize}px`,
+          '--canvas-grid-dot-radius': `${canvasGridDotRadius}px`,
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onScroll={resetCanvasNativeScroll}
        
       >
+        {showInviteAcceptGate && inviteAcceptState?.status !== 'auth_required' && (
+          <InviteAcceptGate
+            status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
+            error={inviteAcceptState?.error || ''}
+            onLogin={() => openAuthModal()}
+            onGoHome={() => navigateToRoute(createAppHomeRoute(), { replace: true })}
+            onShowInvites={handleShowInviteInbox}
+          />
+        )}
+
+        {showMapAccessGate && !showInviteAcceptGate && (
+          <MapAccessGate
+            isLoggedIn={isLoggedIn}
+            authLoading={authLoading}
+            invite={pendingInviteForCurrentRoute}
+            loading={!!routeMapGateState?.loading || (!!pendingInviteForCurrentRoute && pendingMapInvitesLoading)}
+            requestStatus={routeMapGateState?.requestStatus || 'idle'}
+            requestError={routeMapGateState?.requestError || ''}
+            requestMessage={routeAccessRequestMessage}
+            requestedRole={routeMapGateState?.requestedRole || 'viewer'}
+            onLogin={() => openAuthModal()}
+            onGoHome={() => navigateToRoute(createAppHomeRoute(), { replace: true })}
+            onRequestMessageChange={setRouteAccessRequestMessage}
+            onRequestAccess={handleRequestRouteMapAccess}
+            onAcceptInvite={handleAcceptPendingInvite}
+            onDeclineInvite={handleDeclinePendingInvite}
+          />
+        )}
+
         {/* Permission banner for shared links with limited access */}
-        {accessLevel !== ACCESS_LEVELS.EDIT && hasMap && (
-          <div className="permission-banner">
-            <Info size={16} />
-            <span>
-              {accessLevel === ACCESS_LEVELS.VIEW
-                ? "You're viewing this sitemap in read-only mode"
-                : "You can view and comment on this sitemap"}
-            </span>
-          </div>
+        {accessLevel !== ACCESS_LEVELS.EDIT
+          && hasMap
+          && !showCoeditingReadOnlyBanner
+          && currentRoute?.surface !== ROUTE_SURFACES.SHARE && (
+          <StatusAlert tone="warning" className="permission-banner">
+            {accessLevel === ACCESS_LEVELS.VIEW
+              ? "You're viewing this sitemap in read-only mode"
+              : "You can view and comment on this sitemap"}
+          </StatusAlert>
         )}
 
         {mapSaveConflict && hasMap && (
-          <div className="permission-banner map-conflict-banner">
-            <AlertTriangle size={16} />
-            <span>This map changed in another session. Your last update was blocked to avoid overwriting.</span>
-            <div className="map-conflict-actions">
-              <button type="button" onClick={reloadMapAfterConflict}>Reload Latest</button>
-              <button type="button" onClick={dismissMapConflict}>Dismiss</button>
-            </div>
-          </div>
+          <StatusAlert
+            tone="danger"
+            className="permission-banner map-conflict-banner"
+            actions={(
+              <div className="map-conflict-actions">
+                <Button type="secondary" buttonStyle="danger" size="sm" onClick={reloadMapAfterConflict}>
+                  Reload latest
+                </Button>
+                <Button type="ghost" buttonStyle="danger" size="sm" onClick={dismissMapConflict}>
+                  Dismiss
+                </Button>
+              </div>
+            )}
+          >
+            This map changed in another session. Your last update was blocked to avoid overwriting.
+          </StatusAlert>
         )}
 
-        {isCoeditingReadOnlyMode && hasMap && currentMap?.id && (
-          <div className="permission-banner live-edit-banner live-edit-banner-warning">
-            <AlertTriangle size={16} />
+        {showCoeditingReadOnlyBanner && (
+          <StatusAlert tone="warning" className="permission-banner live-edit-banner live-edit-banner-warning">
             <span>
               <strong>Live Editing Read-Only</strong>
               {coeditingReadOnlyMessage ? ` • ${coeditingReadOnlyMessage}` : ''}
             </span>
-          </div>
+          </StatusAlert>
         )}
 
-        {isLiveActive && hasMap && currentMap?.id && (
-          <div className={`permission-banner live-edit-banner live-edit-banner-${liveBannerTone}`}>
-            {liveStatus === COEDITING_LIVE_STATUS.CONNECTED
+        {showLiveStatusBanner && (
+          <StatusAlert
+            tone={liveBannerTone === 'connected' ? 'success' : liveBannerTone === 'warning' ? 'warning' : 'info'}
+            className={`permission-banner live-edit-banner live-edit-banner-${liveBannerTone}`}
+            icon={liveStatus === COEDITING_LIVE_STATUS.CONNECTED
               ? <Wifi size={16} />
               : (liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
                 ? <WifiOff size={16} />
                 : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />)}
-            <span>
-              <strong>Live Editing {liveStatusLabel}</strong>
-              {` • v${liveVersion}`}
-              {livePendingCount > 0 ? ` • ${livePendingCount} queued` : ''}
-              {liveParticipants.length > 1 ? ` • ${liveParticipants.length - 1} collaborator${liveParticipants.length > 2 ? 's' : ''}` : ''}
-              {liveStatusDetail ? ` • ${liveStatusDetail}` : ''}
-            </span>
-            {liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC && (
+            contentClassName="permission-banner-main"
+            actions={liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC ? (
               <div className="map-conflict-actions">
-                <button type="button" onClick={resyncLiveDocument}>Resync</button>
+                <Button type="secondary" buttonStyle="brand" size="sm" onClick={handleLiveResync}>
+                  Resync
+                </Button>
               </div>
-            )}
-          </div>
+            ) : null}
+          >
+            <>
+              <span className="permission-banner-summary">
+                <strong>{liveBannerTitle} {liveStatusLabel}</strong>
+                {` • v${liveVersion}`}
+                {livePendingCount > 0 ? ` • ${livePendingCount} queued` : ''}
+                {liveCollaborators.length > 0 ? ` • ${liveCollaborators.length} collaborator${liveCollaborators.length === 1 ? '' : 's'}` : ''}
+                {liveStatusDetail ? ` • ${liveStatusDetail}` : ''}
+              </span>
+              <PresenceChipList collaborators={liveCollaborators} />
+            </>
+          </StatusAlert>
         )}
 
-        {REALTIME_BASELINE_ENABLED
-          && !isLiveActive
-          && !mapSaveConflict
-          && isLoggedIn
-          && canViewPresence()
-          && hasMap
-          && currentMap?.id
-          && presenceBannerText
-          && (
-            <div className="permission-banner presence-banner">
-              <MessageSquare size={16} />
-              <span>{presenceBannerText}</span>
-            </div>
-          )}
+        {showBlankHome && (
+          <div className={`blank ${isDefaultWorkspaceScanModalVisible ? 'blank--scan-active' : ''}`}>
+            <div className="blank-shell" aria-hidden={isDefaultWorkspaceScanModalVisible ? 'true' : undefined}>
+              <div className="blank-heading">
+                <h1 className="blank-title">Start from one of these</h1>
+              </div>
+              <div className="blank-scan-primary">
+                <div className="search-container scan-bar-shell blank-scan-shell">
+                  <ScanBar
+                    canEdit={canEdit()}
+                    urlInput={urlInput}
+                    onUrlInputChange={(e) => setUrlInput(e.target.value)}
+                    onUrlKeyDown={onKeyDownUrl}
+                    options={scanOptions}
+                    showOptions={showScanOptions}
+                    optionsRef={scanOptionsRef}
+                    onToggleOptions={() => setShowScanOptions(v => !v)}
+                    onOptionChange={(key) => setScanOptions(prev => ({ ...prev, [key]: !prev[key] }))}
+                    scanLayerAvailability={effectiveScanLayerAvailability}
+                    scanLayerVisibility={scanLayerVisibility}
+                    onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
+                    onScan={scan}
+                    scanLabel="Scan"
+                    scanDisabled={isDefaultWorkspaceScanModalVisible || loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput)}
+                    scanTitle={isDefaultWorkspaceScanModalVisible ? 'Scan in progress' : scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
+                    controlsDisabled={isDefaultWorkspaceScanModalVisible || loading}
+                    optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap}
+                    onClearUrl={() => setUrlInput('')}
+                    showClearUrl={!!urlInput.trim()}
+                    sharedTitle={root?.title || 'Shared sitemap'}
+                    placeholder="Enter a URL to start"
+                  />
+                </div>
+              </div>
+              <h2 className="blank-section-label blank-start-label">Or choose another starting point</h2>
+              <div className="blank-card-grid">
+                <button
+                  type="button"
+                  className="blank-card"
+                  onClick={() => openCreateMapFlow()}
+                  disabled={isDefaultWorkspaceScanModalVisible}
+                >
+                  <div className="blank-card-illustration blank-card-illustration-create" aria-hidden="true">
+                    <img src={createIllustration} alt="" className="blank-card-art blank-card-art-light" />
+                    <img src={createIllustrationDark} alt="" className="blank-card-art blank-card-art-dark" />
+                  </div>
+                  <div className="blank-card-title-row">
+                    <span className="blank-card-title">Create</span>
+                  </div>
+                  <div className="blank-card-copy">Start from scratch</div>
+                </button>
 
-        {/* Theme toggle */}
-        <button
-          className="theme-toggle"
-          onClick={toggleTheme}
-          title={`Switch to ${getCurrentTheme() === 'dark' ? 'light' : 'dark'} mode`}
-        >
-          <div className={`theme-toggle-track ${getCurrentTheme()}`}>
-            <Sun size={14} className="theme-icon sun" />
-            <Moon size={14} className="theme-icon moon" />
-            <div className="theme-toggle-thumb" />
-          </div>
-        </button>
+                <button
+                  type="button"
+                  className={`blank-card blank-card-upload ${blankUploadDragActive ? 'drag-over' : ''}`}
+                  onClick={openBlankUploadPicker}
+                  onDrop={handleImportDrop}
+                  onDragOver={handleImportDragOver}
+                  onDragLeave={handleImportDragLeave}
+                  disabled={isDefaultWorkspaceScanModalVisible || importLoading}
+                >
+                  <div className="blank-card-illustration blank-card-illustration-upload" aria-hidden="true">
+                    {importLoading ? (
+                      <Loader2 size={32} className="spin" />
+                    ) : (
+                      <>
+                        <img src={uploadIllustration} alt="" className="blank-card-art blank-card-art-light" />
+                        <img src={uploadIllustrationDark} alt="" className="blank-card-art blank-card-art-dark" />
+                      </>
+                    )}
+                  </div>
+                  <div className="blank-card-title-row">
+                    <span className="blank-card-title">Upload</span>
+                  </div>
+                  <div className="blank-card-copy">
+                    {importLoading
+                      ? 'Processing your file...'
+                      : (
+                        <>
+                          <span>Use existing sitemap files</span>
+                          <span className="blank-card-copy-secondary">(XML, CSV, TXT, MD, or HTML)</span>
+                        </>
+                      )}
+                  </div>
+                </button>
 
-        {!hasMap && (
-          <div className="blank">
-            <div className="blank-icon">
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
+                <button
+                  type="button"
+                  className="blank-card"
+                  disabled={isDefaultWorkspaceScanModalVisible}
+                  onClick={() => {
+                    if (currentUser) {
+                      openProjectsPanel();
+                      return;
+                    }
+                    openAuthModal({
+                      contextMessage: MODIFY_AUTH_CONTEXT_MESSAGE,
+                      postSuccessAction: 'open-projects',
+                    });
+                  }}
+                >
+                  <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
+                    <img src={modifyIllustration} alt="" className="blank-card-art blank-card-art-light" />
+                    <img src={modifyIllustrationDark} alt="" className="blank-card-art blank-card-art-dark" />
+                  </div>
+                  <div className="blank-card-title-row">
+                    <span className="blank-card-title">Modify</span>
+                  </div>
+                  <div className="blank-card-copy">Open saved maps and shared work</div>
+                </button>
+              </div>
+              <input
+                ref={blankUploadInputRef}
+                className="blank-upload-input"
+                type="file"
+                accept=".xml,.rss,.atom,.html,.htm,.csv,.md,.markdown,.txt"
+                onChange={handleFileImport}
+                disabled={isDefaultWorkspaceScanModalVisible || importLoading}
+              />
             </div>
-            <div className="blank-title">Ready to Map</div>
-            <div className="blank-subtitle">Enter a URL above to get started</div>
           </div>
         )}
 
@@ -8198,16 +18972,22 @@ export default function App() {
             onDragMove={handleDndDragMove}
             onDragEnd={handleDndDragEnd}
           >
-            <div className="content-shell" ref={contentShellRef}>
             <div
-              className={`content ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
+              className={`content-shell ${useLargeMapSurface ? 'large-map-shell' : ''}`}
+              ref={contentShellRef}
+            >
+            <div
+              className={`content ${useLargeMapSurface ? 'large-map-content' : ''} ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
               ref={contentRef}
+              data-large-map-surface={useLargeMapSurface ? '1' : undefined}
               style={{
                 // PAN/ZOOM INVARIANT:
                 // This transform must ONLY be translate(px, px) scale(n).
                 // No %, no centering, no layout transforms.
                 // Do not modify without understanding world-space math.
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                transform: useLargeMapSurface
+                  ? 'none'
+                  : `translate(${canvasRenderPan.x}px, ${canvasRenderPan.y}px) scale(${canvasRenderScale})`,
                 transformOrigin: '0 0',
               }}
               onMouseMove={(e) => {
@@ -8223,16 +19003,21 @@ export default function App() {
                 {selectionBox && (
                   <div
                     className="selection-rect"
-                    style={{
-                      left: selectionBox.x,
-                      top: selectionBox.y,
-                      width: selectionBox.w,
-                      height: selectionBox.h,
-                    }}
+                    style={useLargeMapSurface
+                      ? getViewportSelectionRectStyle(selectionBox, {
+                        pan: panRef.current,
+                        scale: scaleRef.current || 1,
+                      })
+                      : {
+                        left: selectionBox.x,
+                        top: selectionBox.y,
+                        width: selectionBox.w,
+                        height: selectionBox.h,
+                      }}
                   />
                 )}
 
-                {liveSelectionBadges.map((badge) => (
+                {!useLargeMapSurface && liveSelectionBadges.map((badge) => (
                   <div
                     key={badge.nodeId}
                     className="live-selection-highlight"
@@ -8261,19 +19046,75 @@ export default function App() {
                   </div>
                 ))}
 
+                {useLargeMapSurface ? (
+                  <MapSurfaceV2
+                    mapId={currentMap?.id}
+                    getScene={api.getMapScene}
+                    getViewState={getLargeMapViewState}
+                    canvasSize={canvasSize}
+                    orientation={mapOrientation}
+                    showThumbnails={showThumbnails}
+                    showCommentBadges={canViewComments()}
+                    canEdit={canEdit()}
+                    canComment={canComment()}
+                    showCommentAction={!!effectiveFeatureGates.mapComment}
+                    commentActionLabel={canComment() ? 'Comments' : 'View comments'}
+                    showExternalLinkAction={canEdit()}
+                    showDeleteAction={showDirectNodeDeleteAction}
+                    connectionTool={connectionTool}
+                    snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
+                    onAnchorMouseDown={handleAnchorMouseDown}
+                    colors={colors}
+                    selectedNodeIds={selectedNodeIds}
+                    onNodeClick={handleNodeClick}
+                    onNodeContextMenu={openLargeMapNodeMenu}
+                    onNodeDoubleClick={handleLargeMapNodeDoubleClick}
+                    onNodeExpand={handleLargeMapNodeExpand}
+                    onViewImage={handleLargeMapNodeViewImage}
+                    onDelete={requestDeleteNode}
+                    onEdit={openEditModal}
+                    onDuplicate={duplicateNode}
+                    onAddNote={(node) => openCommentPopover(node)}
+                    onViewNotes={(node) => openCommentPopover(node)}
+                    activeId={activeId}
+                    badgeVisibility={badgeVisibility}
+                    layerVisibility={layerVisibility}
+                    changeFilters={changeFilters}
+                    showPageNumbers={layers.pageNumbers}
+                    thumbnailRequestIds={thumbnailScopeIds}
+                    thumbnailSessionId={thumbnailSessionId}
+                    thumbnailReloadMap={thumbnailReloadMap}
+                    thumbnailCaptureStopped={thumbnailStats.stopped}
+                    onThumbnailLoad={handleThumbnailDisplayLoad}
+                    onThumbnailError={handleThumbnailDisplayError}
+                    onSceneLoaded={handleLargeMapSceneLoaded}
+                    getNodeSnapshot={getLargeMapNodeSnapshot}
+                    nodeSnapshotVersion={largeMapNodeCacheVersion}
+                    commentsByNode={effectiveVisibleCommentsByNode}
+                    sceneRefreshKey={largeMapSceneRefreshKey}
+                    activeBranchNodeIds={activeBranchNodeIds}
+                    expandedStacks={expandedStacks}
+                    onToggleStack={toggleExpandedStack}
+                  />
+                ) : (
                 <SitemapTree
                   data={renderRoot}
                   orphans={visibleOrphans}
                   layout={mapLayout}
+                  orientation={mapOrientation}
                   showThumbnails={showThumbnails}
-                  showCommentBadges={activeTool === 'comments' || showCommentsPanel}
+                  showCommentBadges={canViewComments()}
                   canEdit={canEdit()}
                   canComment={canComment()}
+                  showCommentAction={!!effectiveFeatureGates.mapComment}
+                  commentActionLabel={canComment() ? 'Comments' : 'View comments'}
+                  showExternalLinkAction={canEdit()}
+                  showDeleteAction={showDirectNodeDeleteAction}
                   connectionTool={connectionTool}
                   snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
                   onAnchorMouseDown={handleAnchorMouseDown}
                   colors={colors}
-                  scale={scale}
+                  scale={canvasRenderScale}
                   onDelete={requestDeleteNode}
                   onEdit={openEditModal}
                   onDuplicate={duplicateNode}
@@ -8306,53 +19147,42 @@ export default function App() {
                   layerVisibility={layerVisibility}
                   changeFilters={changeFilters}
                   showPageNumbers={layers.pageNumbers}
-                  onRequestThumbnail={requestThumbnail}
                   thumbnailRequestIds={thumbnailScopeIds}
                   thumbnailSessionId={thumbnailSessionId}
                   thumbnailReloadMap={thumbnailReloadMap}
                   thumbnailCaptureStopped={thumbnailStats.stopped}
-                  onThumbnailLoad={handleThumbnailImageLoad}
-                  onThumbnailError={handleThumbnailImageError}
+                  onThumbnailLoad={handleThumbnailDisplayLoad}
+                  onThumbnailError={handleThumbnailDisplayError}
                   expandedStacks={expandedStacks}
-                  onToggleStack={(nodeId) => {
-                    setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
-                  }}
+                  viewportBounds={canvasViewportBounds}
+                  activeBranchNodeIds={activeBranchNodeIds}
+                  onToggleStack={toggleExpandedStack}
                   selectedNodeIds={selectedNodeIds}
                 >
                   {/* SVG Connections Layer */}
                   <svg
-                    className="connections-layer"
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      pointerEvents: 'auto',
-                      overflow: 'visible',
-                      zIndex: 0,
-                    }}
+                    className="connections-layer connections-layer--relationship"
                   >
                   {/* Arrowhead marker definition */}
                   <defs>
                     <marker
                       id="arrowhead-userflow"
-                      markerWidth="10"
-                      markerHeight="12.5"
-                    refX="9"
-                    refY="6.25"
-                    orient="auto"
-                    markerUnits="strokeWidth"
-                  >
-                    <path
-                      d="M 1 0 L 9 6.25 L 1 12.5"
-                      fill="none"
-                      stroke="context-stroke"
-                      strokeWidth="1"
-                      strokeLinecap="square"
-                      strokeLinejoin="miter"
-                    />
-                  </marker>
+                      markerWidth={USER_FLOW_ARROWHEAD.markerWidth}
+                      markerHeight={USER_FLOW_ARROWHEAD.markerHeight}
+                      refX={USER_FLOW_ARROWHEAD.refX}
+                      refY={USER_FLOW_ARROWHEAD.refY}
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <path
+                        d={USER_FLOW_ARROWHEAD.path}
+                        fill="none"
+                        stroke="context-stroke"
+                        strokeWidth={USER_FLOW_ARROWHEAD.strokeWidth}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </marker>
                   <filter
                     id="connection-glow"
                     x="-50%"
@@ -8372,7 +19202,8 @@ export default function App() {
                   </filter>
                 </defs>
 
-                {layers.crossLinks && autoCrosslinkConnections.map((conn) => {
+                <g className="connections-layer__crosslinks" data-connector-layer="crosslinks">
+                {layers.crossLinks && visibleAutoCrosslinkConnections.map((conn) => {
                   const path = conn.sourceAnchor && conn.targetAnchor
                     ? generateConnectionPath(conn)
                     : (() => {
@@ -8430,8 +19261,14 @@ export default function App() {
                     </g>
                   );
                 })}
+                {layers.crossLinks && visibleManualCrosslinkConnections
+                  .filter((conn) => draggingEndpoint?.connectionId !== conn.id)
+                  .map(renderCompletedConnection)}
+                {drawingConnection?.type === 'crosslink' && renderDrawingConnectionPreview()}
+                {draggingEndpoint?.type === 'crosslink' && renderDraggingEndpointPreview()}
+                </g>
 
-                {layers.brokenLinks && brokenConnections.map((conn) => {
+                {layers.brokenLinks && visibleBrokenConnections.map((conn) => {
                   const path = getBrokenLinkPathForConnection(conn);
                   if (!path) return null;
                   const isHovered = hoveredConnection === conn.id;
@@ -8481,217 +19318,20 @@ export default function App() {
                   );
                 })}
 
-                {/* Render completed connections */}
-                {connections
-                  .filter(conn => {
-                    if (conn.type === 'userflow' && !layers.userFlows) return false;
-                    if (conn.type === 'crosslink' && !layers.crossLinks) return false;
-                    if (conn.type === 'crosslink' && conn.autoRoute) return false;
-                    // Hide connection being dragged
-                    if (draggingEndpoint?.connectionId === conn.id) return false;
-                    return true;
-                  })
-                  .map(conn => {
-                    const path = generateConnectionPath(conn);
-                    if (!path) return null;
-                    const isUserFlow = conn.type === 'userflow';
-                    const isCrosslink = conn.type === 'crosslink';
-                    const crosslinkGhosted = isCrosslink && isCrosslinkGhosted(conn);
-                    const color = isUserFlow
-                      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
-                      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
-                    const isHovered = hoveredConnection === conn.id;
-                    const baseWidth = 2;
-                    const lineWidth = isHovered ? baseWidth + 1 : baseWidth;
-                    const baseOpacity = isCrosslink && crosslinkGhosted ? 0.4 : 1;
-                    const lineOpacity = isHovered
-                      ? (isCrosslink && crosslinkGhosted ? 0.4 : 1)
-                      : baseOpacity;
-                    const glowOpacity = isHovered
-                      ? (isCrosslink && crosslinkGhosted ? 0.24 : 0.6)
-                      : 0;
-
-                    return (
-                      <g key={conn.id}>
-                        {/* Invisible hit area for easier hovering */}
-                        <path
-                          className="connection-hit"
-                          d={path}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={16}
-                          strokeOpacity={0}
-                          strokeLinecap="round"
-                          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                          onMouseEnter={() => setHoveredConnection(conn.id)}
-                          onMouseLeave={(e) => {
-                            setHoveredConnection(null);
-                            e.currentTarget.style.cursor = 'pointer';
-                          }}
-                          onMouseMove={(e) => {
-                            if (!contentRef.current) return;
-                            const contentRect = contentRef.current.getBoundingClientRect();
-                            const mouseX = (e.clientX - contentRect.left) / scale;
-                            const mouseY = (e.clientY - contentRect.top) / scale;
-                            const nearEndpoint = isNearEndpoint(mouseX, mouseY, conn, 32);
-                            e.currentTarget.style.cursor = nearEndpoint ? 'grab' : 'pointer';
-                          }}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (!contentRef.current) return;
-                            const contentRect = contentRef.current.getBoundingClientRect();
-                            const clickX = (e.clientX - contentRect.left) / scale;
-                            const clickY = (e.clientY - contentRect.top) / scale;
-                            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
-                            if (nearEndpoint) {
-                              handleEndpointDragStart(e, conn, nearEndpoint);
-                            }
-                          }}
-                          onClick={(e) => {
-                            if (!contentRef.current) return;
-                            const contentRect = contentRef.current.getBoundingClientRect();
-                            const clickX = (e.clientX - contentRect.left) / scale;
-                            const clickY = (e.clientY - contentRect.top) / scale;
-                            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
-                            if (!nearEndpoint) {
-                              handleConnectionClick(e, conn);
-                            }
-                          }}
-                        />
-                        {/* Glow effect on hover */}
-                        <path
-                          className="connection-glow"
-                          d={path}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={lineWidth + 2}
-                          strokeOpacity={glowOpacity}
-                          strokeLinecap="round"
-                          strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                          filter="url(#connection-glow)"
-                          style={{ pointerEvents: 'none' }}
-                        />
-                        {/* Main line */}
-                        <path
-                          className="connection-line"
-                          d={path}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={lineWidth}
-                          strokeLinecap="round"
-                          strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                          markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
-                          strokeOpacity={lineOpacity}
-                          style={{ pointerEvents: 'none' }}
-                        />
-                      </g>
-                    );
-                  })}
-
-                {/* Temporary line while drawing */}
-                {drawingConnection && (() => {
-                  const { startX, startY, currentX, currentY, sourceAnchor, type } = drawingConnection;
-                  const isUserFlow = type === 'userflow';
-                  const color = isUserFlow
-                    ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
-                    : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
-
-                  // Calculate curved path based on source anchor direction
-                  const dx = Math.abs(currentX - startX);
-                  const dy = Math.abs(currentY - startY);
-                  const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
-
-                  let ctrl1 = { x: startX, y: startY };
-                  switch (sourceAnchor) {
-                    case 'top': ctrl1.y -= offset; break;
-                    case 'right': ctrl1.x += offset; break;
-                    case 'bottom': ctrl1.y += offset; break;
-                    case 'left': ctrl1.x -= offset; break;
-                    default: break;
-                  }
-
-                  // Control point for target curves toward cursor
-                  const ctrl2 = { x: currentX, y: currentY };
-
-                  const pathD = `M ${startX} ${startY} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${currentX} ${currentY}`;
-
-                  return (
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth={2}
-                      strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                      strokeOpacity={0.8}
-                      strokeLinecap="round"
-                      markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
-                    />
-                  );
-                })()}
-
-                {/* Temporary line while dragging endpoint */}
-                {draggingEndpoint && (() => {
-                  const { fixedX, fixedY, fixedAnchor, currentX, currentY, endpoint, type } = draggingEndpoint;
-                  const isUserFlow = type === 'userflow';
-                  const color = isUserFlow
-                    ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
-                    : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
-
-                  // Determine start/end based on which endpoint is being dragged
-                  const startX = endpoint === 'source' ? currentX : fixedX;
-                  const startY = endpoint === 'source' ? currentY : fixedY;
-                  const endX = endpoint === 'source' ? fixedX : currentX;
-                  const endY = endpoint === 'source' ? fixedY : currentY;
-
-                  // Calculate curved path
-                  const dx = Math.abs(endX - startX);
-                  const dy = Math.abs(endY - startY);
-                  const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
-
-                  let ctrl1 = { x: startX, y: startY };
-                  let ctrl2 = { x: endX, y: endY };
-
-                  // Use fixed anchor direction for the fixed end
-                  if (endpoint === 'source') {
-                    switch (fixedAnchor) {
-                      case 'top': ctrl2.y -= offset; break;
-                      case 'right': ctrl2.x += offset; break;
-                      case 'bottom': ctrl2.y += offset; break;
-                      case 'left': ctrl2.x -= offset; break;
-                      default: break;
-                    }
-                  } else {
-                    switch (fixedAnchor) {
-                      case 'top': ctrl1.y -= offset; break;
-                      case 'right': ctrl1.x += offset; break;
-                      case 'bottom': ctrl1.y += offset; break;
-                      case 'left': ctrl1.x -= offset; break;
-                      default: break;
-                    }
-                  }
-
-                  const pathD = `M ${startX} ${startY} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endX} ${endY}`;
-
-                  return (
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth={2}
-                      strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                      strokeOpacity={0.8}
-                      strokeLinecap="round"
-                      markerEnd={isUserFlow && endpoint === 'target' ? 'url(#arrowhead-userflow)' : 'none'}
-                    />
-                  );
-                })()}
+                <g className="connections-layer__userflows" data-connector-layer="userflows">
+                {layers.userFlows && visibleUserFlowConnections
+                  .filter((conn) => draggingEndpoint?.connectionId !== conn.id)
+                  .map(renderCompletedConnection)}
+                {drawingConnection?.type === 'userflow' && renderDrawingConnectionPreview()}
+                {draggingEndpoint?.type === 'userflow' && renderDraggingEndpointPreview()}
+                </g>
               </svg>
                 </SitemapTree>
+                )}
 
               {/* Connection context menu */}
               {connectionMenu && (
-                <div
+                <MenuPanel
                   className="connection-menu"
                   style={{
                     position: 'absolute',
@@ -8700,33 +19340,37 @@ export default function App() {
                     zIndex: 1000,
                   }}
                 >
-                  <button
+                  <MenuItem
                     className="connection-menu-item"
+                    icon={<MessageSquare size={14} />}
+                    label="Add comment"
+                    title={APP_ONLY_MODE ? `${TESTER_NOT_READY_MESSAGE}: connection comments` : 'Add comment'}
                     onClick={() => {
-                      // TODO: Implement connection comments
-                      showToast('Connection comments coming soon', 'info');
+                      showToast(
+                        APP_ONLY_MODE
+                          ? `${TESTER_NOT_READY_MESSAGE}: connection comments are not ready yet.`
+                          : 'Connection comments coming soon',
+                        'info',
+                      );
                       setConnectionMenu(null);
                     }}
-                  >
-                    <MessageSquare size={14} />
-                    <span>Add Comment</span>
-                  </button>
-                  <button
+                  />
+                  <MenuItem
                     className="connection-menu-item delete"
+                    icon={<Trash2 size={14} />}
+                    label="Delete"
+                    danger
                     onClick={() => {
                       deleteConnection(connectionMenu.connectionId);
                       setConnectionMenu(null);
                     }}
-                  >
-                    <Trash2 size={14} />
-                    <span>Delete</span>
-                  </button>
-                </div>
+                  />
+                </MenuPanel>
               )}
 
               {/* Node annotation context menu */}
               {nodeMenu && (
-                <div
+                <MenuPanel
                   className="node-menu"
                   style={{
                     position: 'absolute',
@@ -8735,41 +19379,44 @@ export default function App() {
                     zIndex: 1000,
                   }}
                 >
-                  <div className="node-menu-title">
+                  <MenuSectionHeader className="node-menu-title">
                     Mark as{nodeMenu.targetIds?.length > 1 ? ` (${nodeMenu.targetIds.length})` : ''}
-                  </div>
+                  </MenuSectionHeader>
                   {ANNOTATION_STATUS_OPTIONS.map((option) => (
-                    <button
+                    <MenuItem
                       key={option.value}
                       className={`node-menu-item${nodeMenuStatus === option.value ? ' active' : ''}`}
+                      label={option.label}
+                      selected={nodeMenuStatus === option.value}
                       onClick={() => {
                         applyAnnotationStatus(nodeMenu.targetIds || [], option.value);
                         setNodeMenu(null);
                       }}
-                    >
-                      <span>{option.label}</span>
-                    </button>
+                    />
                   ))}
-                  <div className="node-menu-divider" />
-                  <button
+                  <MenuDivider className="node-menu-divider" />
+                  <MenuItem
                     className="node-menu-item clear"
+                    label="Clear"
+                    danger
                     onClick={() => {
                       applyAnnotationStatus(nodeMenu.targetIds || [], 'none', { clear: true });
                       setNodeMenu(null);
                     }}
-                  >
-                    <span>Clear</span>
-                  </button>
-                </div>
+                  />
+                </MenuPanel>
               )}
 
-              {/* Comment Popover - positioned next to node */}
-              {(() => {
-                const activeNode = commentingNodeId ? (getNodeById(commentingNodeId) || commentingNodeSnapshot) : null;
-                if (!commentingNodeId || !activeNode) return null;
-                return (
+            </div>
+            </div>
+
+            {/* Comment Popover - canvas overlay anchored to the node edge */}
+            {(() => {
+              const activeNode = commentingNodeId ? (getNodeById(commentingNodeId) || commentingNodeSnapshot) : null;
+              if (!commentingNodeId || !activeNode) return null;
+              return (
                 <div
-                  className={`comment-popover-container ${commentPopoverPos.side}`}
+                  className={`comment-popover-container ${commentPopoverPos.side}${commentPopoverAnchor.mode === 'drawer' ? ' is-drawer-anchor' : ''}`}
                   style={{
                     position: 'absolute',
                     left: commentPopoverPos.x,
@@ -8782,18 +19429,24 @@ export default function App() {
                     onClose={() => {
                       setCommentingNodeId(null);
                       setCommentingNodeSnapshot(null);
+                      setSelectedCommentId(null);
                     }}
                     onAddComment={addCommentToNode}
-                    onToggleCompleted={toggleCommentCompleted}
+                    onUpdateComment={updateCommentText}
                     onDeleteComment={deleteComment}
+                    onToggleCompleted={toggleCommentCompleted}
+                    onSetCommentsCompleted={setCommentsCompleted}
+                    onDeleteAllComments={deleteAllCommentsForNode}
                     collaborators={collaborators}
                     canComment={canComment()}
+                    canResolveComments={canEdit()}
+                    currentUser={currentUser}
+                    readOnlyMessage={commentPopoverReadOnlyMessage}
+                    activeCommentId={selectedCommentId}
                   />
                 </div>
-                );
-              })()}
-            </div>
-            </div>
+              );
+            })()}
 
             {/* DragOverlay - full-size floating card with children, scaled 5% larger than current zoom */}
             <DragOverlay>
@@ -8831,7 +19484,7 @@ export default function App() {
                   zone.type === activeDropZone.type;
 
                 // Size based on zone type and layout, scaled to match current zoom
-                const baseCardHeight = showThumbnails ? 262 : 200;
+                const baseCardHeight = showThumbnails ? 278 : 200;
                 const scaledCardWidth = 288 * scale;
                 const scaledCardHeight = baseCardHeight * scale;
                 let width, height;
@@ -8864,76 +19517,14 @@ export default function App() {
               })}
 
             <RightRail
-              layersPanelProps={{
-                layers,
-                connectionTool,
-                onToggleUserFlows: () => {
-                  setLayers(l => ({ ...l, userFlows: !l.userFlows }));
-                  if (layers.userFlows && connectionTool === 'userflow') {
-                    setConnectionTool(null);
-                  }
-                },
-                onToggleCrossLinks: () => {
-                  setLayers(l => ({ ...l, crossLinks: !l.crossLinks }));
-                  if (layers.crossLinks && connectionTool === 'crosslink') {
-                    setConnectionTool(null);
-                  }
-                },
-                onToggleBrokenLinks: () => setLayers(l => ({ ...l, brokenLinks: !l.brokenLinks })),
-                showPageNumbers: layers.pageNumbers,
-                onTogglePageNumbers: () => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers })),
-                connectionAvailability,
-                scanLayerAvailability,
-                scanLayerVisibility,
-                onToggleScanLayer: (layerKey) => {
-                  setScanLayerVisibility(prev => ({
-                    ...prev,
-                    [layerKey]: !prev[layerKey],
-                  }));
-                },
-                changeFilters,
-                onToggleChangeStatus: (status) => {
-                  setChangeFilters(prev => ({
-                    ...prev,
-                    statuses: {
-                      ...prev.statuses,
-                      [status]: !prev.statuses?.[status],
-                    },
-                  }));
-                },
-                changeStatusOptions: markerStatusOptions,
-                showChangeSection: showMarkerSection,
-                showViewDropdown,
-                onToggleDropdown: () => setShowViewDropdown(!showViewDropdown),
-                viewDropdownRef,
-              }}
-              colorKeyProps={{
-                showColorKey,
-                onToggle: () => setShowColorKey(v => !v),
-                colors,
-                connectionColors,
-                maxDepth,
-                editingDepth: editingColorDepth,
-                editingConnectionKey,
-                connectionLegend,
-                onEditDepth: (depth, position) => {
-                  beginColorEdit();
-                  setEditingColorDepth(depth);
-                  setEditingConnectionKey(null);
-                  setColorPickerPosition(position);
-                },
-                onEditConnectionColor: (key, position) => {
-                  beginColorEdit();
-                  setEditingConnectionKey(key);
-                  setEditingColorDepth(null);
-                  setColorPickerPosition(position);
-                },
-              }}
               toolbarProps={{
                 canEdit: canEdit(),
+                canViewComments: canComment(),
+                canViewVersionHistory: canViewVersionHistory(),
                 activeTool,
                 connectionTool,
                 onSelectTool: () => {
+                  cancelActiveConnectionInteraction();
                   setActiveTool('select');
                   setConnectionTool(null);
                 },
@@ -8942,10 +19533,12 @@ export default function App() {
                   setEditModalMode('add');
                 },
                 onToggleUserFlow: () => {
+                  cancelActiveConnectionInteraction();
                   setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
                   setActiveTool('select');
                 },
                 onToggleCrosslink: () => {
+                  cancelActiveConnectionInteraction();
                   setConnectionTool(connectionTool === 'crosslink' ? null : 'crosslink');
                   setActiveTool('select');
                 },
@@ -8954,7 +19547,11 @@ export default function App() {
                   setShowCommentsPanel((prev) => {
                     const next = !prev;
                     if (next) {
+                      markMentionCommentsRead();
+                      setShowViewDropdown(false);
+                      setShowColorKey(false);
                       setShowReportDrawer(false);
+                      setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
                       setShowVersionHistoryDrawer(false);
@@ -8964,13 +19561,16 @@ export default function App() {
                     return next;
                   });
                 },
-                hasAnyComments,
+                hasUnreadCommentMentions,
                 showReportDrawer,
                 onToggleReportDrawer: () => {
                   setShowReportDrawer((prev) => {
                     const next = !prev;
                     if (next) {
+                      setShowViewDropdown(false);
+                      setShowColorKey(false);
                       setShowCommentsPanel(false);
+                      setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
                       setShowVersionHistoryDrawer(false);
@@ -8980,22 +19580,181 @@ export default function App() {
                     return next;
                   });
                 },
+                showLayersMenu: showViewDropdown,
+                onToggleLayersMenu: () => {
+                  setShowViewDropdown((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setShowColorKey(false);
+                    }
+                    return next;
+                  });
+                },
+                layersMenuRef: viewDropdownRef,
+                layersPanel: (
+                  <LayersPanel
+                    embedded
+                    layers={layers}
+                    connectionTool={connectionTool}
+                    onToggleUserFlows={() => {
+                      cancelScheduledResetView();
+                      setLayers((currentLayers) => ({ ...currentLayers, userFlows: !currentLayers.userFlows }));
+                      if (layers.userFlows && connectionTool === 'userflow') {
+                        setConnectionTool(null);
+                      }
+                    }}
+                    onToggleCrossLinks={() => {
+                      cancelScheduledResetView();
+                      setLayers((currentLayers) => ({ ...currentLayers, crossLinks: !currentLayers.crossLinks }));
+                      if (layers.crossLinks && connectionTool === 'crosslink') {
+                        setConnectionTool(null);
+                      }
+                    }}
+                    onToggleBrokenLinks={() => {
+                      cancelScheduledResetView();
+                      setLayers((currentLayers) => ({ ...currentLayers, brokenLinks: !currentLayers.brokenLinks }));
+                    }}
+                    connectionAvailability={connectionAvailability}
+                    scanLayerAvailability={effectiveScanLayerAvailability}
+                    scanLayerVisibility={scanLayerVisibility}
+                    onToggleScanLayer={(layerKey) => {
+                      cancelScheduledResetView();
+                      setScanLayerVisibility((prev) => ({
+                        ...prev,
+                        [layerKey]: !prev[layerKey],
+                      }));
+                    }}
+                    changeFilters={changeFilters}
+                    onToggleChangeStatus={(status) => {
+                      cancelScheduledResetView();
+                      setChangeFilters((prev) => ({
+                        ...prev,
+                        statuses: {
+                          ...prev.statuses,
+                          [status]: !prev.statuses?.[status],
+                        },
+                      }));
+                    }}
+                    changeStatusOptions={markerStatusOptions}
+                    showChangeSection={showMarkerSection}
+                    showViewDropdown={showViewDropdown}
+                    onToggleDropdown={() => setShowViewDropdown((prev) => !prev)}
+                    viewDropdownRef={viewDropdownRef}
+                  />
+                ),
+                showLegendMenu: showColorKey,
+                onToggleLegendMenu: () => {
+                  setShowColorKey((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setShowViewDropdown(false);
+                    }
+                    return next;
+                  });
+                },
+                legendMenuRef: colorKeyRef,
+                legendPanel: (
+                  <ColorKey
+                    embedded
+                    showColorKey={showColorKey}
+                    onToggle={() => setShowColorKey((currentValue) => !currentValue)}
+                    colors={colors}
+                    connectionColors={connectionColors}
+                    maxDepth={maxDepth}
+                    canEdit={canEdit()}
+                    editingDepth={editingColorDepth}
+                    editingConnectionKey={editingConnectionKey}
+                    connectionLegend={connectionLegend}
+                    onEditDepth={(depth, position) => {
+                      beginColorEdit();
+                      setEditingColorDepth(depth);
+                      setEditingConnectionKey(null);
+                      setColorPickerPosition(position);
+                    }}
+                    onEditConnectionColor={(key, position) => {
+                      beginColorEdit();
+                      setEditingConnectionKey(key);
+                      setEditingColorDepth(null);
+                      setColorPickerPosition(position);
+                    }}
+                  />
+                ),
                 onToggleImageMenu: () => {
-                  setShowImageMenu((prev) => !prev);
+                  if (showImageMenu) {
+                    setShowImageMenu(false);
+                    return;
+                  }
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowImageReportDrawer(false);
+                  setShowImageMenu(true);
+                  if (canEditValue) {
+                    validateCurrentMapImageAssets();
+                  }
                 },
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
                 onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),
+                onUpdateCapturedThumbnails: () => handleThumbnailCapture('all', 'captured'),
+                onGetFullScreenshotsAll: () => handleFullScreenshotCapture('all'),
+                onGetFullScreenshotsSelected: () => handleFullScreenshotCapture('selected'),
+                onUpdateCapturedFullScreenshots: () => handleFullScreenshotCapture('all', 'captured'),
+                onDownloadImagesAll: () => downloadImageAssets('all'),
+                onDownloadImagesSelected: () => downloadImageAssets('selected'),
                 onToggleThumbnails: () => {
                   setShowThumbnails((prev) => !prev);
                 },
                 showThumbnails,
                 hasAnyThumbnails,
+                hasDownloadableThumbnails: hasAnyDownloadableThumbnails,
+                hasDownloadableSelectedThumbnails: hasSelectedDownloadableThumbnails,
+                hasFullScreenshotAssets: hasAnyFullScreenshotAssets,
+                hasSelectedFullScreenshotAssets: hasSelectedFullScreenshotAssets,
+                hasDownloadableImages: hasAnyDownloadableImages,
+                hasDownloadableSelectedImages: hasSelectedDownloadableImages,
                 allThumbnailsCaptured,
+                thumbnailsAllLabel: invalidThumbnailAssetIds.size > 0
+                  ? 'Retry Missing Thumbnails'
+                  : thumbnailCaptureStats.hasPartial
+                  ? 'Get thumbnails (remaining)'
+                  : 'Get thumbnails (all)',
+                thumbnailsSelectedLabel: hasSelectedDownloadableThumbnails
+                  ? 'Recapture'
+                  : 'Get thumbnails (selected)',
+                allFullScreenshotsCaptured: fullScreenshotCaptureStats.allCaptured,
+                fullScreenshotsAllLabel: invalidFullScreenshotAssetIds.size > 0
+                  ? 'Retry Missing Full page'
+                  : fullScreenshotCaptureStats.hasPartial
+                  ? 'Get full page (remaining)'
+                  : 'Get full page (all)',
+                fullScreenshotsSelectedLabel: hasSelectedFullScreenshotAssets
+                  ? 'Recapture'
+                  : 'Get full page (selected)',
+                captureIssues: visibleCaptureIssues,
+                onOpenImageReport: () => {
+                  setShowImageMenu(false);
+                  setShowImageReportDrawer(true);
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowCommentsPanel(false);
+                  setShowReportDrawer(false);
+                  setShowProfileDrawer(false);
+                  setShowSettingsDrawer(false);
+                  setShowVersionHistoryDrawer(false);
+                  setShowProjectsModal(false);
+                  setShowHistoryModal(false);
+                },
+                screenshotCreditsLabel,
+                onAddScreenshotCredits: () => {
+                  setShowImageMenu(false);
+                  openPlansModal('screenshot-credits');
+                },
                 showImageMenu,
                 imageMenuRef,
+                canUseImageTools: canEditValue,
                 hasSelection: selectedNodeIds.size > 0,
                 canUndo,
                 canRedo,
+                undoRedoDisabledReason: liveUndoRedoDisabledReason,
                 onUndo: handleUndo,
                 onRedo: handleRedo,
                 onClearCanvas: clearCanvas,
@@ -9003,13 +19762,17 @@ export default function App() {
                   setCreateMapMode(false);
                   setShowSaveMapModal(true);
                 },
+                isSavingMap,
                 onDuplicateMap: duplicateCurrentMap,
                 onShowVersionHistory: () => {
                   setShowVersionHistoryDrawer((prev) => {
                     const next = !prev;
                     if (next) {
+                      setShowViewDropdown(false);
+                      setShowColorKey(false);
                       setShowCommentsPanel(false);
                       setShowReportDrawer(false);
+                      setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
                       setShowProjectsModal(false);
@@ -9018,11 +19781,28 @@ export default function App() {
                     return next;
                   });
                 },
-                onExport: () => setShowExportModal(true),
-                onShare: () => setShowShareModal(true),
+                onExport: () => {
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowExportModal(true);
+                },
+                onShare: () => {
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowShareModal(true);
+                },
+                onCollaborate: () => {
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowCollaborationModal(true);
+                },
+                canOpenShare: canOpenShareModalValue,
+                canOpenCollaborate: canOpenCollaborationModalValue && !isReaderOnlyMapRoleValue,
                 hasMap,
                 hasSavedMap: !!currentMap?.id,
                 showVersionHistory: showVersionHistoryDrawer,
+                shareDisabledReason: 'Save this map before sharing',
+                onBlockedShareAttempt: () => showToast('Save this map before sharing', 'info'),
               }}
               zoomProps={{
                 scale,
@@ -9036,8 +19816,9 @@ export default function App() {
               }}
               minimapProps={{
                 isOpen: showMinimap,
-                layout: mapLayout,
-                bounds: worldBounds,
+                layout: useLargeMapSurface ? null : mapLayout,
+                overview: useLargeMapSurface ? largeMapMinimapOverview : null,
+                bounds: useLargeMapSurface ? largeMapSceneBounds : worldBounds,
                 canvasSize,
                 pan,
                 scale,
@@ -9058,80 +19839,178 @@ export default function App() {
               stats={reportStats}
               typeOptions={REPORT_TYPE_OPTIONS}
               onDownload={downloadReportPdf}
-              onLocateNode={(nodeId) => {
-                focusNodeById(nodeId);
-              }}
-              onLocateUrl={(url) => {
-                if (!url || !contentRef.current || !canvasRef.current) return;
-                const urlMap = buildUrlNodeMap(root, orphans);
-                let match = urlMap.get(url);
-                if (!match?.id) {
-                  const normalized = normalizeUrlForCompare(url);
-                  for (const [candidateUrl, node] of urlMap.entries()) {
-                    if (normalizeUrlForCompare(candidateUrl) === normalized) {
-                      match = node;
-                      break;
-                    }
-                  }
-                }
-                if (!match?.id) return;
-                focusNodeById(match.id);
-              }}
+              onLocateNode={locateReportNodeOnMap}
+              onLocateUrl={locateReportUrlOnMap}
+              onUpgrade={isPrimaryBillingOwner ? () => openPlansModal('report') : null}
               reportTitle={reportTitle}
               reportTimestamp={reportTimestamp}
+              scanMeta={scanMeta}
+            />
+            <ImageReportDrawer
+              isOpen={showImageReportDrawer}
+              onClose={() => setShowImageReportDrawer(false)}
+              issues={visibleCaptureIssues}
+              onSelectIssue={selectCaptureIssue}
+              onOpenIssueUrl={openCaptureIssueUrl}
+              selectedNodeIds={selectedNodeIds}
+              onSelectionChange={(nodeIds) => setSelectedNodeIds(new Set(nodeIds))}
+              onCaptureSelectedThumbnails={() => handleThumbnailCapture('selected')}
+              onCaptureSelectedScreenshots={() => handleFullScreenshotCapture('selected')}
+              onRetryMissingThumbnails={() => handleThumbnailCapture('all')}
+              onRetryMissingScreenshots={() => handleFullScreenshotCapture('all')}
+              hasMissingThumbnails={invalidThumbnailAssetIds.size > 0}
+              hasMissingScreenshots={invalidFullScreenshotAssetIds.size > 0}
+              reportTitle={reportTitle}
             />
           </DndContext>
         )}
-        {showThumbnails && thumbnailStats.total > 0 && (() => {
-          if (thumbnailStats.stopped) return null;
+        {(showThumbnails || thumbnailStats.mode === 'screenshot') && thumbnailStats.total > 0 && (() => {
+          const backendCaptureActive = Boolean(activeImageCaptureJob?.jobId);
+          if (!backendCaptureActive && !shouldShowImageCaptureProgressToast(thumbnailStats)) return null;
+          const total = thumbnailStats.total || 0;
+          if (total <= 0) return null;
+          const saved = Math.max(0, Number(thumbnailStats.saved ?? thumbnailStats.verified ?? thumbnailStats.captured ?? 0) || 0);
+          const verified = Math.max(saved, Number(thumbnailStats.verified ?? saved) || 0);
+          const settled = Math.min(
+            total,
+            saved + (thumbnailStats.failed || 0) + (thumbnailStats.skipped || 0)
+          );
+          const completed = Math.max(thumbnailStats.completed || 0, settled);
+          const remaining = Math.max(0, total - settled);
+          if (remaining <= 0 && !thumbnailStats.finalizing && !backendCaptureActive) return null;
           const cached = thumbnailStats.cached || 0;
-          const totalNew = Math.max(0, thumbnailStats.total - cached);
-          if (totalNew <= 0) return null;
-          const remaining = totalNew - thumbnailStats.loaded;
-          if (remaining <= 0) return null;
-          const etaMs = thumbnailStats.avgMs > 0
-            ? Math.ceil((remaining * thumbnailStats.avgMs) / Math.max(1, MAX_THUMBNAIL_CONCURRENCY))
+          const unavailable = thumbnailStats.unavailable || 0;
+          const skipped = thumbnailStats.skipped || 0;
+          const captured = verified;
+          const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
+          const fallbackItemMs = isScreenshotCapture ? 30000 : 12000;
+          const elapsedItemMs = completed > 0
+            ? Math.ceil(Math.max(thumbnailElapsedMs, 1000) / completed)
             : 0;
+          const estimateItemMs = Math.max(thumbnailStats.avgMs || 0, elapsedItemMs, fallbackItemMs);
+          const activeConcurrency = isScreenshotCapture ? FULL_SCREENSHOT_CONCURRENCY : MAX_THUMBNAIL_CONCURRENCY;
+          const etaConcurrency = activeConcurrency;
+          const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
+          const captureLabel = isScreenshotCapture ? 'Screenshots' : 'Thumbnails';
+          const title = `${captureLabel}: ${captured} of ${total} saved`;
+          const isPaused = thumbnailStats.paused || activeImageCaptureJob?.status === 'paused';
+          const isRecoveryPhase = thumbnailStats.phase === 'recovering' || thumbnailStats.phase === 'recovery';
+          const phaseTextByKey = {
+            preparing: 'Preparing',
+            capturing: 'Capturing',
+            recovering: 'Retrying slow pages',
+            saving: 'Saving',
+            complete: 'Complete',
+            needs_review: 'Needs review',
+          };
+          const stageLabel = thumbnailStats.stageTotal > 1
+            ? `Stage ${thumbnailStats.stageIndex || 1} of ${thumbnailStats.stageTotal}`
+            : '';
+          const phaseLabel = isPaused
+            ? 'Paused'
+            : [stageLabel, phaseTextByKey[thumbnailStats.phase] || 'Capturing'].filter(Boolean).join(' · ');
+          const shouldShowFailureCount = thumbnailStats.failed > 0
+            && (!backendCaptureActive || thumbnailStats.phase === 'complete' || thumbnailStats.phase === 'needs_review');
+          const metaParts = [
+            backendCaptureActive ? phaseLabel : '',
+            backendCaptureActive && remaining <= 0 && !thumbnailStats.finalizing ? 'finishing save' : '',
+            isRecoveryPhase && thumbnailStats.retrying > 0 ? `${thumbnailStats.retrying} retrying` : '',
+            cached > 0 ? `${cached} already had images` : '',
+            unavailable > 0 ? `${unavailable} unavailable` : '',
+            skipped > 0 ? `${skipped} skipped` : '',
+            shouldShowFailureCount ? `${thumbnailStats.failed} failed` : '',
+          ].filter(Boolean);
           return (
-            <div className="thumbnail-progress-toast">
-              <div className="thumbnail-progress-details">
-                <span>
-                  Thumbnails: {thumbnailStats.loaded}/{totalNew}
-                  {cached > 0 ? ` (${cached} cached)` : ''}
-                  {thumbnailStats.failed > 0 ? ` (${thumbnailStats.failed} retrying)` : ''}
+            <Toast
+              type="loading"
+              className="image-capture-toast"
+              title={title}
+              icon={false}
+              action={(
+                <div className="image-capture-toast__actions">
+                  {backendCaptureActive && (
+                    <Button
+                      type="secondary"
+                      buttonStyle="mono"
+                      size="sm"
+                      onClick={isPaused ? resumeImageCaptureNow : pauseImageCaptureNow}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      {isPaused ? 'Resume' : 'Pause'}
+                    </Button>
+                  )}
+                  <Button
+                    type="secondary"
+                    buttonStyle="mono"
+                    size="sm"
+                    onClick={() => stopThumbnailCaptureNow(true)}
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    Stop
+                  </Button>
+                </div>
+              )}
+            >
+              <div className="image-capture-toast__body">
+                {metaParts.length > 0 && (
+                  <span className="image-capture-toast__meta">
+                    {metaParts.join(' • ')}
+                  </span>
+                )}
+                <span className="image-capture-toast__line">
+                  {formatDuration(thumbnailElapsedMs)} | ETA ~{formatDuration(etaMs)}
                 </span>
-                <span className="thumbnail-progress-line">
-                  <span className="thumbnail-progress-bar" aria-hidden="true" />
-                  {formatDuration(thumbnailElapsedMs)} | ETA ~{thumbnailStats.avgMs > 0 ? formatDuration(etaMs) : '--:--'}
-                </span>
+                <span className="image-capture-toast__bar" aria-hidden="true" />
               </div>
-              <button
-                className="thumbnail-progress-stop"
-                onClick={handleStopThumbnailCapture}
-                title="Stop thumbnail capture"
-                onPointerDown={(event) => event.stopPropagation()}
-                type="button"
-              >
-                <XOctagon size={16} />
-              </button>
-            </div>
+            </Toast>
           );
         })()}
       </div>
 
+      <FeedbackWidget
+        currentRoute={currentRoute}
+        currentUser={currentUser}
+        currentMapId={currentMap?.id || null}
+        activeSurfaces={{
+          commentsPanel: showCommentsPanel,
+          reportDrawer: showReportDrawer,
+          imageReportDrawer: showImageReportDrawer,
+          shareModal: showShareModal,
+          exportModal: showExportModal,
+          projectsModal: showProjectsModal,
+          historyModal: showHistoryModal,
+          authModal: showAuthModal,
+          profileDrawer: showProfileDrawer,
+          settingsDrawer: showSettingsDrawer,
+          versionHistoryDrawer: showVersionHistoryDrawer,
+          inviteInboxModal: showInviteInboxModal,
+          accessRequestsInboxModal: showAccessRequestsInboxModal,
+        }}
+        showToast={showToast}
+      />
+
       {/* Comments Panel - Right Rail */}
-      {showCommentsPanel && (
-        <CommentsPanel
-          root={root}
-          orphans={orphans}
-          onClose={() => setShowCommentsPanel(false)}
-          onCommentClick={(nodeId) => {
-            // Small delay to let animated pan complete before calculating popover position
-            setTimeout(() => openCommentPopover(nodeId), 480);
-          }}
-          onNavigateToNode={focusNodeById}
-        />
-      )}
+      <CommentsPanel
+        isOpen={showCommentsPanel}
+        root={commentsPanelRoot}
+        orphans={commentsPanelOrphans}
+        currentUser={currentUser}
+        selectedCommentId={selectedCommentId}
+        expandedCommentIdsOverride={figmaCaptureExpandedCommentIds}
+        onClose={() => {
+          setShowCommentsPanel(false);
+          setCommentingNodeId(null);
+          setCommentingNodeSnapshot(null);
+          setSelectedCommentId(null);
+        }}
+        onCommentClick={(nodeId, commentId) => {
+          openCommentPopoverFromDrawer(nodeId, commentId);
+        }}
+        onDeleteComment={deleteComment}
+        onToggleCompleted={toggleCommentCompleted}
+        onNavigateToNode={focusNodeById}
+        canResolveComments={canEdit()}
+      />
 
       <EditColorModal
         depth={editingConnectionKey ?? editingColorDepth}
@@ -9159,34 +20038,75 @@ export default function App() {
       <ExportModal
         show={showExportModal}
         onClose={() => setShowExportModal(false)}
-        onExportPng={() => { setShowExportModal(false); exportPng(); }}
+        onExportAiSiteBrief={() => { exportAiSiteBrief(); setShowExportModal(false); }}
+        imageExportDisabled={Boolean(pngExportUnavailableReason)}
+        imageExportDisabledReason={pngExportUnavailableReason}
+        onExportPng={() => {
+          if (pngExportUnavailableReason) return;
+          setShowExportModal(false);
+          exportPng();
+        }}
         onExportPdf={() => { setShowExportModal(false); exportPdf(); }}
+        onExportSvg={() => { setShowExportModal(false); exportSvg(); }}
         onExportCsv={() => { exportCsv(); setShowExportModal(false); }}
         onExportJson={() => { exportJson(); setShowExportModal(false); }}
-        onExportSiteIndex={() => { exportSiteIndex(); setShowExportModal(false); }}
+        onExportXml={() => { exportXml(); setShowExportModal(false); }}
+        onExportSiteIndex={(format) => { exportSiteIndex(format); setShowExportModal(false); }}
+        limitedFormatsOnly={currentUser?.entitlements?.features?.standardExports === false || isReaderOnlyMapRoleValue}
       />
 
       <ShareModal
         show={showShareModal}
+        mode="share"
         onClose={() => {
           setShowShareModal(false);
           setShareEmails('');
           setLinkCopied(false);
           setSharePermission(ACCESS_LEVELS.VIEW);
-          setCollaborationInviteEmail('');
-          setCollaborationInviteRole('viewer');
-          setCollaborationError('');
         }}
         accessLevels={ACCESS_LEVELS}
         sharePermission={sharePermission}
         onChangePermission={(permission) => setSharePermission(permission)}
         linkCopied={linkCopied}
         onCopyLink={() => copyShareLink(sharePermission)}
-        canShareLinks={canManageShares()}
+        canShareLinks={canUseShareLinksValue}
+        allowedSharePermissions={allowedSharePermissionsValue}
+        shareLinksDisabledReason={shareLinksDisabledReasonValue}
+        sharePermissionDisabledReason={sharePermissionDisabledReasonValue}
+        onUpgradePlan={() => openPlansModal('share')}
         shareEmails={shareEmails}
         onShareEmailsChange={setShareEmails}
         onSendEmail={sendShareEmail}
-        collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn && canViewCollaborationPanel()}
+      />
+
+      <ShareModal
+        show={showCollaborationModal}
+        mode="collaboration"
+        onClose={() => {
+          setShowCollaborationModal(false);
+          setCollaborationInviteEmail('');
+          setCollaborationInviteRole('viewer');
+          setCollaborationError('');
+          setCollaborationSettings(null);
+          setCollaborationAccessRequests([]);
+        }}
+        accessLevels={ACCESS_LEVELS}
+        sharePermission={sharePermission}
+        onChangePermission={(permission) => setSharePermission(permission)}
+        linkCopied={linkCopied}
+        onCopyLink={() => copyShareLink(sharePermission)}
+        canShareLinks={canUseShareLinksValue}
+        allowedSharePermissions={allowedSharePermissionsValue}
+        shareLinksDisabledReason={shareLinksDisabledReasonValue}
+        sharePermissionDisabledReason={sharePermissionDisabledReasonValue}
+        onUpgradePlan={() => openPlansModal('share')}
+        shareEmails={shareEmails}
+        onShareEmailsChange={setShareEmails}
+        onSendEmail={sendShareEmail}
+        collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn && currentMap?.id && (
+          canViewCollaborationPanel()
+          || canSelfServeCollaborationValue
+        )}
         collaborationAvailable={Boolean(currentMap?.id)}
         collaborationLoading={collaborationLoading}
         collaborationError={collaborationError}
@@ -9194,84 +20114,131 @@ export default function App() {
         onCollaborationInviteEmailChange={setCollaborationInviteEmail}
         collaborationInviteRole={collaborationInviteRole}
         onCollaborationInviteRoleChange={setCollaborationInviteRole}
+        collaborationCapabilities={collaborationCapabilities}
+        collaborationInviteRoleOptions={collaborationInviteRoleOptionsValue}
         onSendCollaborationInvite={sendCollaborationInvite}
         canSendCollaborationInvites={canSendCollaborationInvites()}
+        currentCollaborationRole={currentCollaborationRole}
+        currentUserId={currentUser?.id || null}
         collaborationMemberships={collaborationMemberships}
         collaborationInvites={collaborationInvites}
+        collaborationSettings={collaborationSettings}
+        collaborationAccessRequests={collaborationAccessRequests}
+        canManageCollaborationSettings={canManageCollaborationSettings()}
+        canManageCollaborationMembers={canManageCollaborationMembersValue}
+        canViewAccessRequests={canViewAccessRequests()}
+        onUpdateCollaborationSettings={updateCollaborationSettings}
+        onUpdateCollaborationMemberRole={updateCollaborationMemberRole}
+        onRemoveCollaborationMember={removeCollaborationMember}
         onRevokeCollaborationInvite={revokeCollaborationInvite}
+        onReviewCollaborationAccessRequest={reviewCollaborationAccessRequest}
+      />
+
+      <InviteInboxModal
+        show={showInviteInboxModal}
+        invites={pendingMapInvites}
+        loading={pendingMapInvitesLoading}
+        error={pendingMapInvitesError}
+        onClose={() => {
+          setShowInviteInboxModal(false);
+          setPendingMapInvitesError('');
+          if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'invites') {
+            navigateToRoute(getActiveAppRoute(), { replace: true });
+          }
+        }}
+        onRefresh={() => loadPendingMapInvites()}
+        onAccept={handleAcceptPendingInvite}
+        onDecline={handleDeclinePendingInvite}
+      />
+
+      <AccessRequestInboxModal
+        show={showAccessRequestsInboxModal}
+        requests={pendingAccessRequests}
+        loading={pendingAccessRequestsLoading}
+        error={pendingAccessRequestsError}
+        onClose={() => {
+          setShowAccessRequestsInboxModal(false);
+          setPendingAccessRequestsError('');
+          if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'access_requests') {
+            navigateToRoute(getActiveAppRoute(), { replace: true });
+          }
+        }}
+        onRefresh={() => loadPendingAccessRequests()}
+        onApprove={handleApprovePendingAccessRequest}
+        onDeny={handleDenyPendingAccessRequest}
       />
 
       <SaveMapModal
+        key={saveMapModalKey}
         show={showSaveMapModal}
-        onClose={() => {
-          setShowSaveMapModal(false);
-          setCreateMapMode(false);
-          setPendingCreateAfterSave(false);
-          setPendingLogoutAfterSave(false);
-          setDuplicateMapConfig(null);
-          setPendingLoadMap(null);
-        }}
+        onClose={closeSaveMapModal}
         isLoggedIn={isLoggedIn}
         onRequireLogin={() => {
-          setShowSaveMapModal(false);
-          setCreateMapMode(false);
-          setPendingCreateAfterSave(false);
-          setPendingLogoutAfterSave(false);
-          setDuplicateMapConfig(null);
-          setPendingLoadMap(null);
-          setShowAuthModal(true);
+          closeSaveMapModal();
+          openAuthModal();
         }}
         projects={projects}
         currentMap={currentMap}
         rootUrl={root?.url}
-        defaultProjectId={duplicateMapConfig?.projectId || null}
-        defaultName={duplicateMapConfig?.name || ''}
-        defaultNotes={currentMap?.notes || ''}
-        accessLevels={ACCESS_LEVELS}
-        sharePermission={sharePermission}
-        onChangePermission={setSharePermission}
+        defaultProjectId={saveMapModalProjectId}
+        defaultName={saveMapModalName}
+        defaultNotes={saveMapModalNotes}
         onSave={createMapMode ? startBlankMapCreation : (duplicateMapConfig ? handleDuplicateMapSave : saveMap)}
         onCreateProject={createProject}
-        title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
-        submitLabel={createMapMode ? 'Create' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
-      />
-
-      <SaveVersionModal
-        show={showSaveVersionModal}
-        onClose={() => setShowSaveVersionModal(false)}
-        onSave={handleSaveVersion}
-        versionNumber={saveVersionMeta.number}
-        timestamp={saveVersionMeta.timestamp}
-        defaultName="Updated"
+        projectCreateDisabledReason={projectCreateDisabledReasonValue}
+        onCancel={handleSaveMapModalCancel}
+        cancelLabel={saveMapModalCancelLabel}
+        title={createMapMode ? 'Create map' : (duplicateMapConfig ? 'Duplicate map' : 'Save map')}
+        submitLabel={createMapMode ? 'Create' : (duplicateMapConfig ? 'Duplicate map' : 'Save map')}
+        submitLoadingLabel={createMapMode ? 'Creating' : (duplicateMapConfig ? 'Duplicating' : 'Saving')}
+        saving={isSavingMap}
       />
 
       <ProjectsModal
         show={showProjectsModal}
-        onClose={() => { setShowProjectsModal(false); setEditingProjectId(null); }}
+        onClose={() => {
+          setShowProjectsModal(false);
+          setEditingProjectId(null);
+          setEditingMapId(null);
+        }}
         isLoggedIn={isLoggedIn}
         projects={projects}
         expandedProjects={expandedProjects}
         editingProjectId={editingProjectId}
         editingProjectName={editingProjectName}
+        editingMapId={editingMapId}
+        editingMapName={editingMapName}
         onToggleProjectExpanded={toggleProjectExpanded}
         onEditProjectNameChange={setEditingProjectName}
         onEditProjectNameStart={(projectId, projectName) => {
           setEditingProjectId(projectId);
           setEditingProjectName(projectName);
+          setEditingMapId(null);
         }}
         onEditProjectNameCancel={() => setEditingProjectId(null)}
         onRenameProject={renameProject}
+        onEditMapNameChange={setEditingMapName}
+        onEditMapNameStart={(mapId, mapName) => {
+          setEditingMapId(mapId);
+          setEditingMapName(mapName);
+          setEditingProjectId(null);
+        }}
+        onEditMapNameCancel={() => setEditingMapId(null)}
+        onRenameMap={renameMap}
         onDeleteProject={deleteProject}
         onLoadMap={handleLoadMapRequest}
         onDeleteMap={deleteMap}
         onMoveMap={moveMapToProject}
+        onAddMap={(projectId) => openCreateMapFlow({ defaultProjectId: projectId })}
+        projectCreateDisabledReason={projectCreateDisabledReasonValue}
         onAddProject={async () => {
+          if (projectCreateDisabledReasonValue) return;
           const name = await showPrompt({
-            title: 'New Project',
+            title: 'New project',
             message: 'Enter a name for the new project:',
             placeholder: 'Project name'
           });
-          if (name) createProject(name);
+          if (name) await createProject(name);
         }}
       />
 
@@ -9289,14 +20256,435 @@ export default function App() {
       <ScanProgressModal
         loading={loading}
         showCancelConfirm={showCancelConfirm}
+        showStopConfirm={showStopConfirm}
+        isStoppingScan={isStoppingScan}
+        scanErrorMessage={scanErrorMessage}
         scanMessage={scanMessage}
         scanProgress={scanProgress}
+        scanLimitNote={scanLimitProgressNote}
         scanElapsed={scanElapsed}
         urlInput={urlInput}
-        onRequestCancel={() => setShowCancelConfirm(true)}
+        onRequestCancel={requestCancelScan}
+        onRequestStop={requestStopScan}
+        onStopScan={stopScan}
         onCancelScan={cancelScan}
-        onContinueScan={() => setShowCancelConfirm(false)}
+        onContinueScan={dismissScanConfirm}
+        onDismissScanError={dismissScanError}
       />
+
+      {guestScanPrompt && (
+        <Modal
+          show
+          onClose={() => setGuestScanPrompt(null)}
+          title="Scan this URL"
+          subtitle={getGuestScanPromptSubtitle()}
+          className="guest-scan-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={continueGuestScan}
+              >
+                Continue as guest
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => openGuestScanAuthFlow({
+                  contextMessage: GUEST_SCAN_SIGNIN_CONTEXT_MESSAGE,
+                  initialView: 'login',
+                  postSuccessAction: 'start-scan',
+                })}
+              >
+                Sign in
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => openGuestScanAuthFlow({
+                  contextMessage: GUEST_SCAN_SIGNUP_CONTEXT_MESSAGE,
+                  initialView: 'signup',
+                  postSuccessAction: 'select-plan-before-scan',
+                })}
+              >
+                Sign up
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => openGuestScanAuthFlow({
+                  contextMessage: GUEST_SCAN_SIGNUP_CONTEXT_MESSAGE,
+                  initialView: 'signup',
+                  postSuccessAction: 'select-plan-before-scan',
+                })}
+              >
+                Upgrade
+              </Button>
+            </>
+          )}
+        >
+          <div className="guest-scan-modal-body">
+            <p>{getGuestScanPromptBody()}</p>
+          </div>
+        </Modal>
+      )}
+
+      {scanLimitPrompt && (
+        <Modal
+          show
+          onClose={() => setScanLimitPrompt(null)}
+          title="Scan limits"
+          className="scan-limit-modal"
+          footer={(
+            <>
+              {isPrimaryBillingOwner ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    pendingPlanScanRef.current = {
+                      url: scanLimitPrompt.url,
+                      preserveName: scanLimitPrompt.preserveName,
+                      authFlow: {
+                        ...(scanLimitPrompt.authFlow || {}),
+                        skipScanLimitPrompt: true,
+                      },
+                    };
+                    setScanLimitPrompt(null);
+                    openPlansModal('scan-limit', { resumeScanAfterPlan: true });
+                  }}
+                >
+                  Upgrade
+                </Button>
+              ) : null}
+              <Button
+                variant="primary"
+                onClick={continueScanLimitPrompt}
+              >
+                Continue
+              </Button>
+            </>
+          )}
+        >
+          <div className="guest-scan-modal-body">
+            <p>{getScanLimitPromptBody(scanLimitPrompt.prompt)}</p>
+          </div>
+        </Modal>
+      )}
+
+      {entitlementLockModal && (
+        <Modal
+          show
+          onClose={() => setEntitlementLockModal(null)}
+          title={entitlementLockModal.title}
+          className="entitlement-lock-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setEntitlementLockModal(null)}
+              >
+                Not now
+              </Button>
+              {isPrimaryBillingOwner ? (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setEntitlementLockModal(null);
+                    openPlansModal(entitlementLockModal.actionContext || 'entitlement-lock');
+                  }}
+                >
+                  {entitlementLockModal.actionLabel || 'View plan options'}
+                </Button>
+              ) : null}
+            </>
+          )}
+        >
+          <div className="entitlement-modal-body">
+            <p>{entitlementLockModal.message}</p>
+          </div>
+        </Modal>
+      )}
+
+      {plansModal && (
+        <Modal
+          show
+	          onClose={dismissPlansModal}
+	          title="Upgrade"
+	          subtitle="Choose a plan, page pack, or screenshot credit pack before opening Stripe checkout."
+	          className="plans-modal"
+	          scrollable
+	          footer={(
+	            <div className="plans-modal-footer">
+	              <div className="plans-modal-subtotal" aria-live="polite">
+	                <div className="plans-modal-subtotal-row">
+	                  <span>Selected:</span>
+	                  <strong>{selectedBillingPurchase?.itemCount ?? '--'}</strong>
+	                </div>
+	                <div className="plans-modal-subtotal-row">
+	                  <span>Subtotal:</span>
+	                  <strong className="plans-modal-subtotal-amount">{selectedBillingPurchase?.subtotal || '--'}</strong>
+	                </div>
+	              </div>
+	              <div className="plans-modal-footer-actions">
+	                <Button variant="secondary" onClick={dismissPlansModal}>
+	                  Cancel
+	                </Button>
+	                <Button
+	                  variant="primary"
+	                  onClick={handleSelectedBillingCheckout}
+	                  loading={!!billingActionKey}
+	                  disabled={!selectedBillingPurchase || selectedBillingPurchase.disabled || !!billingActionKey}
+	                  endIcon={!selectedBillingPurchase?.disabled && selectedBillingPurchase?.checkoutLabel === 'Checkout' ? <ExternalLink /> : null}
+	                >
+	                  {selectedBillingPurchase?.checkoutLabel || 'Checkout'}
+	                </Button>
+	              </div>
+	            </div>
+	          )}
+	        >
+	          <div className="plans-modal-body">
+            {billingCatalogLoading ? (
+              <StatusAlert tone="loading">Checking billing availability...</StatusAlert>
+            ) : null}
+            {billingCatalogError ? (
+              <StatusAlert tone="warning">{billingCatalogError}</StatusAlert>
+            ) : null}
+            <SegmentedControl
+              className="plans-modal-tabs"
+              variant="tabs"
+              size="sm"
+              fullWidth
+              ariaLabel="Billing options"
+              value={billingModalTab}
+              onChange={setBillingModalTab}
+              options={BILLING_MODAL_TAB_OPTIONS}
+              optionRole="tab"
+            />
+            {billingModalTab === BILLING_MODAL_TABS.PLANS ? (
+              <section className="plans-modal-tab-panel plans-modal-tab-panel--plans" role="tabpanel" aria-label="Plans">
+                <div className="plans-modal-cycle-control">
+                  <span className="plans-modal-cycle-label">Billing cycle</span>
+                  <div className="plans-modal-cycle" role="group" aria-label="Billing cycle">
+                    {BILLING_CYCLE_OPTIONS.map((option) => (
+                      <button
+                        type="button"
+                        key={option.key}
+                        className={billingCycle === option.key ? 'active' : ''}
+                        aria-pressed={billingCycle === option.key}
+                        disabled={!!billingActionKey}
+                        onClick={() => setBillingCycle(option.key)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="plans-modal-pricing-grid" aria-label="Plan options">
+                  {planOptionCards.map((plan) => {
+                    const isCurrentPlan = currentBillingPlanKey === plan.key;
+                    const isSelected = !isCurrentPlan && billingSelectedPlanKey === plan.key;
+                    return (
+                      <article
+                        className={classNames(
+                          'plans-modal-pricing-card',
+                          `plans-modal-pricing-card--${plan.accent || 'brand'}`,
+                          isSelected && 'is-selected',
+                          isCurrentPlan && 'is-current'
+                        )}
+                        key={plan.key}
+                      >
+                        <div className="plans-modal-pricing-card__top">
+                          <h3>{plan.name}</h3>
+                          <div className="plans-modal-pricing-card__price">
+                            <div className="plans-modal-pricing-card__price-main">
+                              <strong>{plan.price}</strong>
+                              <span>{plan.priceSuffix}</span>
+                            </div>
+                            {plan.priceComparison ? (
+                              <span className="plans-modal-pricing-card__price-compare">
+                                ({plan.priceComparison.price}{plan.priceComparison.suffix})
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <p>{plan.note}</p>
+                        <ul>
+                          {plan.features.map((feature) => (
+                            <li key={feature}>
+                              <Check size={14} aria-hidden="true" />
+                              <span>{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="plans-modal-pricing-card__actions">
+                          {isCurrentPlan ? (
+                            <span className="plans-modal-pricing-card__current">
+                              Current plan
+                            </span>
+                          ) : (
+                            <Button
+                              className="plans-modal-pricing-card__cta"
+                              type="button"
+                              variant="secondary"
+                              buttonStyle="brand"
+                              disabled={!!billingActionKey}
+                              onClick={() => handlePlanSelection(plan.key)}
+                            >
+                              {billingSelectedPlanKey === plan.key ? 'Selected' : 'Select'}
+                            </Button>
+                          )}
+                          <p className="plans-modal-pricing-card__screenshot-note">
+                            *additional screenshot credits and page limits can be purchased anytime
+                          </p>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : (
+              <section className="plans-modal-tab-panel plans-modal-tab-panel--upgrades" role="tabpanel" aria-label="Upgrades">
+                <div className="plans-modal-upgrades-grid">
+                  <section className="plans-modal-pack-section">
+                    <h3>Page packs</h3>
+                    {pageCreditPacks.length ? (
+                      <div className="plans-modal-pack-list">
+                        {pageCreditPacks.map((pack) => renderBillingPackCard(pack, {
+                          singular: 'page',
+                          plural: 'pages',
+                        }))}
+                      </div>
+                    ) : null}
+                  </section>
+                  <section className="plans-modal-pack-section">
+                    <h3>Screenshot Credits</h3>
+                    {screenshotCreditPacks.length ? (
+                      <div className="plans-modal-pack-list">
+                        {screenshotCreditPacks.map((pack) => renderBillingPackCard(pack, {
+                          singular: 'credit',
+                          plural: 'credits',
+                        }))}
+                      </div>
+                    ) : null}
+                    <small className="plans-modal-pack-caption">*1 credit = 1 screenshot of any size, unlimited downloads</small>
+                  </section>
+                </div>
+                {billingCatalog && !billingCatalogLoading && !pageCreditPacks.length && !screenshotCreditPacks.length ? (
+                  <StatusAlert tone="warning">Credit packs are unavailable.</StatusAlert>
+                ) : null}
+              </section>
+            )}
+	          </div>
+	        </Modal>
+      )}
+
+      {scanAuthPrompt && (
+        <Modal
+          show
+          onClose={closeScanAuthPrompt}
+          title="This scan may need login"
+          className="scan-auth-modal"
+          scrollable
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={continueScanWithoutTargetAuth}
+                disabled={scanAuthPrompt.loading}
+              >
+                Continue without login
+              </Button>
+              {scanAuthPrompt.authBrowser?.sessionId ? (
+                <Button
+                  variant="primary"
+                  onClick={finishTargetAuthLogin}
+                  loading={scanAuthPrompt.loading}
+                >
+                  Use this login
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  onClick={startTargetAuthLogin}
+                  loading={scanAuthPrompt.loading}
+                  disabled={!scanAuthPrompt.interactiveLoginSupported || scanAuthPrompt.loading}
+                >
+                  {scanAuthPrompt.interactiveLoginSupported ? 'Log in to this site' : 'Login not available yet'}
+                </Button>
+              )}
+            </>
+          )}
+        >
+          <div className="scan-auth-modal-body">
+            <p>
+              Vellic found {scanAuthPrompt.authCount || 'some'} page{scanAuthPrompt.authCount === 1 ? '' : 's'} that may require login.
+              One login session would apply to this whole scan.
+            </p>
+            {scanAuthPrompt.sampleUrls?.length ? (
+              <ul className="scan-auth-samples">
+                {scanAuthPrompt.sampleUrls.slice(0, 3).map((sampleUrl) => (
+                  <li key={sampleUrl}>{sampleUrl}</li>
+                ))}
+              </ul>
+            ) : null}
+            {scanAuthPrompt.authBrowser?.sessionId ? (
+              <div className="scan-auth-browser">
+                <div className="scan-auth-browser-bar">
+                  <span>{scanAuthPrompt.authBrowser.pageUrl || scanAuthPrompt.url}</span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => sendTargetAuthBrowserAction({ action: 'press', key: 'Enter' })}
+                  >
+                    Enter
+                  </Button>
+                </div>
+                <button
+                  type="button"
+                  className="scan-auth-browser-frame"
+                  onClick={clickTargetAuthBrowser}
+                  aria-label="Target-site login browser"
+                >
+                  <img
+                    ref={scanAuthBrowserImageRef}
+                    src={scanAuthPrompt.authBrowser.screenshotUrl || ''}
+                    alt="Target-site login screen"
+                    draggable="false"
+                  />
+                </button>
+                <div className="scan-auth-browser-controls">
+                  <TextInput
+                    type="text"
+                    size="sm"
+                    shellClassName="scan-auth-browser-input"
+                    value={scanAuthPrompt.authBrowser.text || ''}
+                    placeholder="Type selected field text here"
+                    onChange={(event) => setScanAuthPrompt((current) => current ? {
+                      ...current,
+                      authBrowser: {
+                        ...current.authBrowser,
+                        text: event.target.value,
+                      },
+                    } : current)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') typeIntoTargetAuthBrowser();
+                    }}
+                  />
+                  <Button variant="secondary" size="sm" onClick={typeIntoTargetAuthBrowser}>
+                    Type
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {scanAuthPrompt.error ? (
+              <StatusAlert tone="warning" title="Login connection unavailable">
+                {scanAuthPrompt.error}
+              </StatusAlert>
+            ) : !scanAuthPrompt.interactiveLoginSupported ? (
+              <StatusAlert tone="warning" title="Login scanning is not available yet">
+                Continue without login for now. Protected pages will stay labeled as requiring login.
+              </StatusAlert>
+            ) : null}
+          </div>
+        </Modal>
+      )}
 
       <ImageOverlay
         imageUrl={fullImageUrl}
@@ -9310,13 +20698,90 @@ export default function App() {
         }}
       />
 
+      <WelcomeModal
+        show={showWelcomeModal}
+        dontShowAgain={isLoggedIn ? welcomeDontShowAgain : false}
+        disableDontShowAgain={!isLoggedIn}
+        onToggleDontShowAgain={() => {
+          if (!isLoggedIn) return;
+          setWelcomeDontShowAgain((prev) => !prev);
+        }}
+        onClose={dismissWelcomeModal}
+        onConfirm={dismissWelcomeModal}
+      />
+
       {showAuthModal && (
         <AuthModal
-          onClose={() => setShowAuthModal(false)}
+          onClose={closeAuthModal}
           onSuccess={handleAuthSuccess}
-          onDemo={handleDemoAccess}
+          contextMessage={authContextMessage}
+          initialView={authInitialView}
           showToast={showToast}
         />
+      )}
+
+      {screenshotDownloadUpsell && (
+        <Modal
+          show
+          onClose={() => setScreenshotDownloadUpsell(null)}
+          title="Screenshot downloads locked"
+          subtitle="Free accounts need a plan or screenshot credits before downloading screenshots."
+          className="screenshot-download-upsell-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setScreenshotDownloadUpsell(null)}
+              >
+                Not now
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setScreenshotDownloadUpsell(null);
+                  openPlansModal('screenshot-download');
+                }}
+              >
+                Upgrade
+              </Button>
+            </>
+          )}
+        >
+          <div className="screenshot-download-preview-modal">
+            <p>
+              This export would package {screenshotDownloadUpsell.count || 0} saved image{screenshotDownloadUpsell.count === 1 ? '' : 's'}
+              {' '}from {screenshotDownloadUpsell.scope === 'selected' ? 'selected pages' : 'the full map'} into organized folders.
+            </p>
+            <div className="screenshot-download-preview-grid" aria-label="Organized screenshot export preview">
+              <div className="screenshot-download-preview-card">
+                <div className="screenshot-download-preview-window">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <strong>Desktop captures</strong>
+                <small>Grouped by page path</small>
+              </div>
+              <div className="screenshot-download-preview-card">
+                <div className="screenshot-download-preview-window screenshot-download-preview-window--mobile">
+                  <span />
+                  <span />
+                </div>
+                <strong>Mobile captures</strong>
+                <small>Matched with desktop files</small>
+              </div>
+              <div className="screenshot-download-preview-card">
+                <div className="screenshot-download-preview-folder">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <strong>ZIP package</strong>
+                <small>Ready for clients or review</small>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
 
       <ProfileDrawer
@@ -9325,6 +20790,12 @@ export default function App() {
         onClose={() => setShowProfileDrawer(false)}
         onUpdate={(updatedUser) => setCurrentUser(updatedUser)}
         onLogout={handleLogout}
+        onOpenPlans={(context = 'profile') => {
+          setShowProfileDrawer(false);
+          window.setTimeout(() => openPlansModal(context), 220);
+        }}
+        onOpenBilling={() => handleBillingPortal('profile')}
+        billingLoading={billingActionKey === 'portal:profile'}
         showToast={showToast}
       />
 
@@ -9333,8 +20804,12 @@ export default function App() {
         onClose={() => setShowSettingsDrawer(false)}
         theme={theme}
         onThemeChange={setTheme}
+        mapOrientation={mapOrientation}
+        onMapOrientationChange={(nextOrientation) => setMapOrientation(normalizeMapOrientation(nextOrientation))}
         showPageNumbers={layers.pageNumbers}
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
+        consent={consent}
+        onOpenPrivacySettings={openPrivacySettings}
       />
 
       <VersionHistoryDrawer
@@ -9342,10 +20817,16 @@ export default function App() {
         onClose={() => setShowVersionHistoryDrawer(false)}
         versions={versionsForDrawer}
         onRestoreVersion={restoreVersion}
+        onSelectActivity={handleActivitySelect}
         activeVersionId={activeVersionForDrawer}
         latestVersionId={latestVersionForDrawer}
         isLoading={isVersionLoading}
-        onAddVersion={openSaveVersionModal}
+        onBookmarkVersion={handleBookmarkVersion}
+        canBookmarkVersion={canSaveVersion()}
+        canViewActivity={canViewActivity()}
+        currentUser={currentUser}
+        activity={activityForDrawer}
+        isActivityLoading={isActivityDrawerLoading}
       />
 
       <VersionEditPromptModal
@@ -9356,15 +20837,27 @@ export default function App() {
 
       {editModalNode && (
         <EditNodeModal
+          key={`${editModalMode}:${editModalNode.id || 'new'}:${editModalNode.__detailsVersion || 'base'}`}
           node={editModalNode}
           allNodes={parentOptions}
           rootTree={root}
           onClose={() => setEditModalNode(null)}
           onSave={saveNodeChanges}
+          onUploadNodeImageAsset={uploadNodeImageAsset}
+          onViewImage={viewFullScreenshot}
+          onDelete={(nodeId) => {
+            setEditModalNode(null);
+            requestDeleteNode(nodeId);
+          }}
+          onLocateUrl={locateUrlOnMap}
+          canLocateUrl={canLocateUrlOnMap}
           mode={editModalMode}
+          allowDelete={editModalNode.id !== root?.id}
           customPageTypes={customPageTypes}
           onAddCustomType={(type) => setCustomPageTypes(prev => [...prev, type])}
           specialParentOptions={specialParentOptions}
+          isHomePageCreation={editModalMode === 'add' && !root}
+          showParentSelector={!useLargeMapSurface}
         />
       )}
 
@@ -9383,7 +20876,7 @@ export default function App() {
           setCreateMapMode(true);
           setShowSaveMapModal(true);
         }}
-        onImportFromFile={() => setShowImportModal(true)}
+        onImportFromFile={openImportModalFlow}
       />
 
       <ImportModal
@@ -9396,45 +20889,104 @@ export default function App() {
         loading={importLoading}
       />
 
+      {importPageLimitModal && (
+        <Modal
+          show
+          onClose={() => setImportPageLimitModal(null)}
+          title="Account limit reached"
+          className="import-limit-modal"
+          footer={(
+            <>
+              {importPageLimitModal.availablePages > 0 ? (
+                <Button
+                  variant={importPageLimitModal.canManageBilling ? 'secondary' : 'primary'}
+                  onClick={() => {
+                    const partialImport = limitImportedMapToPageCount(
+                      importPageLimitModal.imported,
+                      importPageLimitModal.availablePages
+                    );
+                    if (partialImport) {
+                      applyImportedMap(partialImport, {
+                        originalPageCount: importPageLimitModal.pageCount,
+                        partial: true,
+                        defaultName: importPageLimitModal.defaultMapName || '',
+                      });
+                    }
+                    setImportPageLimitModal(null);
+                  }}
+                >
+                  Continue
+                </Button>
+              ) : null}
+              {importPageLimitModal.canManageBilling ? (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setImportPageLimitModal(null);
+                    openPlansModal('import-page-limit');
+                  }}
+                >
+                  Upgrade
+                </Button>
+              ) : null}
+            </>
+          )}
+        >
+          <div className="entitlement-modal-body">
+            <p>
+              {importPageLimitModal.fileName || 'This file'} has{' '}
+              {formatEntitlementCount(importPageLimitModal.pageCount)} pages, but this account has{' '}
+              {formatEntitlementCount(importPageLimitModal.availablePages)} active pages available.
+            </p>
+            {importPageLimitModal.availablePages > 0 && importPageLimitModal.canManageBilling ? (
+              <p>You can continue with a partial import using the available pages, or add pages before importing the full file.</p>
+            ) : importPageLimitModal.availablePages > 0 ? (
+              <p>You can continue with a partial import using the available pages, or ask the primary account owner to add pages before importing the full file.</p>
+            ) : importPageLimitModal.canManageBilling ? (
+              <p>Add pages to the account or upgrade the account before importing this file.</p>
+            ) : (
+              <p>Ask the primary account owner to add pages or upgrade the account before importing this file.</p>
+            )}
+          </div>
+        </Modal>
+      )}
+
       {toast && (
-        <div className={`toast toast-${toast.type}`}>
-          <ToastIcon type={toast.type} />
-          <span>{toast.message}</span>
-          <button className="toast-close" onClick={dismissToast}>
-            <X size={16} />
-          </button>
-        </div>
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={dismissToast}
+        />
       )}
 
       {/* Generic Confirmation Modal */}
       {confirmModal && (
-        <div className="modal-overlay" onClick={confirmModal.onCancel}>
-          <div className="modal-card modal-sm confirm-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{confirmModal.title}</h3>
-              <button className="modal-close" onClick={confirmModal.onCancel}>
-                <X size={24} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p>{confirmModal.message}</p>
-            </div>
-            <div className="modal-footer">
-              <button
-                className="modal-btn secondary"
+        <Modal
+          show={!!confirmModal}
+          onClose={confirmModal.onCancel}
+          title={confirmModal.title}
+          size="sm"
+          className="confirm-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                buttonStyle={confirmModal.danger ? 'mono' : undefined}
                 onClick={confirmModal.onCancel}
               >
                 {confirmModal.cancelText}
-              </button>
-              <button
-                className={confirmModal.danger ? 'modal-btn danger' : 'modal-btn primary'}
+              </Button>
+              <Button
+                variant={confirmModal.danger ? 'danger' : 'primary'}
                 onClick={confirmModal.onConfirm}
               >
                 {confirmModal.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </>
+          )}
+        >
+          <p>{confirmModal.message}</p>
+        </Modal>
       )}
 
       {/* Generic Prompt Modal */}

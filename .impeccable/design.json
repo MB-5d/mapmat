@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-05T21:32:08Z",
+  "title": "Design System: Vellic",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Vellic Indigo",
+        "canonical": "#6366f1",
+        "tonalRamp": ["#eef2ff", "#e0e7ff", "#c7d2fe", "#a5b4fc", "#818cf8", "#6366f1", "#4f46e5", "#4338ca", "#3730a3", "#312e81", "#1e1b4b"]
+      },
+      "neutral": {
+        "role": "neutral",
+        "displayName": "Slate Neutral",
+        "canonical": "#1e293b",
+        "tonalRamp": ["#ffffff", "#f8fafc", "#f1f5f9", "#e2e8f0", "#cbd5e1", "#94a3b8", "#64748b", "#475569", "#334155", "#1e293b", "#0f172a"]
+      },
+      "plum-dark": {
+        "role": "dark-neutral",
+        "displayName": "Dark Plum",
+        "canonical": "#1a1022",
+        "tonalRamp": ["#f5effa", "#e7ddef", "#d4c8e0", "#b8add1", "#9f8fb8", "#6b5a80", "#56456e", "#3d2a52", "#301e3f", "#1a1022", "#0d0812"]
+      },
+      "status": {
+        "role": "semantic",
+        "displayName": "Status Set",
+        "canonical": "#2563eb",
+        "tonalRamp": ["#2563eb", "#16a34a", "#d97706", "#ef4444"]
+      },
+      "page-depth": {
+        "role": "map-structure",
+        "displayName": "Page Depth Spectrum",
+        "canonical": "#38bdf8",
+        "tonalRamp": ["#38bdf8", "#2dd4bf", "#a3e635", "#fbbf24", "#fb7185", "#a78bfa"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Marketing and large empty-state headlines only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Major app, drawer, and modal headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel titles and strong section labels."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Primary app copy and explanatory text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels use 12px / 16px / 500 with 4px spacing to controls; compact UI labels use the same restrained scale."
+      }
+    },
+    "elevation": {
+      "card": "0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06)",
+      "raised": "0 4px 12px rgba(15, 23, 42, 0.12)",
+      "canvas-control": "0 4px 12px rgba(0, 0, 0, 0.1)",
+      "overlay": "0 12px 24px rgba(15, 23, 42, 0.12)",
+      "modal": "0 20px 25px rgba(15, 23, 42, 0.15)",
+      "drawer": "-12px 0 24px rgba(15, 23, 42, 0.15)"
+    },
+    "componentNotes": {
+      "sourceOfTruth": "Code owns shipped app behavior. Shared primitives live under frontend/src/components/ui and styles are mainly in frontend/src/App.css plus frontend/src/design-system.generated.css.",
+      "signatureSurfaces": ["ScanBar", "CanvasToolbar", "NodeCard", "CommentsPanel", "CommentPopover", "ReportDrawer", "ShareModal"],
+      "rules": [
+        "Keep the map central.",
+        "Use primary color for action, focus, and selection.",
+        "Prefer shared primitives over local styling.",
+        "Keep Map Insights secondary.",
+        "Avoid decorative AI-looking polish."
+      ]
+    }
+  }
+}

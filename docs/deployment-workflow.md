@@ -1,4 +1,4 @@
-# Map Mat Deployment Workflow
+# Vellic Deployment Workflow
 
 This repository uses separate branches and separate infrastructure for safe releases:
 
@@ -77,12 +77,12 @@ Keep two Railway services:
    - Branch: `main`
    - Start command: `node server.js`
    - Volume mount: `/app/data` (or chosen mount path)
-   - `DB_PATH=/app/data/mapmat.db`
+   - `DB_PATH=/app/data/vellic.db`
 2. Staging service:
    - Branch: `staging`
    - Start command: `node server.js`
    - Separate volume mount: `/app/data`
-   - `DB_PATH=/app/data/mapmat.db`
+   - `DB_PATH=/app/data/vellic.db`
 
 Required backend vars per service:
 
@@ -144,7 +144,7 @@ npm run backup:archive
 Optional custom backup destination (for Google Drive synced folder):
 
 ```bash
-bash scripts/backup-repo.sh "$HOME/Desktop/<your-drive-folder>/mapmat-backups"
+bash scripts/backup-repo.sh "$HOME/Desktop/<your-drive-folder>/vellic-backups"
 ```
 
 ## 8) Environment Templates
@@ -157,3 +157,17 @@ Use templates committed in repo:
 - Frontend local: `frontend/.env.example`
 - Frontend staging: `frontend/.env.staging.example`
 - Frontend production: `frontend/.env.production.example`
+
+Before applying staging values, you can validate the env matrix locally:
+
+```bash
+set -a
+source .env.staging.example
+source frontend/.env.staging.example
+npm run check:staging:readiness
+```
+
+This should pass with only the expected warnings for:
+
+- `EMAIL_PROVIDER=log`
+- filesystem-backed screenshot storage on a small single-instance staging environment

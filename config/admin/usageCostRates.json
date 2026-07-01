@@ -1,0 +1,62 @@
+{
+  "currency": "USD",
+  "updatedAt": "2026-06-02",
+  "notes": [
+    "These are admin-side estimating inputs, not a customer billing ledger.",
+    "Replace platform placeholders with live vendor bills after Railway, Vercel, and storage account access is available.",
+    "Client-side exports are treated as zero infrastructure cost unless they read stored image assets or call a paid API."
+  ],
+  "sources": [
+    {
+      "provider": "cloudflare_r2",
+      "url": "https://developers.cloudflare.com/r2/pricing/"
+    },
+    {
+      "provider": "vercel",
+      "url": "https://vercel.com/pricing"
+    },
+    {
+      "provider": "railway",
+      "url": "https://docs.railway.com/pricing/plans"
+    },
+    {
+      "provider": "resend",
+      "url": "https://resend.com/docs/knowledge-base/what-is-resend-pricing"
+    },
+    {
+      "provider": "postmark",
+      "url": "https://postmarkapp.com/pricing"
+    },
+    {
+      "provider": "sentry",
+      "url": "https://sentry.io/pricing/"
+    },
+    {
+      "provider": "microsoft_clarity",
+      "url": "https://learn.microsoft.com/en-us/clarity/setup-and-installation/about-clarity"
+    }
+  ],
+  "fixedMonthlyUsd": {
+    "vercelProSeat": 20,
+    "sentryTeam": 26,
+    "resendPro": 20,
+    "railwayUsagePlaceholder": 0,
+    "postgresUsagePlaceholder": 0
+  },
+  "ratesUsd": {
+    "scanPerRun": 0,
+    "scanPerPage": 0.0005,
+    "screenshotJob": 0,
+    "thumbnailScreenshot": 0.001,
+    "fullPageScreenshot": 0.003,
+    "cloudflareR2StorageGbMonth": 0.015,
+    "cloudflareR2ClassAPerMillion": 4.5,
+    "cloudflareR2ClassBPerMillion": 0.36,
+    "emailPerThousand": 0.9,
+    "clientExport": 0,
+    "imageDownloadPackage": 0,
+    "comment": 0,
+    "share": 0,
+    "additionalUserSeatMonth": 0
+  }
+}

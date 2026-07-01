@@ -4,6 +4,11 @@ const mapStore = require('../stores/mapStore');
 const collaborationStore = require('../stores/collaborationStore');
 const permissionPolicy = require('../policies/permissionPolicy');
 const {
+  ensureCollaborationActivitySchemaAsync,
+  recordMapActivityBestEffortAsync,
+  buildCoeditingOperationActivity,
+} = require('../utils/collaborationActivity');
+const {
   normalizeOperationEnvelope,
   CoeditingContractError,
 } = require('../utils/coeditingContract');
@@ -20,6 +25,7 @@ const {
 const { resolveCoeditingRolloutAsync } = require('../utils/coeditingRollout');
 const {
   recordCommitLatencyAsync,
+  recordDroppedEventAsync,
   recordVersionConflictAsync,
   recordReadOnlyBlockAsync,
 } = require('../utils/coeditingObservability');
@@ -133,7 +139,10 @@ router.use(requireAuth);
 router.use(async (req, res, next) => {
   if (!COLLABORATION_BACKEND_ENABLED) return next();
   try {
-    await collaborationStore.ensureCollaborationSchemaAsync();
+    await Promise.all([
+      collaborationStore.ensureCollaborationSchemaAsync(),
+      ensureCollaborationActivitySchemaAsync(),
+    ]);
     return next();
   } catch (error) {
     console.error('Coediting schema init error:', error);
@@ -267,6 +276,16 @@ router.post('/maps/:id/ops/ingest', async (req, res) => {
     const committed = await applyOperationAsync({ mapId, operation });
     await recordCommitLatencyAsync(Date.now() - startedAt);
 
+    if (!committed.duplicate) {
+      const activity = buildCoeditingOperationActivity({
+        operation: committed.operation,
+        actorRole: context.role,
+      });
+      if (activity) {
+        await recordMapActivityBestEffortAsync(activity, { label: 'coediting op ingest' });
+      }
+    }
+
     await broadcastRoomEventAsync(mapId, {
       type: MESSAGE_TYPES.OPERATION_COMMITTED,
       mapId,
@@ -283,6 +302,7 @@ router.post('/maps/:id/ops/ingest', async (req, res) => {
     });
   } catch (error) {
     if (error instanceof CoeditingContractError) {
+      await recordDroppedEventAsync('contract_invalid_envelope');
       return res.status(400).json({
         error: 'Invalid coediting operation envelope',
         code: error.code,

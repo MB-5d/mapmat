@@ -36,8 +36,8 @@ npm run verify:runtime:all
 
 For each environment:
 
-1. Open `Railway` -> project `mapmat`.
-2. Open service `mapmat`.
+1. Open `Railway` -> project `vellic`.
+2. Open service `vellic`.
 3. Select environment (`staging` or `production`).
 4. Open tab `Variables`.
 5. Confirm:

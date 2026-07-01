@@ -1,22 +1,61 @@
 const adapter = require('./dbAdapter');
+let ensureShareSchemaPromise = null;
+const COMPACT_SHARE_ID_LENGTH = 6;
 
-function createShareAsync({
+async function ensureColumnAsync(table, column, type) {
+  let rows = [];
+  if (adapter.runtime?.activeProvider === 'postgres') {
+    rows = await adapter.queryAllAsync(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = ?
+    `, [table]);
+  } else {
+    rows = await adapter.queryAllAsync(`PRAGMA table_info(${table})`);
+  }
+
+  const columns = rows.map((row) => row.column_name || row.name).filter(Boolean);
+  if (!columns.includes(column)) {
+    await adapter.executeAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
+async function ensureShareSchemaAsync() {
+  if (ensureShareSchemaPromise) return ensureShareSchemaPromise;
+  ensureShareSchemaPromise = (async () => {
+    await ensureColumnAsync('shares', 'project_id', 'TEXT');
+    await ensureColumnAsync('shares', 'access_level', 'TEXT');
+    await ensureColumnAsync('shares', 'orientation', 'TEXT');
+  })();
+  try {
+    await ensureShareSchemaPromise;
+  } catch (error) {
+    ensureShareSchemaPromise = null;
+    throw error;
+  }
+}
+
+async function createShareAsync({
   id,
   mapId,
+  projectId,
   userId,
   rootData,
   orphansData,
   connectionsData,
   colors,
   connectionColors,
+  accessLevel,
+  orientation,
   expiresAt,
 }) {
+  await ensureShareSchemaAsync();
   return adapter.executeAsync(`
     INSERT INTO shares (
       id, map_id, user_id, root_data, orphans_data, connections_data,
-      colors, connection_colors, expires_at
+      colors, connection_colors, project_id, access_level, orientation, expires_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     id,
     mapId || null,
@@ -26,17 +65,74 @@ function createShareAsync({
     connectionsData,
     colors,
     connectionColors,
+    projectId || null,
+    accessLevel || null,
+    orientation || null,
     expiresAt,
   ]);
 }
 
-function getShareWithUserByIdAsync(shareId) {
+async function updateShareSnapshotAsync(shareId, {
+  rootData,
+  orphansData,
+  connectionsData,
+  colors,
+  connectionColors,
+  accessLevel,
+  orientation,
+  expiresAt,
+}) {
+  await ensureShareSchemaAsync();
+  return adapter.executeAsync(`
+    UPDATE shares
+    SET root_data = ?,
+      orphans_data = ?,
+      connections_data = ?,
+      colors = ?,
+      connection_colors = ?,
+      access_level = ?,
+      orientation = ?,
+      expires_at = ?
+    WHERE id = ?
+  `, [
+    rootData,
+    orphansData,
+    connectionsData,
+    colors,
+    connectionColors,
+    accessLevel || null,
+    orientation || null,
+    expiresAt,
+    shareId,
+  ]);
+}
+
+async function getShareWithUserByIdAsync(shareId) {
+  await ensureShareSchemaAsync();
   return adapter.queryOneAsync(`
     SELECT s.*, u.name as shared_by_name
     FROM shares s
     LEFT JOIN users u ON s.user_id = u.id
     WHERE s.id = ?
   `, [shareId]);
+}
+
+async function getFirstMapShareForUserAsync({ mapId, projectId, userId }) {
+  await ensureShareSchemaAsync();
+  const projectFilter = projectId ? 'project_id = ?' : 'project_id IS NULL';
+  const params = [mapId, userId, COMPACT_SHARE_ID_LENGTH];
+  if (projectId) params.push(projectId);
+
+  return adapter.queryOneAsync(`
+    SELECT *
+    FROM shares
+    WHERE map_id = ?
+      AND user_id = ?
+      AND LENGTH(id) = ?
+      AND ${projectFilter}
+    ORDER BY created_at ASC
+    LIMIT 1
+  `, params);
 }
 
 function incrementShareViewCountAsync(shareId) {
@@ -69,7 +165,9 @@ async function countSharesByUserAsync(userId) {
 
 module.exports = {
   createShareAsync,
+  updateShareSnapshotAsync,
   getShareWithUserByIdAsync,
+  getFirstMapShareForUserAsync,
   incrementShareViewCountAsync,
   getShareForUserAsync,
   deleteShareAsync,

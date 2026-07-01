@@ -1,5 +1,4 @@
 import { STACK_THRESHOLD, LAYOUT } from './constants';
-import { normalizePathname, getPathSegments, getTitlePrefix, getSlugPattern, getMostCommon } from './helpers';
 
 export const buildExpandedStackMap = (rootNode, orphanNodes = []) => {
   const expanded = {};
@@ -52,52 +51,12 @@ export const isDescendantOf = (tree, nodeId, ancestorId) => {
   return !!findNodeById(ancestor, nodeId);
 };
 
-// Check if children should be stacked (many similar siblings with same URL pattern)
+// Stack crowded sibling groups below the root row.
 export const shouldStackChildren = (children, depth) => {
   if (!children || children.length < STACK_THRESHOLD) return false;
   // Don't stack root level children (main nav items)
   if (depth < 1) return false;
-
-  const pathInfo = children
-    .map((child) => {
-      const pathname = normalizePathname(child.url);
-      if (!pathname) return null;
-      const segments = getPathSegments(pathname);
-      const slug = segments[segments.length - 1] || '';
-      const prefix = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : pathname;
-      return { prefix, slug };
-    })
-    .filter(Boolean);
-
-  if (pathInfo.length < STACK_THRESHOLD) return false;
-
-  const prefixes = pathInfo.map((item) => item.prefix).filter(Boolean);
-  const slugPatterns = pathInfo.map((item) => getSlugPattern(item.slug)).filter(Boolean);
-  const titlePrefixes = children.map((child) => getTitlePrefix(child.title)).filter(Boolean);
-
-  const prefixCommon = getMostCommon(prefixes);
-  const slugCommon = getMostCommon(slugPatterns);
-  const titleCommon = getMostCommon(titlePrefixes);
-
-  const prefixRatio = prefixes.length ? prefixCommon.count / prefixes.length : 0;
-  const slugRatio = slugPatterns.length ? slugCommon.count / slugPatterns.length : 0;
-  const titleRatio = titlePrefixes.length ? titleCommon.count / titlePrefixes.length : 0;
-
-  const strongPrefix = prefixCommon.value && prefixRatio >= 0.75;
-  const strongSlug = slugCommon.value && slugRatio >= 0.7;
-  const strongTitle = titleCommon.value && titleRatio >= 0.7;
-  const hasNumberedSlugs = pathInfo.filter((item) => /^\d+$/.test(item.slug)).length / pathInfo.length >= 0.6;
-  const hasIdSlugs = pathInfo.filter((item) => /[a-z]/i.test(item.slug || '') && /\d/.test(item.slug || '') && (item.slug || '').length >= 8).length / pathInfo.length >= 0.6;
-
-  if (strongPrefix && (strongSlug || strongTitle || prefixRatio >= 0.9)) return true;
-  if (strongSlug && strongTitle) return true;
-  if (strongSlug && prefixRatio >= 0.6) return true;
-  if (strongTitle && prefixRatio >= 0.6) return true;
-  if (strongPrefix && hasNumberedSlugs) return true;
-  if (strongPrefix && hasIdSlugs) return true;
-  if (prefixCommon.value && prefixRatio >= 0.85) return true;
-
-  return false;
+  return true;
 };
 
 // Runtime invariant checks (Development Only)

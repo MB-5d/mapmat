@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
+
 const AccountDrawer = ({
   isOpen,
   onClose,
@@ -13,6 +15,7 @@ const AccountDrawer = ({
   bodyRef,
   onBodyScroll,
   children,
+  ...props
 }) => {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
@@ -33,6 +36,17 @@ const AccountDrawer = ({
     }
   }, [isOpen, shouldRender]);
 
+  useEffect(() => {
+    if (!shouldRender) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, shouldRender]);
+
   if (!shouldRender) return null;
 
   return (
@@ -40,6 +54,7 @@ const AccountDrawer = ({
       className={`account-drawer ${className} ${isClosing ? 'account-drawer-closing' : 'account-drawer-open'}`}
       role="dialog"
       aria-label={ariaLabel || title}
+      {...props}
       onPointerDown={(e) => e.stopPropagation()}
       onWheel={(e) => {
         e.stopPropagation();
@@ -62,14 +77,15 @@ const AccountDrawer = ({
         </div>
         <div className="account-drawer-actions">
           {actions}
-          <button
-            type="button"
+          <IconButton
+            htmlType="button"
             className="account-drawer-close"
+            variant="ghost"
+            size="sm"
+            icon={<X />}
+            label={`Close ${title}`}
             onClick={onClose}
-            aria-label={`Close ${title}`}
-          >
-            <X size={20} />
-          </button>
+          />
         </div>
       </header>
 

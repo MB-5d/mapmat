@@ -1,0 +1,1088 @@
+import fs from 'fs';
+import path from 'path';
+
+import { __testing } from './App';
+
+const appCss = fs.readFileSync(path.join(__dirname, 'App.css'), 'utf8');
+const generatedCss = fs.readFileSync(path.join(__dirname, 'design-system.generated.css'), 'utf8');
+const appJs = fs.readFileSync(path.join(__dirname, 'App.js'), 'utf8');
+const commentPopoverJs = fs.readFileSync(path.join(__dirname, 'components/comments/CommentPopover.js'), 'utf8');
+const landingCss = fs.readFileSync(path.join(__dirname, 'LandingPage.css'), 'utf8');
+const minimapCss = fs.readFileSync(path.join(__dirname, 'components/minimap/minimapNavigator.css'), 'utf8');
+const adminCss = fs.readFileSync(path.join(__dirname, 'components/admin/AdminConsole.css'), 'utf8');
+const adminJs = fs.readFileSync(path.join(__dirname, 'components/admin/AdminConsole.js'), 'utf8');
+const marketingPreviewCss = fs.readFileSync(path.join(__dirname, 'marketing/MarketingPreviewV2.css'), 'utf8');
+
+const listFiles = (dir, extensions, results = []) => {
+  fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
+    const filePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      listFiles(filePath, extensions, results);
+      return;
+    }
+    if (extensions.some((extension) => filePath.endsWith(extension))) {
+      results.push(filePath);
+    }
+  });
+  return results;
+};
+
+const extractSharedButtonClassNames = () => {
+  const sourceFiles = listFiles(__dirname, ['.js', '.jsx', '.ts', '.tsx']);
+  const classNames = new Set();
+
+  sourceFiles.forEach((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    Array.from(source.matchAll(/<(Button|IconButton)\b[\s\S]*?>/g)).forEach(([tag]) => {
+      const classNameMatch = tag.match(/className\s*=\s*("[^"]+"|'[^']+'|\{[\s\S]*?\})/);
+      if (!classNameMatch) return;
+
+      Array.from(classNameMatch[1].matchAll(/['"`]([^'"`{}]+)['"`]/g)).forEach(([, value]) => {
+        value
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter((token) => /^[A-Za-z][A-Za-z0-9_-]*$/.test(token))
+          .forEach((token) => classNames.add(token));
+      });
+    });
+  });
+
+  return classNames;
+};
+
+const findDisabledOverridesForSharedButtonClasses = () => {
+  const sharedButtonClassNames = extractSharedButtonClassNames();
+  const cssFiles = listFiles(__dirname, ['.css']);
+  const overrides = [];
+
+  cssFiles.forEach((filePath) => {
+    const css = fs.readFileSync(filePath, 'utf8');
+    Array.from(css.matchAll(/([^{}]+)\{[^{}]*\}/g)).forEach(([, selectorGroup]) => {
+      selectorGroup.split(',').forEach((rawSelector) => {
+        const selector = rawSelector.trim().replace(/\s+/g, ' ');
+        if (!selector.includes(':disabled') || selector.includes(':not(:disabled)')) return;
+
+        const selectorClassNames = Array.from(selector.matchAll(/\.([A-Za-z0-9_-]+)/g)).map((match) => match[1]);
+        const matchedClassNames = selectorClassNames.filter((className) => sharedButtonClassNames.has(className));
+        if (matchedClassNames.length > 0) {
+          overrides.push(`${path.relative(__dirname, filePath)}: ${selector}`);
+        }
+      });
+    });
+  });
+
+  return overrides;
+};
+
+const SENTENCE_CASE_ALLOWED_WORDS = new Set([
+  'AI',
+  'API',
+  'Atom',
+  'CSV',
+  'CSS',
+  'FAQ',
+  'Figma',
+  'Google',
+  'Graph',
+  'HTML',
+  'ID',
+  'JSON',
+  'Markdown',
+  'OAuth',
+  'Open',
+  'PDF',
+  'PNG',
+  'RSS',
+  'SEO',
+  'Stripe',
+  'Twitter',
+  'URL',
+  'URLs',
+  'UX',
+  'Vellic',
+  'XML',
+]);
+
+const SENTENCE_CASE_COMPONENT_PROPS = new Map([
+  ['AccountDrawer', ['title']],
+  ['Button', ['aria-label', 'label', 'title']],
+  ['IconButton', ['aria-label', 'label', 'title']],
+  ['MarketingButtonLink', ['aria-label', 'label', 'title']],
+  ['MenuItem', ['aria-label', 'label', 'title']],
+  ['MenuRadioItem', ['aria-label', 'label', 'title']],
+  ['Modal', ['title']],
+  ['OptionCard', ['aria-label', 'label', 'title']],
+  ['ScanBar', ['scanLabel', 'scanTitle', 'sharedTitle']],
+]);
+
+const SENTENCE_CASE_TEXT_CHILDREN = ['Button', 'MarketingButtonLink'];
+
+const decodeUiText = (value) => String(value || '')
+  .replace(/&apos;/g, "'")
+  .replace(/&amp;/g, '&')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const isSentenceCaseText = (value) => {
+  const text = decodeUiText(value);
+  if (!text) return true;
+
+  let startsSentence = true;
+  const wordPattern = /[A-Za-z][A-Za-z0-9'.-]*/g;
+  let match;
+  let previousEnd = 0;
+
+  while ((match = wordPattern.exec(text)) !== null) {
+    const word = match[0].replace(/^['.]+|['.]+$/g, '');
+    const separator = text.slice(previousEnd, match.index);
+    const isFirstWord = startsSentence || /[.!?]\s*$/.test(separator);
+    previousEnd = match.index + match[0].length;
+    startsSentence = false;
+
+    if (isFirstWord) continue;
+    if (SENTENCE_CASE_ALLOWED_WORDS.has(word)) continue;
+    if (/^[A-Z]{2,}$/.test(word)) continue;
+    if (/^[A-Z][a-z]/.test(word)) return false;
+  }
+
+  return true;
+};
+
+const findOpeningTags = (source, componentNames) => {
+  const tags = [];
+  let index = 0;
+
+  while (index < source.length) {
+    const start = source.indexOf('<', index);
+    if (start === -1) break;
+    const nameMatch = source.slice(start + 1).match(/^([A-Z][A-Za-z0-9]*)\b/);
+    if (!nameMatch) {
+      index = start + 1;
+      continue;
+    }
+
+    const name = nameMatch[1];
+    let cursor = start + 1 + name.length;
+    let braceDepth = 0;
+    let quote = '';
+
+    while (cursor < source.length) {
+      const char = source[cursor];
+      const previous = source[cursor - 1];
+      if (quote) {
+        if (char === quote && previous !== '\\') quote = '';
+      } else if (char === '"' || char === "'" || char === '`') {
+        quote = char;
+      } else if (char === '{') {
+        braceDepth += 1;
+      } else if (char === '}') {
+        braceDepth = Math.max(0, braceDepth - 1);
+      } else if (char === '>' && braceDepth === 0) {
+        cursor += 1;
+        break;
+      }
+      cursor += 1;
+    }
+
+    if (componentNames.has(name)) {
+      tags.push({ name, index: start, text: source.slice(start, cursor) });
+    }
+    index = cursor;
+  }
+
+  return tags;
+};
+
+const getLineNumber = (source, index) => source.slice(0, index).split('\n').length;
+
+const findSentenceCaseViolations = () => {
+  const componentNames = new Set(SENTENCE_CASE_COMPONENT_PROPS.keys());
+  const sourceFiles = listFiles(__dirname, ['.js', '.jsx', '.ts', '.tsx'])
+    .filter((filePath) => !/\.test\.[jt]sx?$/.test(filePath))
+    .filter((filePath) => !filePath.endsWith('setupTests.js'));
+  const violations = [];
+
+  sourceFiles.forEach((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(__dirname, filePath);
+
+    findOpeningTags(source, componentNames).forEach((tag) => {
+      const propNames = SENTENCE_CASE_COMPONENT_PROPS.get(tag.name) || [];
+      propNames.forEach((propName) => {
+        const propPattern = new RegExp(`\\b${propName}\\s*=\\s*([\"'])((?:\\\\.|(?!\\1).)*?)\\1`, 'g');
+        let propMatch;
+        while ((propMatch = propPattern.exec(tag.text)) !== null) {
+          const value = propMatch[2];
+          if (!isSentenceCaseText(value)) {
+            violations.push(`${relativePath}:${getLineNumber(source, tag.index)} ${tag.name}.${propName}="${value}"`);
+          }
+        }
+      });
+    });
+
+    SENTENCE_CASE_TEXT_CHILDREN.forEach((componentName) => {
+      const textChildPattern = new RegExp(`<${componentName}\\b[^>]*>\\s*([^<>{}\\n][^<>{}]*)\\s*<\\/${componentName}>`, 'g');
+      let textChildMatch;
+      while ((textChildMatch = textChildPattern.exec(source)) !== null) {
+        const value = decodeUiText(textChildMatch[1]);
+        if (value && !isSentenceCaseText(value)) {
+          violations.push(`${relativePath}:${getLineNumber(source, textChildMatch.index)} ${componentName} text "${value}"`);
+        }
+      }
+    });
+
+    const rawButtonPattern = /<button\b[^>]*>\s*([^<>{}\n][^<>{}]*)\s*<\/button>/g;
+    let rawButtonMatch;
+    while ((rawButtonMatch = rawButtonPattern.exec(source)) !== null) {
+      const value = decodeUiText(rawButtonMatch[1]);
+      if (value && !isSentenceCaseText(value)) {
+        violations.push(`${relativePath}:${getLineNumber(source, rawButtonMatch.index)} button text "${value}"`);
+      }
+    }
+  });
+
+  return violations;
+};
+
+describe('UI design-system contract', () => {
+  test('home title, canvas elevation, connection stroke, and disabled state use shared tokens', () => {
+    expect(generatedCss).toContain('--type-home-title-lg-size: 32px;');
+    expect(generatedCss).toContain('--type-home-title-lg-line-height: 40px;');
+    expect(generatedCss).toContain('--type-home-title-lg-weight: 500;');
+    expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(0, 0, 0, 0.1);');
+    expect(generatedCss).toContain('--shadow-canvas-control: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 18px rgba(167, 139, 250, 0.14), 0 0 28px rgba(255, 255, 255, 0.07);');
+    expect(generatedCss).toContain('--shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 12px rgba(255, 255, 255, 0.06);');
+    expect(generatedCss).toContain('--ui-connection-map-stroke-width: 1.25px;');
+    expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
+    expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-400);');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled: var(--color-brand-300);');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled-contrast: var(--color-neutral-white);');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled: #352b84;');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled-contrast: var(--color-plum-300);');
+    expect(generatedCss).toContain('--ui-button-brand-quiet-disabled: #7a73d4;');
+    expect(generatedCss).toContain('--ui-button-mono-fill-disabled: #515266;');
+    expect(generatedCss).toContain('--ui-button-mono-fill-disabled-contrast: var(--color-plum-200);');
+    expect(generatedCss).toContain('--ui-button-danger-fill-disabled: #80535d;');
+    expect(generatedCss).toContain('--ui-button-danger-fill-disabled-contrast: var(--color-red-100);');
+
+    expect(appCss).toContain('font-size: var(--type-size-4xl);');
+    expect(appCss).toContain('line-height: var(--type-line-height-48);');
+    expect(appCss).toContain('font-weight: var(--type-weight-bold);');
+    expect(appCss).toContain('box-shadow: var(--shadow-canvas-control);');
+    expect(appCss).toContain('box-shadow: var(--shadow-drawer);');
+    expect(appCss).toContain('box-shadow: var(--ui-overlay-shadow);');
+    expect(appJs).toContain('strokeWidth="var(--ui-connection-map-stroke-width)"');
+    expect(appCss).toContain('color: var(--ui-control-disabled-content);');
+    expect(appCss).toMatch(
+      /\.ui-btn--type-primary\.ui-btn--style-brand:disabled,\n\.ui-btn--primary:disabled \{[\s\S]*background: var\(--ui-button-brand-fill-disabled\);[\s\S]*border-color: var\(--ui-button-brand-fill-disabled\);[\s\S]*color: var\(--ui-button-brand-fill-disabled-contrast\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(
+      /\.ui-icon-btn--type-primary\.ui-icon-btn--style-brand:disabled,\n\.ui-icon-btn--primary:disabled \{[\s\S]*background: var\(--ui-button-brand-fill-disabled\);[\s\S]*border-color: var\(--ui-button-brand-fill-disabled\);[\s\S]*color: var\(--ui-button-brand-fill-disabled-contrast\);[\s\S]*\}/
+    );
+    expect(appCss).not.toContain('.blank-scan-shell .ui-btn--type-primary.ui-btn--style-brand:disabled');
+    expect(appCss).not.toContain('.scan-btn:disabled');
+    expect(appCss).not.toContain('[data-theme="dark"] .scan-btn:disabled');
+  });
+
+  test('shared Button and IconButton disabled states are not overridden by local classes', () => {
+    expect(findDisabledOverridesForSharedButtonClasses()).toEqual([]);
+  });
+
+  test('shared tone and chip tokens define badge, tag, and filter surfaces', () => {
+    [
+      'sky',
+      'teal',
+      'blue',
+      'indigo',
+      'violet',
+      'yellow',
+      'amber',
+      'orange',
+      'red',
+      'rose',
+      'green',
+      'slate',
+    ].forEach((tone) => {
+      expect(generatedCss).toContain(`--ui-tone-${tone}-surface:`);
+      expect(generatedCss).toContain(`--ui-tone-${tone}-border:`);
+      expect(generatedCss).toContain(`--ui-tone-${tone}-text:`);
+      expect(generatedCss).toContain(`--ui-tone-${tone}-accent:`);
+      expect(appCss).toContain(`.ui-tone--${tone}`);
+    });
+
+    expect(generatedCss).toContain('--ui-chip-filter-height: 58px;');
+    expect(generatedCss).toContain('--ui-chip-metric-height: 72px;');
+    expect(appCss).toMatch(/\.ui-chip \{[\s\S]*border-radius: var\(--ui-chip-radius\);[\s\S]*text-decoration: none;/);
+    expect(appCss).toMatch(/\.ui-chip\[class\*="ui-tone--"\] \{[\s\S]*--ui-chip-bg-current: var\(--ui-tone-surface-current\);/);
+    expect(appCss).toMatch(/\.ui-badge\[class\*="ui-tone--"\]\.ui-badge--type-hollow \{[\s\S]*--ui-badge-bg-current: var\(--ui-tone-surface-current\);/);
+    expect(appCss).toMatch(/\.ui-tag\[class\*="ui-tone--"\]\.ui-tag--type-hollow \{[\s\S]*--ui-tag-bg-current: var\(--ui-tone-surface-current\);/);
+  });
+
+  test('buttons, modal titles, and drawer titles use sentence case', () => {
+    expect(generatedCss).toContain('--ui-button-text-transform: none;');
+    expect(generatedCss).toContain('--ui-shell-title-text-transform: none;');
+    expect(appCss).toMatch(/\.ui-btn \{[\s\S]*text-transform: var\(--ui-button-text-transform\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn \{[\s\S]*text-transform: var\(--ui-button-text-transform\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.modal-header h2,[\s\S]*\.modal-header h3 \{[\s\S]*text-transform: var\(--ui-shell-title-text-transform\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.account-drawer-heading-title \{[\s\S]*text-transform: var\(--ui-shell-title-text-transform\);[\s\S]*\}/);
+    expect(findSentenceCaseViolations()).toEqual([]);
+  });
+
+  test('danger confirm modal uses mono companion action', () => {
+    expect(appJs).toContain("buttonStyle={confirmModal.danger ? 'mono' : undefined}");
+    expect(appJs).toContain("variant={confirmModal.danger ? 'danger' : 'primary'}");
+  });
+
+  test('billing checkout return messages include exact applied upgrades when available', () => {
+    expect(__testing.formatBillingUpgradeSuccessMessage({
+      purchaseSummary: {
+        meters: [
+          { meter: 'screenshot_credits', quantity: 450 },
+        ],
+      },
+    })).toBe('Upgrade successful! 450 screenshot credits added and ready to use.');
+    expect(__testing.formatBillingUpgradeSuccessMessage({
+      purchaseSummary: {
+        meters: [
+          { meter: 'active_pages', quantity: 2000 },
+          { meter: 'screenshot_credits', quantity: 10 },
+        ],
+      },
+    })).toBe('Upgrade successful! 2,000 active pages and 10 screenshot credits added and ready to use.');
+    expect(__testing.formatBillingUpgradeSuccessMessage({})).toBe('Upgrade successful and applied to your account');
+  });
+
+  test('account-menu inbox actions open modals without changing the canvas route', () => {
+    const inviteHandlerStart = appJs.indexOf('const handleShowInviteInbox = useCallback(async () => {');
+    const inviteHandlerEnd = appJs.indexOf('const handleShowAccessRequestsInbox', inviteHandlerStart);
+    const accessHandlerStart = inviteHandlerEnd;
+    const accessHandlerEnd = appJs.indexOf("useEffect(() => {\n    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invites') return;", accessHandlerStart);
+    const inviteHandler = appJs.slice(inviteHandlerStart, inviteHandlerEnd);
+    const accessHandler = appJs.slice(accessHandlerStart, accessHandlerEnd);
+
+    expect(inviteHandlerStart).toBeGreaterThan(-1);
+    expect(accessHandlerStart).toBeGreaterThan(inviteHandlerStart);
+    expect(accessHandlerEnd).toBeGreaterThan(accessHandlerStart);
+    expect(inviteHandler).toContain('setShowInviteInboxModal(true);');
+    expect(inviteHandler).toContain('await loadPendingMapInvites();');
+    expect(inviteHandler).not.toContain('navigateToRoute');
+    expect(accessHandler).toContain('setShowAccessRequestsInboxModal(true);');
+    expect(accessHandler).toContain('await loadPendingAccessRequests();');
+    expect(accessHandler).not.toContain('navigateToRoute');
+  });
+
+  test('toolbar panels use compact mono menu states without changing toolbar icon states', () => {
+    expect(appCss).toMatch(/\.canvas-tool-menu\.canvas-tool-menu-panel \{[\s\S]*min-width: 200px;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.layers-panel\.layers-panel-embedded \{[\s\S]*min-width: 176px;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.color-key\.color-key-embedded \{[\s\S]*min-width: 176px;[\s\S]*\}/);
+    expect(appCss).toMatch(
+      /\.canvas-tool-menu-panel \.ui-menu-item--selected \{[\s\S]*background: var\(--ui-color-icon-hover\);[\s\S]*color: var\(--ui-color-text\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(
+      /\.color-key-item\.editing \{[\s\S]*background: var\(--ui-color-icon-hover\);[\s\S]*color: var\(--ui-color-text\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(
+      /\.color-swatch\.editing \{[\s\S]*outline: 2px solid var\(--ui-color-border-strong\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(/\.color-edit-icon \{[\s\S]*color: inherit;[\s\S]*\}/);
+    expect(appCss).not.toContain('[data-theme="dark"] .color-edit-icon');
+    expect(appCss).toMatch(/\.canvas-tool-btn\.active \{[\s\S]*background: var\(--ui-color-primary\);[\s\S]*\}/);
+  });
+
+  test('brand filled button hover keeps contrast text and is not overridden by share modal styles', () => {
+    expect(appCss).toMatch(
+      /\.ui-btn--type-primary\.ui-btn--style-brand:hover:not\(:disabled\),\n\.ui-btn--primary:hover:not\(:disabled\) \{[\s\S]*background: var\(--ui-button-brand-fill-hover\);[\s\S]*border-color: var\(--ui-button-brand-fill-hover\);[\s\S]*color: var\(--ui-button-brand-contrast\);[\s\S]*\}/
+    );
+    expect(appCss).not.toContain('.share-email-btn:hover');
+    expect(appCss).not.toMatch(/\.share-email-btn \{[^}]*color:/);
+  });
+
+  test('accordion uses one shared visual contract', () => {
+    expect(appCss).toMatch(
+      /\.ui-accordion \{[\s\S]*flex: 0 0 auto;[\s\S]*border: var\(--border-width-subtle\) solid var\(--ui-color-border\);[\s\S]*background: transparent;[\s\S]*overflow: visible;[\s\S]*\}/
+    );
+    expect(appCss).toMatch(
+      /\.ui-accordion:hover \{[\s\S]*border-color: var\(--ui-color-border-strong\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(/\.ui-accordion:hover \{\n  border-color: var\(--ui-color-border-strong\);\n\}/);
+    expect(appCss).toMatch(/\.ui-accordion\.is-open \{[\s\S]*box-shadow: var\(--shadow-card\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-accordion__trigger:focus-visible \{[\s\S]*box-shadow: inset var\(--ui-focus-ring\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-accordion__content \{[\s\S]*gap: var\(--unit-16\);[\s\S]*padding: var\(--unit-12\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.profile-form \{[\s\S]*flex: 0 0 auto;[\s\S]*min-height: 100%;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.profile-password-details \{[\s\S]*gap: var\(--unit-24\);[\s\S]*\}/);
+    expect(appCss).not.toContain('.account-plan-details {');
+    expect(appCss).not.toContain('.account-plan-summary');
+    expect(appCss).not.toContain('.profile-password-summary');
+    expect(marketingPreviewCss).not.toContain('.marketing-v2-faq-item__button');
+    expect(landingCss).not.toContain('.faq-question');
+  });
+
+  test('input labels use the compact label token and shared control spacing', () => {
+    expect(generatedCss).toContain('--type-label-sm-size: 12px;');
+    expect(generatedCss).toContain('--type-label-sm-line-height: 16px;');
+    expect(generatedCss).toContain('--type-label-sm-weight: 500;');
+    expect(appCss).toMatch(/\.field \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).toMatch(/\.field-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.field-label \{[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.scan-options-depth-field \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).toMatch(/\.scan-options-depth-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.share-collab-setting \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).not.toContain('.share-collab-setting-label');
+    expect(appCss).not.toContain('.share-collab-setting-help');
+    expect(appCss).toMatch(/\.feedback-field-group \{[\s\S]*gap: var\(--space-sm\);/);
+    expect(adminCss).toMatch(/\.admin-console-auth-form span \{[\s\S]*margin-bottom: var\(--space-xs\);[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(adminJs).toContain('className="admin-console-password-toggle auth-password-toggle"');
+    expect(adminJs).toContain("aria-label={showLoginPassword ? 'Hide password' : 'Show password'}");
+    expect(adminJs).not.toContain("{showLoginPassword ? 'Hide' : 'Show'}");
+    expect(adminCss).toMatch(/\.admin-console-password-field \{[\s\S]*position: relative;[\s\S]*\}/);
+    expect(adminCss).toMatch(/\.admin-console-password-toggle \{[\s\S]*position: absolute;[\s\S]*right: 8px;[\s\S]*width: 32px;[\s\S]*height: 32px;[\s\S]*background: transparent;[\s\S]*color: var\(--ui-color-input-placeholder\);/);
+    expect(adminCss).toMatch(/\.admin-feedback-item-controls label,[\s\S]*gap: var\(--space-xs\);/);
+    expect(adminCss).toMatch(/\.admin-feedback-item-controls span,[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(adminCss).toMatch(/\.admin-storage-form label \{[\s\S]*gap: var\(--space-xs\);[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(adminCss).toMatch(/\.admin-usage-filters label \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(adminCss).toMatch(/\.admin-usage-filters label span \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+  });
+
+  test('top scan bar is limited to unsaved scans and supports clear/update states', () => {
+    expect(appJs).toContain('const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);');
+    expect(appJs).toContain('isDefaultWorkspaceScanModalVisible');
+    expect(appJs).toContain('|| (isUnsavedScannedMap && !!root?.url)');
+    expect(appJs).toContain('appHome={showAppHomeGrid}');
+    expect(appJs).toContain("scanLabel={canTopbarRescan ? 'Update' : 'Scan'}");
+    expect(appJs).toContain('showClearUrl={!!urlInput.trim()}');
+    expect(appJs).toContain('scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig)');
+    expect(appCss).toContain('.topbar--app-home .brand');
+    expect(appCss).toContain('.topbar--app-home .topbar-center .scan-bar-shell');
+  });
+
+  test('canvas grid and stacked cards use shared visual rules', () => {
+    expect(appCss).toContain('.canvas.has-map::before');
+    expect(appCss).toContain('background-position: var(--canvas-pan-x, 0px) var(--canvas-pan-y, 0px);');
+    expect(appCss).toContain('var(--canvas-grid-dot-radius, 0.75px)');
+    expect(appJs).toContain('const getCanvasGridMetrics = (scaleValue) => {');
+    expect(appJs).toContain('size: Math.max(4, Math.round(16 * canvasGridScale)),');
+    expect(appJs).toContain('dotRadius: canvasGridScale < 0.5 ? 0.25 : (canvasGridScale > 2 ? 1 : 0.75),');
+    expect(appJs).toContain('const canvasGridMetrics = getCanvasGridMetrics(canvasRenderScale);');
+    expect(appJs).toContain('const CANVAS_EDGE_PADDING_MAX = 400;');
+    expect(appJs).toContain('const minPanX = viewportWidth - padding - scaledRight;');
+    expect(appJs).toContain('const maxPanX = padding - scaledLeft;');
+    expect(appCss).toContain('z-index: 0;');
+    expect(appCss).toContain('border-radius: var(--ui-radius-lg);');
+    expect(appCss).toContain('transform: translate(15px, 15px);');
+    expect(appCss).toContain('transform: translate(10px, 10px);');
+    expect(appCss).toContain('transform: translate(5px, 5px);');
+  });
+
+  test('connector layers and arrowheads use one shared geometry contract', () => {
+    expect(appCss).toMatch(/\.connector-overlay \{[\s\S]*z-index: 0;/);
+    expect(appCss).toMatch(/\.connector-overlay--map \{[\s\S]*z-index: 0;/);
+    expect(appCss).toMatch(/\.connections-layer \{[\s\S]*z-index: 1;/);
+    expect(appCss).toMatch(/\.connections-layer--relationship \{[\s\S]*z-index: 1;/);
+    expect(appJs).toContain('className="connector-overlay connector-overlay--map"');
+    expect(appJs).toContain('className="connections-layer connections-layer--relationship"');
+    expect(appJs).toContain('getRenderedConnectionAnchors');
+    expect(appJs).toContain('layoutConnectorEndpointReservations');
+    expect(appJs).toContain('getLayoutConnectorEndpointAnchorReservation');
+    expect(appJs).toContain('getLayoutConnectorEndpointsAtAnchor');
+    expect(appJs).toContain("kind: 'layout'");
+    expect(appJs).toContain('getConnectionEndpointsAtAnchor');
+    expect(appJs).toContain("matches.push({ connectionId: conn.id, endpoint: 'source' });");
+    expect(appJs).toContain("matches.push({ connectionId: conn.id, endpoint: 'target' });");
+    expect(appJs).toContain('const reservedOffsets = layoutEndpointReservations.map');
+    expect(appJs).toContain('availableOffsets[index]');
+    expect(appJs).toContain('visibleManualCrosslinkConnections');
+    expect(appJs).toContain('visibleUserFlowConnections');
+    expect(appJs.indexOf('data-connector-layer="crosslinks"')).toBeLessThan(
+      appJs.indexOf('data-connector-layer="userflows"')
+    );
+    expect(appJs).toContain('buildConnectorBezier({');
+    expect(appJs).toContain('USER_FLOW_ARROWHEAD.path');
+    expect(appJs).toContain("markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}");
+    expect(appJs).not.toContain('getConnectionsAtAnchor');
+    expect(appJs).not.toContain('relationship-map-connector-gap-mask');
+  });
+
+  test('canvas wheel zooms while press-drag remains the pan control', () => {
+    const wheelStart = appJs.indexOf('// Smooth wheel handling for canvas zoom. Press-drag remains the pan control.');
+    const wheelEnd = appJs.indexOf('const exportJson', wheelStart);
+    const wheelHandler = appJs.slice(wheelStart, wheelEnd);
+
+    expect(wheelStart).toBeGreaterThan(-1);
+    expect(wheelHandler).toContain('zoomAtClientPoint(next, clientX, clientY);');
+    expect(wheelHandler).toContain('.canvas-tool-menu');
+    expect(wheelHandler).not.toContain('panBy(');
+    expect(wheelHandler).not.toContain('e.ctrlKey || e.metaKey');
+    expect(appJs).toContain('dragRef.current.dragging = true;');
+    expect(appJs).toContain('applyTransform({ scale: scaleRef.current, x: newPan.x, y: newPan.y });');
+  });
+
+  test('canvas map title blocks accidental text selection while rename stays selectable', () => {
+    expect(appCss).toMatch(/\.canvas-map-header \{[\s\S]*user-select: none;/);
+    expect(appCss).toMatch(/\.canvas-map-name-button \{[\s\S]*user-select: none;/);
+    expect(appCss).toMatch(/\.canvas-map-name-text \{[\s\S]*user-select: none;/);
+    expect(appCss).toMatch(/\.canvas-map-name-input \{[\s\S]*user-select: text;/);
+    expect(appCss).toMatch(/\.canvas\.panning,\n\.canvas\.panning \* \{[\s\S]*user-select: none !important;/);
+    expect(appCss).toMatch(/\.canvas\.panning \.canvas-map-name-input \{[\s\S]*user-select: text !important;/);
+  });
+
+  test('button size typography tokens match the shared scale', () => {
+    expect(generatedCss).toContain('--type-button-lg-size: 16px;');
+    expect(generatedCss).toContain('--type-button-lg-weight: 700;');
+    expect(generatedCss).toContain('--ui-text-box-edge: cap alphabetic;');
+    expect(generatedCss).toContain('--ui-text-box-trim: trim-both;');
+    expect(generatedCss).toContain('--ui-leading-trim: both;');
+    expect(appCss).toMatch(/\.ui-btn \{[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-btn__content \{[\s\S]*line-height: inherit;[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-btn--sm \{[\s\S]*height: var\(--unit-32\);[\s\S]*min-height: var\(--unit-32\);[\s\S]*font-size: var\(--type-button-sm-size\);[\s\S]*font-weight: var\(--type-button-sm-weight\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-btn--md \{[\s\S]*height: var\(--unit-40\);[\s\S]*min-height: var\(--unit-40\);[\s\S]*font-size: var\(--type-button-md-size\);[\s\S]*font-weight: var\(--type-button-md-weight\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-btn--lg \{[\s\S]*height: var\(--unit-48\);[\s\S]*min-height: var\(--unit-48\);[\s\S]*font-size: var\(--type-button-lg-size\);[\s\S]*font-weight: var\(--type-button-lg-weight\);[\s\S]*\}/);
+  });
+
+  test('tags and badges use the shared text trim contract', () => {
+    expect(appCss).toMatch(/\.ui-badge \{[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-badge__content \{[\s\S]*line-height: inherit;[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-tag \{[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-tag__content \{[\s\S]*line-height: inherit;[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+  });
+
+  test('icon button active state has enough specificity for styled icon buttons', () => {
+    expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active {');
+    expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active:hover:not(:disabled) {');
+    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-icon-button-active-bg\);[\s\S]*color: var\(--ui-icon-button-active-fg\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--type-secondary\.ui-icon-btn--style-mono\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-color-surface-muted\);[\s\S]*border-color: var\(--ui-button-mono-quiet\);[\s\S]*color: var\(--ui-button-mono-quiet\);[\s\S]*outline: 1px solid var\(--ui-button-mono-quiet\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--type-secondary\.ui-icon-btn--style-mono\.ui-icon-btn--active:hover:not\(:disabled\) \{[\s\S]*background: var\(--ui-color-surface-muted\);[\s\S]*border-color: var\(--ui-button-mono-quiet-hover\);[\s\S]*color: var\(--ui-button-mono-quiet-hover\);[\s\S]*outline-color: var\(--ui-button-mono-quiet-hover\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn--xxs \{[\s\S]*border-radius: var\(--ui-icon-button-radius-sm\);[\s\S]*\}/);
+    expect(generatedCss).toContain('--ui-icon-button-size-xxs: 16px;');
+    expect(generatedCss).toContain('--ui-icon-button-size-xs: 24px;');
+    expect(generatedCss).toContain('--ui-icon-button-size-sm: 32px;');
+    expect(generatedCss).toContain('--ui-icon-button-size-md: 40px;');
+    expect(generatedCss).toContain('--ui-icon-button-size-lg: 48px;');
+    expect(generatedCss).toContain('--ui-icon-button-radius-sm: var(--radius-xs);');
+    expect(generatedCss).toContain('--ui-icon-button-active-bg: var(--ui-color-primary);');
+    expect(generatedCss).toContain('--ui-icon-button-active-bg-hover: var(--ui-color-primary-hover);');
+    expect(generatedCss).toContain('--ui-icon-button-active-fg: var(--ui-icon-inverse);');
+    expect(appCss).not.toContain('\n.ui-icon-btn--active {');
+  });
+});
+
+describe('scan config and differential rescan behavior', () => {
+  const {
+    normalizeScanConfig,
+    scanConfigsHaveOptionChanges,
+    applyScanArtifacts,
+    mergeRescanResults,
+  } = __testing;
+
+  test('rescan changes ignore URL-only edits and respond to scan option changes', () => {
+    const previous = normalizeScanConfig({
+      url: 'https://example.com',
+      options: { includeExternal: false, includeImages: true },
+    });
+
+    expect(scanConfigsHaveOptionChanges(normalizeScanConfig({
+      url: 'https://example.com/changed',
+      options: { includeExternal: false, includeImages: true },
+    }), previous)).toBe(false);
+
+    expect(scanConfigsHaveOptionChanges(normalizeScanConfig({
+      url: 'https://example.com',
+      depth: 5,
+      options: { includeExternal: false, includeImages: true },
+    }), previous)).toBe(false);
+
+    expect(scanConfigsHaveOptionChanges(normalizeScanConfig({
+      url: 'https://example.com',
+      options: { includeExternal: true, includeImages: true },
+    }), previous)).toBe(true);
+  });
+
+  test('differential rescan preserves edited nodes and manual connection endpoints', () => {
+    const existingRoot = {
+      id: 'home-old',
+      title: 'Edited Home',
+      url: 'https://example.com',
+      annotations: { note: 'Keep this' },
+      children: [
+        {
+          id: 'about-old',
+          title: 'Edited About',
+          url: 'https://example.com/about',
+          comments: [{ id: 'comment-1', text: 'Keep comment' }],
+          children: [],
+        },
+        {
+          id: 'deep-old',
+          title: 'Manually linked deep page',
+          url: 'https://example.com/deep',
+          children: [],
+        },
+      ],
+    };
+
+    const nextRoot = {
+      id: 'home-new',
+      title: 'Scanned Home',
+      url: 'https://example.com',
+      children: [
+        {
+          id: 'about-new',
+          title: 'Scanned About',
+          url: 'https://example.com/about',
+          children: [],
+        },
+      ],
+    };
+
+    const merged = mergeRescanResults({
+      existingRoot,
+      existingOrphans: [],
+      nextRoot,
+      nextOrphans: [],
+      manualConnections: [{ id: 'manual-1', sourceNodeId: 'deep-old', targetNodeId: 'about-old' }],
+    });
+
+    expect(merged.root.id).toBe('home-old');
+    expect(merged.root.title).toBe('Edited Home');
+    expect(merged.root.annotations.note).toBe('Keep this');
+    expect(merged.root.children[0].id).toBe('about-old');
+    expect(merged.root.children[0].comments).toHaveLength(1);
+    expect(merged.orphans.some((node) => node.id === 'deep-old')).toBe(true);
+  });
+
+  test('applyScanArtifacts applies error artifacts by normalized URL', () => {
+    const root = {
+      id: 'home',
+      title: 'Home',
+      url: 'https://example.com/',
+      children: [
+        {
+          id: 'missing-node',
+          title: 'Missing',
+          url: 'https://example.com/missing/',
+          children: [],
+        },
+      ],
+    };
+
+    const merged = applyScanArtifacts(
+      root,
+      [],
+      {
+        errors: [
+          {
+            url: 'https://example.com/missing',
+            status: 404,
+            httpErrorLabel: 'HTTP 404 / Not Found',
+          },
+        ],
+      }
+    );
+
+    expect(merged.root.children[0].isError).toBe(true);
+    expect(merged.root.children[0].httpStatus).toBe(404);
+    expect(merged.root.children[0].httpErrorLabel).toBe('HTTP 404 / Not Found');
+  });
+});
+
+describe('comment popover positioning', () => {
+  const {
+    getCommentDrawerNodeFocusTarget,
+    getCommentPopoverDrawerPosition,
+    getCommentPopoverPosition,
+  } = __testing;
+  const canvasRect = {
+    left: 100,
+    top: 200,
+    width: 1000,
+    height: 800,
+  };
+
+  test('left-half nodes anchor popovers to the right edge', () => {
+    expect(getCommentPopoverPosition({
+      canvasRect,
+      nodeRect: {
+        left: 200,
+        right: 488,
+        top: 300,
+        bottom: 578,
+        width: 288,
+        height: 278,
+      },
+    })).toEqual({
+      side: 'right',
+      x: 392,
+      y: 100,
+    });
+  });
+
+  test('right-half nodes anchor popovers to the left edge', () => {
+    expect(getCommentPopoverPosition({
+      canvasRect,
+      nodeRect: {
+        left: 900,
+        right: 1188,
+        top: 300,
+        bottom: 578,
+        width: 288,
+        height: 278,
+      },
+    })).toEqual({
+      side: 'left',
+      x: 412,
+      y: 100,
+    });
+  });
+
+  test('comments drawer selections use drawer spacing without delayed popover open', () => {
+    expect(getCommentPopoverDrawerPosition({
+      canvasRect,
+      drawerRect: {
+        left: 900,
+      },
+    })).toEqual({
+      side: 'right',
+      x: 384,
+      y: 200,
+    });
+
+    expect(getCommentDrawerNodeFocusTarget({
+      canvasRect,
+      drawerRect: {
+        left: 900,
+      },
+    })).toEqual({
+      screenRight: 380,
+      screenTop: 200,
+    });
+
+    expect(appJs).toContain('const openCommentPopoverFromDrawer = (nodeId, commentId) => {');
+    expect(appJs).toContain('focusNodeById(nodeId, focusTarget);');
+    expect(appJs).toContain('options.screenTop - nodeData.y * scale');
+    expect(appJs).toContain('setSelectedCommentId(commentId || null);');
+    expect(appJs).toContain('openCommentPopoverFromDrawer(nodeId, commentId);');
+    expect(appJs).not.toContain('setTimeout(() => openCommentPopover(nodeId, { forceSide:');
+  });
+
+  test('popover container stays fixed-size outside the zoomed canvas content', () => {
+    expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 384px;[\s\S]*transform: none;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container\.is-drawer-anchor \{[\s\S]*transform: none;[\s\S]*\}/);
+    expect(appJs).toContain('querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`)');
+    expect(appJs).toContain("commentPopoverAnchor.mode === 'drawer' ? ' is-drawer-anchor' : ''");
+    expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*max-height: 400px;[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);[\s\S]*border-radius: 16px;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container\.right \.comment-popover\.modal-card \{[\s\S]*border-top-left-radius: 0;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container\.left:not\(\.is-drawer-anchor\) \.comment-popover\.modal-card \{[\s\S]*border-top-right-radius: 0;[\s\S]*\}/);
+    expect(appCss).not.toMatch(/\.comment-popover-container\.right::before/);
+    expect(appCss).not.toMatch(/\.comment-popover-container\.right::after/);
+    expect(appCss).not.toMatch(/\.comment-popover-footer\.modal-footer/);
+    expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*max-height: 400px;[\s\S]*height: auto;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-body\.modal-body \{[\s\S]*flex: 0 1 auto;[\s\S]*max-height: calc\(400px - 48px\);[\s\S]*overflow-y: auto;[\s\S]*scroll-padding: var\(--unit-24\);/);
+    expect(appCss).toMatch(/\.comment-thread-scroll \{[\s\S]*overflow: visible;[\s\S]*padding-bottom: 0;/);
+    expect(appCss).not.toMatch(/\.comment-popover\.has-add-toggle \.comment-thread-scroll/);
+    expect(appCss).toMatch(/\.comment-input-actions \{[\s\S]*gap: var\(--space-xs\);[\s\S]*\}/);
+    const inputActionsBlock = appCss.match(/\.comment-input-actions \{[\s\S]*?\}/)?.[0] || '';
+    expect(inputActionsBlock).not.toContain('border-top');
+    const inputWrapperBlock = appCss.match(/\.comment-input-wrapper \{[\s\S]*?\}/)?.[0] || '';
+    expect(inputWrapperBlock).not.toContain('border:');
+    expect(inputWrapperBlock).not.toContain('border-radius:');
+    expect(inputWrapperBlock).not.toContain('box-shadow:');
+    expect(appCss).not.toMatch(/\.comment-input-wrapper:hover/);
+    expect(appCss).not.toMatch(/\.comment-input-wrapper:focus-within/);
+    const commentInputBlock = appCss.match(/\.comment-input \{[\s\S]*?\}/)?.[0] || '';
+    expect(commentInputBlock).not.toContain('border: none');
+    expect(commentInputBlock).not.toContain('border-radius: 0');
+    expect(commentInputBlock).not.toContain('box-shadow: none');
+    expect(appCss).not.toMatch(/\.comment-input:focus/);
+    expect(commentPopoverJs).not.toContain('buttonStyle="brand"');
+    expect(commentPopoverJs).toContain('type="primary"');
+    expect(commentPopoverJs).toContain('buttonStyle="mono"');
+    expect(commentPopoverJs).not.toContain('active={isAddingComment}');
+    expect(commentPopoverJs).toContain('Add a comment... (use @ to mention)');
+    expect(commentPopoverJs).not.toContain('Add a comment...\\n');
+    expect(commentPopoverJs).toContain('emoji-picker-element');
+    expect(commentPopoverJs).toContain('onWheel={(event) => event.stopPropagation()}');
+    expect(appJs).toContain('.comment-popover, .comment-emoji-popover, .comments-drawer');
+    expect(appCss).toMatch(/\.comment-emoji-popover \{[\s\S]*position: absolute;[\s\S]*width: 320px;/);
+    expect(appCss).toMatch(/\.comment-emoji-popover \{[\s\S]*overscroll-behavior: contain;/);
+    expect(appCss).not.toContain('bottom: calc(100% + var(--space-sm));');
+    expect(appCss).toMatch(/\.comment-emoji-popover emoji-picker \{[\s\S]*--background: var\(--ui-color-surface\);[\s\S]*--indicator-color: var\(--ui-button-mono-quiet\);/);
+    expect(appCss).toMatch(/\.comment-complete-btn\.checked,[\s\S]*\.comment-complete-btn\.checked:hover:not\(:disabled\),[\s\S]*\.comment-complete-btn\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
+  });
+
+  test('comments drawer items use mono text styles and compact menu controls', () => {
+    expect(appCss).toMatch(/\.comments-panel-node-title \{[\s\S]*color: var\(--ui-color-text\);[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
+    expect(appCss).toMatch(/\.comments-panel-item \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
+    expect(appCss).toMatch(/\.comments-panel-item\.is-selected \{[\s\S]*border-color: var\(--ui-color-border-strong\);[\s\S]*outline: 1px solid var\(--ui-color-border-strong\);/);
+    const selectedCommentBlock = appCss.match(/\.comments-panel-item\.is-selected \{[\s\S]*?\}/)?.[0] || '';
+    expect(selectedCommentBlock).not.toContain('var(--ui-color-primary)');
+    expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: var\(--type-body-sm-size\);/);
+    expect(appCss).toMatch(/\.comments-panel-show-resolved\.ui-checkbox-field \{[\s\S]*min-height: var\(--unit-32\);/);
+    expect(appCss).toMatch(/\.comments-panel-filter \{[\s\S]*gap: var\(--space-sm\);/);
+    expect(appCss).toMatch(/\.comments-panel-menu \{[\s\S]*width: 128px;[\s\S]*min-width: 128px;/);
+    expect(appCss).toMatch(/\.comments-panel-menu-item\.ui-menu-item \{[\s\S]*min-height: 24px;/);
+    expect(appCss).not.toMatch(/\.comments-filter-select/);
+    expect(appCss).not.toMatch(/\.comments-filter-toggle/);
+    expect(appCss).not.toMatch(/\.comments-panel-control-button/);
+    expect(appJs).not.toContain('Filter comments');
+    expect(appJs).not.toContain('ListFilter');
+  });
+
+  test('shared search and dark input tokens stay consistent', () => {
+    expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-color-input-bg: var\(--color-plum-950\);/);
+    expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-input-mono-border: var\(--color-plum-600\);[\s\S]*--ui-input-mono-border-hover: var\(--color-plum-500\);[\s\S]*--ui-input-mono-border-focus: var\(--color-plum-400\);/);
+    expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-status-success-icon: var\(--color-green-300\);/);
+    expect(generatedCss).toContain('--ui-toast-info-bg: var(--color-brand-600);');
+    expect(generatedCss).toContain('--ui-toast-success-bg: var(--color-green-600);');
+    expect(generatedCss).toContain('--ui-toast-warning-bg: #EB7E00;');
+    expect(generatedCss).toContain('--ui-toast-error-bg: var(--color-red-600);');
+    expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-toast-success-bg: var\(--color-green-600\);/);
+    const toastInfoBlock = appCss.match(/\.toast-info \{[\s\S]*?\}/)?.[0] || '';
+    const toastSuccessBlock = appCss.match(/\.toast-success \{[\s\S]*?\}/)?.[0] || '';
+    const toastWarningBlock = appCss.match(/\.toast-warning \{[\s\S]*?\}/)?.[0] || '';
+    const toastErrorBlock = appCss.match(/\.toast-error,[\s\S]*?\.toast-danger \{[\s\S]*?\}/)?.[0] || '';
+    expect(toastInfoBlock).toContain('background: var(--ui-toast-info-bg);');
+    expect(toastSuccessBlock).toContain('background: var(--ui-toast-success-bg);');
+    expect(toastSuccessBlock).toContain('border-color: var(--ui-toast-success-border);');
+    expect(toastWarningBlock).toContain('background: var(--ui-toast-warning-bg);');
+    expect(toastErrorBlock).toContain('background: var(--ui-toast-error-bg);');
+    expect(toastSuccessBlock).toContain('color: var(--color-neutral-white);');
+    expect(toastSuccessBlock).not.toContain('var(--ui-status-success-icon)');
+    expect(appCss).toMatch(/\.ui-search-input \{[\s\S]*width: 100%;/);
+    expect(appCss).toMatch(/\[data-theme="dark"\] \.modal-card input,[\s\S]*background-color: var\(--ui-color-input-bg\);/);
+    expect(appCss).toMatch(/\[data-theme="dark"\] \.blank-scan-shell\.search-container:hover,[\s\S]*background: var\(--ui-color-input-bg\);/);
+  });
+});
+
+describe('map image asset persistence', () => {
+  const {
+    applyNodeAssetUpdatesToMap,
+    buildMapSavePayload,
+    serializeMapAutosaveSnapshot,
+    isStoredScreenshotAsset,
+    getImageCaptureStats,
+  } = __testing;
+
+  test('image capture stats only count real saved screenshot assets', () => {
+    expect(isStoredScreenshotAsset('https://replit.com/pricing')).toBe(false);
+    expect(isStoredScreenshotAsset('/screenshots/thumb-about.jpg')).toBe(true);
+    expect(isStoredScreenshotAsset('https://api.vellic.io/screenshots/thumb-about.jpg')).toBe(true);
+    expect(isStoredScreenshotAsset('https://pub-example.r2.dev/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_thumb_small_v8.jpg')).toBe(true);
+
+    const root = {
+      id: 'home',
+      url: 'https://example.com',
+      thumbnailUrl: 'https://example.com',
+      children: [
+        {
+          id: 'about',
+          url: 'https://example.com/about',
+          thumbnailUrl: '/screenshots/thumb-about.jpg',
+          children: [],
+        },
+        {
+          id: 'contact',
+          url: 'https://example.com/contact',
+          thumbnailCaptureFailed: true,
+          children: [],
+        },
+        {
+          id: 'login',
+          url: 'https://example.com/login',
+          authRequired: true,
+          children: [],
+        },
+      ],
+    };
+
+    const stats = getImageCaptureStats({
+      rootNode: root,
+      assetKey: 'thumbnailUrl',
+      invalidAssetIds: new Set(['about']),
+      isUnavailable: (node) => Boolean(node.authRequired),
+    });
+
+    expect(stats).toMatchObject({
+      total: 4,
+      captured: 0,
+      unavailable: 1,
+      remaining: 3,
+      hasPartial: false,
+      allCaptured: false,
+    });
+  });
+
+  test('thumbnail asset updates are retained in saved map payloads', () => {
+    const root = {
+      id: 'home',
+      url: 'https://example.com',
+      internalLinks: ['https://example.com/about'],
+      children: [
+        {
+          id: 'about',
+          url: 'https://example.com/about',
+          children: [],
+        },
+      ],
+    };
+
+    const updated = applyNodeAssetUpdatesToMap({
+      root,
+      orphans: [],
+      nodeId: 'about',
+      assetEntries: [
+        ['thumbnailUrl', '/screenshots/thumb-about.jpg'],
+        ['thumbnailFullUrl', '/screenshots/preview-about.jpg'],
+      ],
+    });
+
+    const payload = buildMapSavePayload({
+      root: updated.root,
+      orphans: updated.orphans,
+    });
+
+    expect(payload.root.internalLinks).toBeUndefined();
+    expect(payload.root.children[0].thumbnailUrl).toBe('/screenshots/thumb-about.jpg');
+    expect(payload.root.children[0].thumbnailFullUrl).toBe('/screenshots/preview-about.jpg');
+  });
+
+  test('image menu opens before validating saved image assets', () => {
+    const handlerStart = appJs.indexOf('onToggleImageMenu: () => {');
+    const handlerEnd = appJs.indexOf('onGetThumbnailsAll', handlerStart);
+    const handler = appJs.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handler).toContain('setShowImageMenu(true);');
+    expect(handler).toContain('validateCurrentMapImageAssets();');
+    expect(handler.indexOf('setShowImageMenu(true);')).toBeLessThan(
+      handler.indexOf('validateCurrentMapImageAssets();')
+    );
+    expect(handler).not.toContain('await validateCurrentMapImageAssets');
+  });
+
+  test('report see on map keeps the report drawer open while focusing the node', () => {
+    const handlerStart = appJs.indexOf('const locateReportNodeOnMap = useCallback((nodeId) => {');
+    const handlerEnd = appJs.indexOf('const locateReportUrlOnMap', handlerStart);
+    const handler = appJs.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    expect(handler).toContain('setSelectedNodeIds(new Set([nodeId]));');
+    expect(handler).toContain('focusNodeById(nodeId);');
+    expect(handler).not.toContain('setShowReportDrawer(false);');
+  });
+
+  test('node clicks can replace report-focused selection in view mode', () => {
+    const handlerStart = appJs.indexOf('const handleNodeClick = (node, event) => {');
+    const handlerEnd = appJs.indexOf('const openLargeMapNodeMenu', handlerStart);
+    const handler = appJs.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    expect(handler).toContain('const targetIds = getNodeStackSelectionIds(node.id);');
+    expect(handler).toContain('if (shiftActive) {\n      if (!canEdit()) return;');
+    expect(handler).not.toContain('if (!canEdit()) return;\n\n    const targetIds = getNodeStackSelectionIds(node.id);');
+  });
+
+  test('large maps keep area selection enabled', () => {
+    expect(appJs).toContain('const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];');
+    expect(appJs).toContain('largeMapVisibleNodesRef.current = rawNodes.map((node) => (');
+    expect(appJs).toContain('largeMapVisibleNodesRef.current.forEach((node) => {');
+    expect(appJs).toContain('getViewportSelectionRectStyle(selectionBox');
+    expect(appJs).not.toContain('{!useLargeMapSurface && selectionBox && (');
+  });
+
+  test('large map viewfinder uses scene bounds', () => {
+    expect(appJs).toContain('setLargeMapSceneBounds(scene?.bounds || null);');
+    expect(appJs).toContain('setLargeMapMinimapOverview(scene.minimap);');
+    expect(appJs).toContain('overview: useLargeMapSurface ? largeMapMinimapOverview : null');
+    expect(appJs).toContain('bounds: useLargeMapSurface ? largeMapSceneBounds : worldBounds');
+    expect(appJs).toContain('normalizeCanvasWorldBounds(useLargeMapSurface ? largeMapSceneBounds : worldBounds)');
+    expect(minimapCss).toMatch(/\.minimap-navigator \{[\s\S]*z-index: 1500;/);
+    expect(minimapCss).toMatch(/\.minimap-navigator-preview \{[\s\S]*border: 1px solid var\(--minimap-preview-border\);/);
+    expect(__testing.normalizeCanvasWorldBounds({ w: 4000, h: 2000 })).toEqual({
+      minX: 0,
+      minY: 0,
+      maxX: 4000,
+      maxY: 2000,
+    });
+  });
+
+  test('page details modal spacing uses design-system spacing tokens', () => {
+    const formBlock = appCss.match(/\.edit-node-form \{([\s\S]*?)\}/)?.[1] || '';
+    expect(formBlock).not.toContain('flex: 1;');
+    expect(formBlock).not.toContain('min-height: 0;');
+    expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-24\);/);
+    expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*padding: var\(--unit-24\);[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
+    expect(generatedCss).toContain('--type-label-sm-weight: 500;');
+    expect(appCss).toMatch(/\.field \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).toMatch(/\.field-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.edit-node-form > \.field:last-child \{[\s\S]*margin-bottom: 0;/);
+    expect(appCss).toMatch(/\.edit-node-modal__footer-actions \{[\s\S]*gap: var\(--unit-12\);/);
+    expect(appCss).toMatch(/\.edit-node-duplicate-section,\n\.edit-node-marker-detail-card \{[\s\S]*gap: var\(--unit-10\);[\s\S]*padding: var\(--unit-16\);/);
+    expect(appCss).toMatch(/\.edit-node-duplicate-row,\n\.edit-node-marker-detail-row \{[\s\S]*grid-template-columns: minmax\(120px, 0\.4fr\) minmax\(0, 1fr\);[\s\S]*gap: var\(--unit-8\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-section\.ui-accordion \{[\s\S]*background: var\(--ui-color-surface\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-section\.ui-accordion \{[\s\S]*border-radius: var\(--ui-radius-lg\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-content \{[\s\S]*gap: var\(--unit-24\);[\s\S]*padding: 0 var\(--unit-16\) var\(--unit-16\);/);
+    expect(appCss).toMatch(/\.edit-node-form-grid \{[\s\S]*column-gap: var\(--unit-24\);[\s\S]*row-gap: var\(--unit-24\);/);
+    expect(appCss).toMatch(/\.image-upload-zone \{[\s\S]*border: var\(--border-width-subtle\) dashed var\(--ui-color-border-strong\);/);
+  });
+
+  test('upgrade modal keeps stable height and aligned purchase columns', () => {
+    expect(appJs).toContain('*additional screenshot credits and page limits can be purchased anytime');
+    expect(appJs).toContain("{selectedBillingPurchase?.itemCount ?? '--'}");
+    expect(appJs).toContain('className="plans-modal-pack-multiplier"');
+    expect(appJs).toContain("singular: 'credit'");
+    expect(appJs).toContain("plural: 'credits'");
+    expect(appJs).toContain('className="plans-modal-pack-price"');
+    expect(appCss).toMatch(/\.modal-card\.plans-modal \{[\s\S]*height: min\(640px, calc\(100vh - 48px\)\);/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card \{[\s\S]*--plans-modal-pricing-card-copy-color: #475569;/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card > p \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card li \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card__screenshot-note \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);
+    expect(appCss).toMatch(/\.plans-modal-tab-panel--upgrades \{[\s\S]*padding-top: 32px;/);
+    expect(appCss).toMatch(/\.plans-modal-pack-card \{[\s\S]*grid-template-columns: 18px minmax\(0, 1fr\) 64px 12px 54px 136px;[\s\S]*"check main price multiplier quantity total";/);
+    expect(appCss).toMatch(/\.plans-modal-pack-price \{[\s\S]*justify-self: end;[\s\S]*font-size: var\(--type-body-sm-size\);/);
+    expect(appCss).toMatch(/\.plans-modal-pack-multiplier \{[\s\S]*grid-area: multiplier;[\s\S]*justify-self: center;/);
+    expect(appCss).toMatch(/\.plans-modal-pack-quantity \{[\s\S]*justify-self: center;/);
+    expect(appCss).toMatch(/\.plans-modal-pack-total \{[\s\S]*width: 136px;[\s\S]*text-align: left;/);
+    expect(appCss).toMatch(/\.modal-card\.plans-modal \.modal-subtitle \{[\s\S]*color: var\(--ui-color-text\);/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal \{[\s\S]*margin-right: 8px;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal-row \{[\s\S]*grid-template-columns: 72px 76px;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal-row span \{[\s\S]*text-align: right;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal-row strong \{[\s\S]*text-align: left;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal-amount \{[\s\S]*font-size: 14px;[\s\S]*font-weight: 800;/);
+  });
+
+  test('back-to-top scroll areas reserve bottom clearance', () => {
+    expect(appCss).toMatch(/\.report-drawer:not\(\.image-report-drawer\) \.report-drawer-body \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.image-report-list-shell \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.version-history-drawer \.account-drawer-body \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).not.toMatch(/\.version-history-drawer \.version-history-card \{[\s\S]*background: transparent;/);
+    expect(appCss).toMatch(/\.history-actions \{[\s\S]*padding: 12px 16px;/);
+    expect(appCss).toMatch(/\.history-list \{[\s\S]*display: flex;[\s\S]*flex-direction: column;[\s\S]*overflow-x: hidden;[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.history-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);
+    expect(appCss).toMatch(/\.comments-panel-body \{[\s\S]*padding: 12px 12px var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+  });
+
+  test('autosave snapshots only track canvas content changes', () => {
+    const base = {
+      name: 'Original map name',
+      root: { id: 'home', title: 'Home', url: 'https://example.com', children: [] },
+      orphans: [],
+      connections: [],
+      colors: { home: '#000000' },
+      connectionColors: { primary: '#111111' },
+      project_id: 'project-a',
+    };
+
+    expect(serializeMapAutosaveSnapshot(base)).toBe(serializeMapAutosaveSnapshot({
+      ...base,
+      name: 'Renamed map',
+      project_id: 'project-b',
+    }));
+
+    expect(serializeMapAutosaveSnapshot(base)).not.toBe(serializeMapAutosaveSnapshot({
+      ...base,
+      root: { ...base.root, title: 'Updated Home' },
+    }));
+  });
+});

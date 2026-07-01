@@ -1,0 +1,384 @@
+{
+  "version": 1,
+  "fallbackPlan": "free",
+  "trialDefaults": {
+    "fallbackPlan": "free",
+    "basePlan": "pro",
+    "personalDays": 7,
+    "teamDays": 7,
+    "teamSeatCap": 4,
+    "screenshotCredits": 15,
+    "organizedScreenshotExports": 15,
+    "teamRoles": ["owner", "editor", "commenter", "viewer"]
+  },
+  "retentionDefaults": {
+    "archiveDownloadWindowDays": 30,
+    "largeAssetRetentionDays": 30,
+    "lightweightDataRetentionMonths": 12
+  },
+  "meters": {
+    "active_pages": "Pages",
+    "crawl_pages": "Pages",
+    "active_maps": "Maps",
+    "screenshot_credits": "Screenshot credits",
+    "organized_exports": "Downloads",
+    "downloads": "Downloads",
+    "editors": "Editors"
+  },
+  "screenshotCreditCosts": {
+    "desktop_viewport": 1,
+    "mobile_viewport": 1,
+    "desktop_mobile_viewport_pair": 2,
+    "desktop_full_page": 1,
+    "mobile_full_page": 2,
+    "desktop_mobile_full_page_pair": 5
+  },
+  "stripe": {
+    "portalConfigurationEnv": "STRIPE_BILLING_PORTAL_CONFIGURATION_ID",
+    "plans": {
+      "pro": {
+        "prices": {
+          "monthly": {
+            "priceEnv": "STRIPE_PRICE_PRO_MONTHLY",
+            "interval": "month"
+          },
+          "yearly": {
+            "priceEnv": "STRIPE_PRICE_PRO_YEARLY",
+            "priceEnvFallbacks": ["STRIPE_PRICE_PRO_ANNUAL"],
+            "interval": "year"
+          }
+        }
+      },
+      "studio": {
+        "prices": {
+          "monthly": {
+            "priceEnv": "STRIPE_PRICE_STUDIO_MONTHLY",
+            "interval": "month"
+          },
+          "yearly": {
+            "priceEnv": "STRIPE_PRICE_STUDIO_YEARLY",
+            "priceEnvFallbacks": ["STRIPE_PRICE_STUDIO_ANNUAL"],
+            "interval": "year"
+          }
+        }
+      },
+      "agency": {
+        "prices": {
+          "monthly": {
+            "priceEnv": "STRIPE_PRICE_AGENCY_MONTHLY",
+            "interval": "month"
+          },
+          "yearly": {
+            "priceEnv": "STRIPE_PRICE_AGENCY_YEARLY",
+            "priceEnvFallbacks": ["STRIPE_PRICE_AGENCY_ANNUAL"],
+            "interval": "year"
+          }
+        }
+      }
+    },
+    "addOns": {
+      "screenshot_pack_1": {
+        "name": "10 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_1",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 10,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_pack_2": {
+        "name": "25 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_2",
+        "priceEnvFallbacks": ["STRIPE_PRICE_SCREENSHOT_CREDITS_25"],
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 25,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_pack_3": {
+        "name": "50 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_3",
+        "priceEnvFallbacks": ["STRIPE_PRICE_SCREENSHOT_CREDITS_50"],
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 50,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_pack_4": {
+        "name": "100 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_4",
+        "priceEnvFallbacks": ["STRIPE_PRICE_SCREENSHOT_CREDITS_100"],
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 100,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_pack_5": {
+        "name": "1,000 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_5",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 1000,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_pack_6": {
+        "name": "10,000 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_6",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 10000,
+        "resetBehavior": "rollover"
+      },
+      "page_pack_1": {
+        "name": "1,000 pages",
+        "priceEnv": "STRIPE_PRICE_PAGE_PACK_1",
+        "mode": "subscription",
+        "meter": "active_pages",
+        "quantity": 1000,
+        "resetBehavior": "period"
+      },
+      "page_pack_2": {
+        "name": "10,000 pages",
+        "priceEnv": "STRIPE_PRICE_PAGE_PACK_2",
+        "mode": "subscription",
+        "meter": "active_pages",
+        "quantity": 10000,
+        "resetBehavior": "period"
+      },
+      "page_pack_3": {
+        "name": "50,000 pages",
+        "priceEnv": "STRIPE_PRICE_PAGE_PACK_3",
+        "mode": "subscription",
+        "meter": "active_pages",
+        "quantity": 50000,
+        "resetBehavior": "period"
+      },
+      "organized_exports_10": {
+        "name": "10 downloads",
+        "priceEnv": "STRIPE_PRICE_ORGANIZED_EXPORTS_10",
+        "mode": "payment",
+        "meter": "downloads",
+        "quantity": 10,
+        "resetBehavior": "rollover"
+      }
+    },
+    "recurringAddOns": {
+      "extra_editor": {
+        "name": "Extra editor",
+        "prices": {
+          "monthly": {
+            "priceEnv": "STRIPE_PRICE_EXTRA_EDITOR_MONTHLY",
+            "interval": "month"
+          },
+          "yearly": {
+            "priceEnv": "STRIPE_PRICE_EXTRA_EDITOR_YEARLY",
+            "interval": "year"
+          }
+        },
+        "entitlements": {
+          "editors": 1,
+          "activePages": 10000,
+          "downloads": 15,
+          "screenshotCredits": 300
+        }
+      }
+    },
+    "addOnAliases": {
+      "screenshot_credits_25": "screenshot_pack_2",
+      "screenshot_credits_50": "screenshot_pack_3",
+      "screenshot_credits_100": "screenshot_pack_4"
+    }
+  },
+  "planAliases": {
+    "solo": "pro"
+  },
+  "plans": {
+    "free": {
+      "key": "free",
+      "name": "Free",
+      "paid": false,
+      "display": {
+        "accent": "green",
+        "description": "For trying Vellic on a small site or one-off audit.",
+        "marketingCta": "Get started",
+        "marketingAction": "signup",
+        "prices": {
+          "monthly": {
+            "amount": 0,
+            "currency": "usd",
+            "interval": "month"
+          },
+          "yearly": {
+            "amount": 0,
+            "currency": "usd",
+            "interval": "year"
+          }
+        }
+      },
+      "limits": {
+        "activeProjects": 1,
+        "activePages": 1000,
+        "scanPagesPerRun": 100,
+        "screenshotCredits": 25,
+        "downloads": 5,
+        "editors": 1
+      },
+      "features": {
+        "limitedExports": true,
+        "standardExports": false,
+        "advancedExports": false,
+        "clientShareLinks": false,
+        "brandedReports": false,
+        "scheduledRescans": false,
+        "priorityQueue": false,
+        "clientWorkspaces": false
+      }
+    },
+    "pro": {
+      "key": "pro",
+      "name": "Pro",
+      "paid": true,
+      "display": {
+        "accent": "blue",
+        "description": "For solo audits with screenshots and saved work.",
+        "appNote": "For solo audits with screenshots and saved work.",
+        "marketingCta": "Subscribe",
+        "marketingAction": "checkout",
+        "prices": {
+          "monthly": {
+            "amount": 800,
+            "currency": "usd",
+            "interval": "month"
+          },
+          "yearly": {
+            "amount": 7200,
+            "currency": "usd",
+            "interval": "year"
+          }
+        }
+      },
+      "limits": {
+        "activeProjects": 5,
+        "activePages": 10000,
+        "screenshotCredits": 300,
+        "downloads": null,
+        "editors": 1
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": true,
+        "clientShareLinks": false,
+        "brandedReports": false,
+        "scheduledRescans": false,
+        "priorityQueue": false,
+        "clientWorkspaces": false
+      }
+    },
+    "studio": {
+      "key": "studio",
+      "name": "Studio",
+      "paid": true,
+      "display": {
+        "accent": "purple",
+        "description": "For small teams handling recurring site work.",
+        "appNote": "For small teams handling recurring site work.",
+        "marketingCta": "Subscribe",
+        "marketingAction": "checkout",
+        "prices": {
+          "monthly": {
+            "amount": 1800,
+            "currency": "usd",
+            "interval": "month"
+          },
+          "yearly": {
+            "amount": 14400,
+            "currency": "usd",
+            "interval": "year"
+          }
+        }
+      },
+      "limits": {
+        "activeProjects": 15,
+        "activePages": 50000,
+        "screenshotCredits": 1000,
+        "downloads": null,
+        "editors": 3
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": true,
+        "clientShareLinks": true,
+        "brandedReports": true,
+        "scheduledRescans": true,
+        "priorityQueue": false,
+        "clientWorkspaces": false
+      }
+    },
+    "agency": {
+      "key": "agency",
+      "name": "Agency",
+      "paid": true,
+      "display": {
+        "accent": "coral",
+        "description": "For heavier client audits and shared delivery.",
+        "appNote": "For heavier client audits and shared delivery.",
+        "marketingCta": "Subscribe",
+        "marketingAction": "checkout",
+        "prices": {
+          "monthly": {
+            "amount": 8800,
+            "currency": "usd",
+            "interval": "month"
+          },
+          "yearly": {
+            "amount": 96000,
+            "currency": "usd",
+            "interval": "year"
+          }
+        }
+      },
+      "limits": {
+        "activeProjects": null,
+        "activePages": 200000,
+        "screenshotCredits": 5000,
+        "downloads": null,
+        "editors": 10
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": true,
+        "clientShareLinks": true,
+        "brandedReports": true,
+        "scheduledRescans": true,
+        "priorityQueue": true,
+        "clientWorkspaces": true
+      }
+    },
+    "test_unlimited": {
+      "key": "test_unlimited",
+      "name": "Test Unlimited",
+      "paid": false,
+      "internal": true,
+      "limits": {
+        "activeProjects": null,
+        "activePages": null,
+        "scanPagesPerRun": null,
+        "screenshotCredits": null,
+        "downloads": null,
+        "editors": null
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": true,
+        "clientShareLinks": true,
+        "brandedReports": true,
+        "scheduledRescans": true,
+        "priorityQueue": true,
+        "clientWorkspaces": true
+      }
+    }
+  }
+}

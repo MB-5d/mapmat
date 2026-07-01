@@ -60,6 +60,7 @@ Applied operation types:
 - `node.add`
 - `node.update`
 - `node.delete`
+- `node.move`
 - `link.add`
 - `link.update`
 - `link.delete`
@@ -68,7 +69,7 @@ Applied operation types:
 Current limitation:
 
 - `node.update` supports shallow property edits only.
-- Structural moves/reparents are not applied yet through `node.update`.
+- Structural moves/reparents use `node.move`, not `node.update`.
 - Unsupported structural changes return a `400` validation/apply error instead of silently mutating the document.
 
 ## Versioning and recovery
