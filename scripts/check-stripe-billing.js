@@ -2,6 +2,10 @@ const assert = require('assert');
 const os = require('os');
 const path = require('path');
 
+// This fixture check uses a temp SQLite DB, even when invoked by postgres-mode CI without DATABASE_URL.
+if (String(process.env.DB_PROVIDER || '').toLowerCase() === 'postgres' && !process.env.DATABASE_URL) {
+  process.env.DB_PROVIDER = 'sqlite';
+}
 process.env.DB_PATH = path.join(os.tmpdir(), `vellic-stripe-billing-${process.pid}-${Date.now()}.db`);
 process.env.TEST_AUTH_ENABLED = 'false';
 process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_pro_test';

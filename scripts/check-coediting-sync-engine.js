@@ -14,6 +14,7 @@ const {
 } = require('../utils/coeditingSyncEngine');
 const { normalizeOperationEnvelope } = require('../utils/coeditingContract');
 const {
+  shouldSkipPersistedHarness,
   createPersistedLoadContextAsync,
   cleanupPersistedLoadContextAsync,
 } = require('./lib/coeditingLoadHarness');
@@ -280,7 +281,11 @@ async function main() {
     },
   }), 'COEDITING_INVALID_NODE_MOVE');
 
-  await assertSavedMapDriftRefreshesLiveSnapshot();
+  if (shouldSkipPersistedHarness()) {
+    console.log('[coediting-sync-engine] Skipped persisted drift refresh check without DATABASE_URL.');
+  } else {
+    await assertSavedMapDriftRefreshesLiveSnapshot();
+  }
 
   console.log('[coediting-sync-engine] Passed. Live document apply/replay/resync behavior is consistent.');
 }

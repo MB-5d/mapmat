@@ -3,6 +3,10 @@ const os = require('os');
 const path = require('path');
 const { randomUUID } = require('crypto');
 
+// This fixture check uses a temp SQLite DB, even when invoked by postgres-mode CI without DATABASE_URL.
+if (String(process.env.DB_PROVIDER || '').toLowerCase() === 'postgres' && !process.env.DATABASE_URL) {
+  process.env.DB_PROVIDER = 'sqlite';
+}
 process.env.DB_PATH = path.join(os.tmpdir(), `vellic-entitlements-${process.pid}-${Date.now()}.db`);
 process.env.TEST_AUTH_ENABLED = 'false';
 
