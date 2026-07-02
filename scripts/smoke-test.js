@@ -34,6 +34,13 @@ async function fetchWithCookie(url, options = {}, cookieJar) {
   return { res, data };
 }
 
+function getAuthHeaders(cookieJar) {
+  const headers = {};
+  if (cookieJar?.value) headers.Cookie = cookieJar.value;
+  if (cookieJar?.token) headers.Authorization = `Bearer ${cookieJar.token}`;
+  return headers;
+}
+
 function assertOk(result, label) {
   if (!result.res.ok) {
     throw new Error(`${label} failed: ${result.data?.error || result.res.status}`);
@@ -90,10 +97,7 @@ async function authenticateSmokeUser(cookieJar) {
   await loginWithTestAuthFallback(cookieJar);
 }
 
-async function testSaveLoadShare() {
-  const cookieJar = { value: '', token: '' };
-  await authenticateSmokeUser(cookieJar);
-
+async function testSaveLoadShare(cookieJar) {
   const payload = {
     name: 'Smoke Map',
     url: 'https://example.com',
@@ -145,7 +149,7 @@ async function testSaveLoadShare() {
   return true;
 }
 
-async function testScanStream() {
+async function testScanStream(cookieJar) {
   const url = process.env.SMOKE_SCAN_URL || 'https://example.com';
   const params = new URLSearchParams({
     url,
@@ -158,7 +162,10 @@ async function testScanStream() {
   try {
     const res = await fetch(`${API_BASE}/scan-stream?${params.toString()}`, {
       signal: controller.signal,
-      headers: { Accept: 'text/event-stream' },
+      headers: {
+        Accept: 'text/event-stream',
+        ...getAuthHeaders(cookieJar),
+      },
     });
     if (!res.ok) throw new Error(`scan-stream http ${res.status}`);
 
@@ -203,10 +210,12 @@ async function testScanStream() {
 
 async function run() {
   console.log('Running smoke tests...');
-  await testSaveLoadShare();
+  const cookieJar = { value: '', token: '' };
+  await authenticateSmokeUser(cookieJar);
+  await testSaveLoadShare(cookieJar);
   console.log('✓ save/load/share ok');
   await sleep(500);
-  await testScanStream();
+  await testScanStream(cookieJar);
   console.log('✓ scan-stream ok (or skipped with warning)');
 }
 
