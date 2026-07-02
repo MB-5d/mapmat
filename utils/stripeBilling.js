@@ -30,41 +30,74 @@ const ZERO_TOTAL_PAYMENT_METHOD_COLLECTION = 'if_required';
 const ADMIN_PROMOTION_OFFERS = Object.freeze([
   {
     key: 'pro_free_month',
-    label: 'Pro free month',
-    description: '$8 off the first Pro monthly invoice.',
+    label: 'Pro free for 1 month',
+    description: '100% off the first Pro monthly invoice.',
     provider: 'stripe',
     kind: 'subscription',
     planKey: 'pro',
     billingCycle: 'monthly',
     couponId: 'vellic_pro_free_month',
     discountType: 'amount',
-    firstTimeOrderOnly: true,
+    duration: 'once',
+    firstTimeOrderOnly: false,
+    maxRedemptions: 1,
+  },
+  {
+    key: 'pro_free_3_months',
+    label: 'Pro free for 3 months',
+    description: '100% off Pro monthly invoices for 3 months.',
+    provider: 'stripe',
+    kind: 'subscription',
+    planKey: 'pro',
+    billingCycle: 'monthly',
+    couponId: 'vellic_pro_free_3_months',
+    discountType: 'amount',
+    duration: 'repeating',
+    durationInMonths: 3,
+    firstTimeOrderOnly: false,
     maxRedemptions: 1,
   },
   {
     key: 'studio_free_month',
-    label: 'Studio free month',
-    description: '$18 off the first Studio monthly invoice.',
+    label: 'Studio free for 1 month',
+    description: '100% off the first Studio monthly invoice.',
     provider: 'stripe',
     kind: 'subscription',
     planKey: 'studio',
     billingCycle: 'monthly',
     couponId: 'vellic_studio_free_month',
     discountType: 'amount',
-    firstTimeOrderOnly: true,
+    duration: 'once',
+    firstTimeOrderOnly: false,
     maxRedemptions: 1,
   },
   {
-    key: 'agency_free_month',
-    label: 'Agency free month',
-    description: '$88 off the first Agency monthly invoice.',
+    key: 'studio_free_3_months',
+    label: 'Studio free for 3 months',
+    description: '100% off Studio monthly invoices for 3 months.',
     provider: 'stripe',
     kind: 'subscription',
-    planKey: 'agency',
+    planKey: 'studio',
     billingCycle: 'monthly',
-    couponId: 'vellic_agency_free_month',
+    couponId: 'vellic_studio_free_3_months',
     discountType: 'amount',
-    firstTimeOrderOnly: true,
+    duration: 'repeating',
+    durationInMonths: 3,
+    firstTimeOrderOnly: false,
+    maxRedemptions: 1,
+  },
+  {
+    key: 'extra_editor_free_month',
+    label: 'Extra editor free for 1 month',
+    description: '100% off the first Extra editor monthly invoice.',
+    provider: 'stripe',
+    kind: 'recurring_addon',
+    addonKey: 'extra_editor',
+    billingCycle: 'monthly',
+    couponId: 'vellic_extra_editor_free_month',
+    discountType: 'amount',
+    duration: 'once',
+    firstTimeOrderOnly: false,
     maxRedemptions: 1,
   },
   {
@@ -95,8 +128,8 @@ const ADMIN_PROMOTION_OFFERS = Object.freeze([
   },
   {
     key: 'unlimited_manual',
-    label: 'Unlimited usage',
-    description: 'Internal code record for manual unlimited access grants.',
+    label: 'Free forever',
+    description: 'Internal code record for unlimited access forever.',
     provider: 'internal',
     kind: 'manual_grant',
     planKey: 'test_unlimited',
@@ -748,6 +781,10 @@ function isAdminPromotionOfferConfigured(offer) {
       getAddOnPriceConfig(offer.addonKey);
       return true;
     }
+    if (offer.kind === 'recurring_addon') {
+      getRecurringAddOnPriceConfig(offer.addonKey, offer.billingCycle);
+      return true;
+    }
   } catch {
     return false;
   }
@@ -764,6 +801,8 @@ function serializeAdminPromotionOffer(offer) {
     planKey: offer.planKey || null,
     billingCycle: offer.billingCycle || null,
     addonKey: offer.addonKey || null,
+    duration: offer.duration || 'once',
+    durationInMonths: offer.durationInMonths || null,
     firstTimeOrderOnly: !!offer.firstTimeOrderOnly,
     maxRedemptions: offer.maxRedemptions || null,
     configured: isAdminPromotionOfferConfigured(offer),
@@ -813,6 +852,8 @@ async function retrieveOfferStripePriceDetailsAsync({ stripe, offer }) {
     priceConfig = getPlanPriceConfig(offer.planKey, offer.billingCycle);
   } else if (offer.kind === 'addon') {
     priceConfig = getAddOnPriceConfig(offer.addonKey);
+  } else if (offer.kind === 'recurring_addon') {
+    priceConfig = getRecurringAddOnPriceConfig(offer.addonKey, offer.billingCycle);
   }
 
   if (!priceConfig?.priceId) {
@@ -848,7 +889,7 @@ async function buildAdminPromotionCouponPayloadAsync({ stripe, offer }) {
   const payload = {
     id: offer.couponId,
     name: offer.label,
-    duration: 'once',
+    duration: offer.duration || 'once',
     applies_to: {
       products: [priceDetails.productId],
     },
@@ -862,9 +903,15 @@ async function buildAdminPromotionCouponPayloadAsync({ stripe, offer }) {
   if (offer.discountType === 'percent') {
     payload.percent_off = Math.max(0, Math.min(Number(offer.percentOff || 100), 100));
   } else {
-    const staticAmount = getStaticPlanAmountForOffer(offer);
+    const staticAmount = offer.kind === 'subscription'
+      ? getStaticPlanAmountForOffer(offer)
+      : { amount: 0, currency: priceDetails.currency };
     payload.amount_off = priceDetails.unitAmount || staticAmount.amount;
     payload.currency = priceDetails.currency || staticAmount.currency;
+  }
+
+  if (payload.duration === 'repeating') {
+    payload.duration_in_months = Math.max(1, Math.floor(Number(offer.durationInMonths || 1)));
   }
 
   return payload;
