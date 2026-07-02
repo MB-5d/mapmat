@@ -8,8 +8,11 @@ if (String(process.env.DB_PROVIDER || '').toLowerCase() === 'postgres' && !proce
 }
 process.env.DB_PATH = path.join(os.tmpdir(), `vellic-stripe-billing-${process.pid}-${Date.now()}.db`);
 process.env.TEST_AUTH_ENABLED = 'false';
+process.env.BILLING_STRIPE_ENABLED = 'true';
+process.env.STRIPE_SECRET_KEY = 'sk_test_fixture';
 process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_pro_test';
 process.env.STRIPE_PRICE_PRO_YEARLY = 'price_pro_yearly_test';
+process.env.STRIPE_PRICE_STUDIO_MONTHLY = 'price_studio_monthly_test';
 process.env.STRIPE_PRICE_STUDIO_ANNUAL = 'price_studio_annual_test';
 process.env.STRIPE_PRICE_EXTRA_EDITOR_MONTHLY = 'price_extra_editor_test';
 process.env.STRIPE_PRICE_EXTRA_EDITOR_YEARLY = 'price_extra_editor_yearly_test';
@@ -543,8 +546,21 @@ async function main() {
   );
 
   const promotionOffers = getAdminPromotionOffers();
-  assert(promotionOffers.some((offer) => offer.key === 'pro_free_month'));
+  assert.deepEqual(promotionOffers.map((offer) => offer.key), [
+    'pro_free_month',
+    'pro_free_3_months',
+    'studio_free_month',
+    'studio_free_3_months',
+    'extra_editor_free_month',
+    'screenshots_100',
+    'screenshots_1000',
+    'unlimited_manual',
+  ]);
+  assert(promotionOffers.every((offer) => offer.configured));
   assert(promotionOffers.some((offer) => offer.key === 'unlimited_manual' && offer.provider === 'internal'));
+  assert.equal(promotionOffers.find((offer) => offer.key === 'pro_free_3_months').duration, 'repeating');
+  assert.equal(promotionOffers.find((offer) => offer.key === 'pro_free_3_months').durationInMonths, 3);
+  assert.equal(promotionOffers.find((offer) => offer.key === 'extra_editor_free_month').kind, 'recurring_addon');
 
   const promoStripeState = {
     coupons: [],
@@ -552,14 +568,24 @@ async function main() {
   };
   const promoStripe = {
     prices: {
-      retrieve: async (priceId) => ({
-        id: priceId,
-        unit_amount: priceId === 'price_pro_test' ? 800 : 1600,
-        currency: 'usd',
-        product: {
-          id: priceId === 'price_pro_test' ? 'prod_test_pro' : 'prod_test_screenshot_pack',
-        },
-      }),
+      retrieve: async (priceId) => {
+        const priceFixtures = {
+          price_pro_test: { unitAmount: 800, productId: 'prod_test_pro' },
+          price_studio_monthly_test: { unitAmount: 1800, productId: 'prod_test_studio' },
+          price_extra_editor_test: { unitAmount: 500, productId: 'prod_test_extra_editor' },
+          price_screenshot_pack_4_test: { unitAmount: 1000, productId: 'prod_test_screenshot_pack_100' },
+          price_screenshot_pack_5_test: { unitAmount: 8000, productId: 'prod_test_screenshot_pack_1000' },
+        };
+        const fixture = priceFixtures[priceId] || { unitAmount: 1600, productId: 'prod_test_unknown' };
+        return {
+          id: priceId,
+          unit_amount: fixture.unitAmount,
+          currency: 'usd',
+          product: {
+            id: fixture.productId,
+          },
+        };
+      },
     },
     coupons: {
       retrieve: async (couponId) => {
@@ -631,11 +657,39 @@ async function main() {
   assert.equal(promoStripeState.coupons[0].id, 'vellic_pro_free_month');
   assert.equal(promoStripeState.coupons[0].amount_off, 800);
   assert.equal(promoStripeState.coupons[0].currency, 'usd');
+  assert.equal(promoStripeState.coupons[0].duration, 'once');
   assert.deepEqual(promoStripeState.coupons[0].applies_to.products, ['prod_test_pro']);
   assert.equal(promoStripeState.promotionCodes.length, 2);
   assert.equal(promoStripeState.promotionCodes[0].payload.max_redemptions, 1);
-  assert.equal(promoStripeState.promotionCodes[0].payload.restrictions.first_time_transaction, true);
+  assert.equal(promoStripeState.promotionCodes[0].payload.restrictions.first_time_transaction, false);
   assert.equal(promoStripeState.promotionCodes[0].payload.metadata.campaignKey, 'friends');
+
+  const createdThreeMonthPromos = await createAdminPromotionCodesAsync({
+    offerKey: 'pro_free_3_months',
+    quantity: 1,
+    campaignKey: 'launch',
+    createdByUserId: 'admin_test',
+    stripeClient: promoStripe,
+  });
+  assert.equal(createdThreeMonthPromos.length, 1);
+  assert.equal(promoStripeState.coupons[1].id, 'vellic_pro_free_3_months');
+  assert.equal(promoStripeState.coupons[1].amount_off, 800);
+  assert.equal(promoStripeState.coupons[1].duration, 'repeating');
+  assert.equal(promoStripeState.coupons[1].duration_in_months, 3);
+  assert.deepEqual(promoStripeState.coupons[1].applies_to.products, ['prod_test_pro']);
+
+  const createdExtraEditorPromos = await createAdminPromotionCodesAsync({
+    offerKey: 'extra_editor_free_month',
+    quantity: 1,
+    campaignKey: 'team',
+    createdByUserId: 'admin_test',
+    stripeClient: promoStripe,
+  });
+  assert.equal(createdExtraEditorPromos.length, 1);
+  assert.equal(promoStripeState.coupons[2].id, 'vellic_extra_editor_free_month');
+  assert.equal(promoStripeState.coupons[2].amount_off, 500);
+  assert.equal(promoStripeState.coupons[2].duration, 'once');
+  assert.deepEqual(promoStripeState.coupons[2].applies_to.products, ['prod_test_extra_editor']);
 
   const listedPromos = await listAdminPromotionCodesAsync({
     limit: 10,
