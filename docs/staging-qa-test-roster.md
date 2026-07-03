@@ -9,7 +9,7 @@ Use these only on staging:
 
 - Existing seeded accounts are already verified, so normal password login should not need a code.
 - If staging test auth sends a code to an `@test.vellic.local` account, use `123456`.
-- Staging email copies are controlled by `EMAIL_COPY_TO_ADDRESSES`; set it to `hello@vellic.io` to copy outbound emails.
+- Staging email copies are controlled by `EMAIL_COPY_TO_ADDRESSES`; auth verification and password reset codes are never copied.
 
 ## Plan Accounts
 
