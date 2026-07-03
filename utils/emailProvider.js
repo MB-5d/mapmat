@@ -1,8 +1,12 @@
-const { getDefaultAppBaseUrl } = require('./emailTemplates');
+const { EMAIL_TEMPLATE_KEYS, getDefaultAppBaseUrl } = require('./emailTemplates');
 
 const isProd = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_PUBLIC_DOMAIN;
 const SUPPORTED_EMAIL_PROVIDERS = new Set(['disabled', 'log', 'resend', 'postmark']);
 const SUPPORTED_COPY_MODES = new Set(['cc', 'bcc']);
+const COPY_BLOCKED_TEMPLATE_KEYS = new Set([
+  EMAIL_TEMPLATE_KEYS.AUTH_EMAIL_VERIFICATION,
+  EMAIL_TEMPLATE_KEYS.AUTH_PASSWORD_RESET,
+]);
 
 function normalizeProviderName(value) {
   const normalized = String(value || '').trim().toLowerCase();
@@ -116,12 +120,20 @@ function buildHealthSnapshot() {
   };
 }
 
-function resolveDeliveryRecipients({ config, toEmail }) {
+function shouldSuppressCopies(metadata) {
+  const templateKey = String(metadata?.templateKey || '').trim();
+  return COPY_BLOCKED_TEMPLATE_KEYS.has(templateKey);
+}
+
+function resolveDeliveryRecipients({ config, toEmail, metadata = null }) {
   const toEmails = config.recipientOverrideAddresses.length > 0
     ? config.recipientOverrideAddresses
     : [toEmail];
   const toSet = new Set(toEmails);
-  const copyEmails = config.copyToAddresses.filter((email) => !toSet.has(email));
+  const copySuppressed = shouldSuppressCopies(metadata);
+  const copyEmails = copySuppressed
+    ? []
+    : config.copyToAddresses.filter((email) => !toSet.has(email));
   const ccEmails = config.copyMode === 'cc' ? copyEmails : [];
   const bccEmails = config.copyMode === 'bcc' ? copyEmails : [];
 
@@ -131,6 +143,7 @@ function resolveDeliveryRecipients({ config, toEmail }) {
     ccEmails,
     bccEmails,
     copied: copyEmails.length > 0,
+    copySuppressed,
     overridden: config.recipientOverrideAddresses.length > 0,
   };
 }
@@ -258,7 +271,7 @@ async function sendEmailAsync({
   if (!normalizedToEmail) {
     throw new Error('A valid recipient email is required for email delivery.');
   }
-  const recipients = resolveDeliveryRecipients({ config, toEmail: normalizedToEmail });
+  const recipients = resolveDeliveryRecipients({ config, toEmail: normalizedToEmail, metadata });
 
   const normalizedSubject = String(subject || '').trim();
   if (!normalizedSubject) {
@@ -277,6 +290,7 @@ async function sendEmailAsync({
         toEmails: recipients.toEmails,
         ccEmails: recipients.ccEmails,
         bccEmails: recipients.bccEmails,
+        copySuppressed: recipients.copySuppressed,
         recipientOverridden: recipients.overridden,
       },
     };
@@ -289,6 +303,7 @@ async function sendEmailAsync({
       toEmails: recipients.toEmails,
       ccEmails: recipients.ccEmails,
       bccEmails: recipients.bccEmails,
+      copySuppressed: recipients.copySuppressed,
       recipientOverridden: recipients.overridden,
       subject: normalizedSubject,
       replyTo: normalizedReplyToEmail || config.replyToAddress,
@@ -305,6 +320,7 @@ async function sendEmailAsync({
         toEmails: recipients.toEmails,
         ccEmails: recipients.ccEmails,
         bccEmails: recipients.bccEmails,
+        copySuppressed: recipients.copySuppressed,
         recipientOverridden: recipients.overridden,
       },
     };
