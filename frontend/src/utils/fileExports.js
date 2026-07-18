@@ -1,6 +1,7 @@
 import { getSeoValue } from './seoMetadata';
 import { isVirtualMissingNode } from './scanStatus';
 import { isRenderableTextUrl } from './url';
+import { isPageNode } from './treeUtils';
 
 export const EXPORT_BRANDING = Object.freeze({
   name: 'Vellic',
@@ -85,28 +86,30 @@ export const buildSitemapExportRows = (rootNode, orphanNodes = []) => {
   const visit = (node, number, depth, section, fallbackType) => {
     if (!node) return;
     const annotations = node.annotations || {};
-    rows.push({
-      id: node.id || '',
-      number,
-      depth,
-      section,
-      title: normalizeExportText(node.title) || 'Untitled',
-      url: normalizeExportText(node.url),
-      pageType: getExportPageType(node, fallbackType),
-      description: normalizeExportText(getSeoValue(node, 'description')),
-      metaKeywords: normalizeExportText(getSeoValue(node, 'keywords')),
-      canonicalUrl: normalizeExportText(getSeoValue(node, 'canonicalUrl')),
-      h1: normalizeExportText(getSeoValue(node, 'h1')),
-      h2: normalizeExportText(getSeoValue(node, 'h2')),
-      robots: normalizeExportText(getSeoValue(node, 'robots')),
-      annotationStatus: annotations.status || 'none',
-      annotationTags: Array.isArray(annotations.tags) ? annotations.tags : [],
-      annotationNote: normalizeExportText(annotations.note),
-      thumbnailUrl: node.thumbnailUrl || '',
-      thumbnailFullUrl: node.thumbnailFullUrl || '',
-      fullScreenshotUrl: node.fullScreenshotUrl || '',
-      childCount: Array.isArray(node.children) ? node.children.length : 0,
-    });
+    if (isPageNode(node)) {
+      rows.push({
+        id: node.id || '',
+        number: node.importNumber || number,
+        depth,
+        section,
+        title: normalizeExportText(node.title) || 'Untitled',
+        url: normalizeExportText(node.url),
+        pageType: getExportPageType(node, fallbackType),
+        description: normalizeExportText(getSeoValue(node, 'description')),
+        metaKeywords: normalizeExportText(getSeoValue(node, 'keywords')),
+        canonicalUrl: normalizeExportText(getSeoValue(node, 'canonicalUrl')),
+        h1: normalizeExportText(getSeoValue(node, 'h1')),
+        h2: normalizeExportText(getSeoValue(node, 'h2')),
+        robots: normalizeExportText(getSeoValue(node, 'robots')),
+        annotationStatus: annotations.status || 'none',
+        annotationTags: Array.isArray(annotations.tags) ? annotations.tags : [],
+        annotationNote: normalizeExportText(annotations.note),
+        thumbnailUrl: node.thumbnailUrl || '',
+        thumbnailFullUrl: node.thumbnailFullUrl || '',
+        fullScreenshotUrl: node.fullScreenshotUrl || '',
+        childCount: Array.isArray(node.children) ? node.children.filter(isPageNode).length : 0,
+      });
+    }
 
     (node.children || []).forEach((child, index) => {
       visit(child, getChildNumber(number, index), depth + 1, section, 'Page');

@@ -78,4 +78,25 @@ describe('mapDisplaySummary', () => {
       url: 'https://blog.example.com/',
     }, subdomainMeta, visibility)).toBe(true);
   });
+
+  test('excludes import-only structure and keeps logical page depth', () => {
+    const summary = buildMapDisplaySummary({
+      id: 'container',
+      nodeKind: 'import-container',
+      children: [{
+        id: 'ghost',
+        nodeKind: 'import-ghost',
+        url: '',
+        children: [{
+          id: 'page',
+          nodeKind: 'page',
+          url: 'https://example.com/page',
+          children: [],
+        }],
+      }],
+    }, []);
+
+    expect(summary.maxDepth).toBe(1);
+    expect(summary.scanLayerAvailability.placementPrimary).toBe(true);
+  });
 });

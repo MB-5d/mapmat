@@ -67,6 +67,7 @@ export const computeLayout = (
   const allOrphans = Array.isArray(orphans) ? orphans.filter(Boolean) : [];
   const subdomainOrphans = allOrphans.filter((o) => o.subdomainRoot);
   const regularOrphans = allOrphans.filter((o) => !o.subdomainRoot);
+  const isImportContainer = root?.nodeKind === 'import-container';
 
   const getBounds = () => {
     const all = Array.from(nodes.values());
@@ -254,6 +255,21 @@ export const computeLayout = (
     const mainNumberFor = (parentNumber, childIndex, depth) => (
       depth === 0 ? `${childIndex + 1}` : `${parentNumber}.${childIndex + 1}`
     );
+
+    if (isImportContainer) {
+      [...(root.children || []), ...allOrphans].forEach((treeRoot) => {
+        const treeHeight = layoutHorizontalTree(
+          treeRoot,
+          startX,
+          cursorY,
+          treeRoot.importNumber || '',
+          { isOrphan: false, isImportedPeer: true },
+          mainNumberFor,
+        );
+        cursorY += treeHeight + HORIZONTAL_TREE_GAP_Y;
+      });
+      return { nodes, connectors, bounds: getBounds(), orientation };
+    }
 
     const mainTreeHeight = layoutHorizontalTree(root, startX, cursorY, "0", { isOrphan: false }, mainNumberFor);
     cursorY += mainTreeHeight + HORIZONTAL_TREE_GAP_Y;
@@ -491,6 +507,21 @@ export const computeLayout = (
 
     return getRootTreeWidth(rootNode);
   };
+
+  if (isImportContainer) {
+    let importedX = 0;
+    [...(root.children || []), ...allOrphans].forEach((treeRoot) => {
+      const treeWidth = layoutRootTree(
+        treeRoot,
+        importedX,
+        ROOT_Y,
+        treeRoot.importNumber || '',
+        { isOrphan: false, isImportedPeer: true },
+      );
+      importedX += treeWidth + GAP_L1_X;
+    });
+    return { nodes, connectors, bounds: getBounds(), orientation };
+  }
 
   // ------------------------------------------------------------
   // 1) Root (Home)

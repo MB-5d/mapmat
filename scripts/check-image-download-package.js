@@ -96,6 +96,28 @@ assert.deepStrictEqual(
   'orphan folder path should use orphan numbering'
 );
 
+const importedDescriptors = collectFallbackImageDownloadNodes({
+  id: 'import-container',
+  title: 'Imported URLs',
+  nodeKind: 'import-container',
+  url: '',
+  children: [{
+    id: 'import-ghost',
+    title: 'articles',
+    nodeKind: 'import-ghost',
+    url: '',
+    children: [{
+      id: 'import-page',
+      title: 'Post',
+      nodeKind: 'page',
+      url: 'https://example.com/articles/post',
+      children: [],
+    }],
+  }],
+}, []);
+assert.deepStrictEqual(importedDescriptors.map((entry) => entry.id), ['import-page']);
+assert.deepStrictEqual(importedDescriptors[0].pathSegments.map((entry) => entry.id), ['import-page']);
+
 const usedPaths = new Set();
 const detailPath = buildImageDownloadPath({
   descriptor: detail,

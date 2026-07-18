@@ -98,8 +98,13 @@ const NodeCard = ({
   const badgeTitle = badgeTitleParts.join('\n');
   const isDeleted = showAnnotations && status === 'deleted';
   const isEntitlementLocked = Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
+  const isImportGhost = node?.nodeKind === 'import-ghost';
+  const isSourceGroup = node?.nodeKind === 'source-group';
+  const isImportStructuralNode = isImportGhost || isSourceGroup;
   const shouldGhost = isGhosted || isDeleted;
-  const showActionBar = !isEntitlementLocked && (canEdit || showCommentAction || (showExternalLinkAction && !!node.url));
+  const showActionBar = !isEntitlementLocked
+    && !isImportStructuralNode
+    && (canEdit || showCommentAction || (showExternalLinkAction && !!node.url));
   const actionBarPermission = canEdit
     ? 'Owner / Editor'
     : showCommentAction
@@ -285,6 +290,8 @@ const NodeCard = ({
   if (isDeleted) classNames.push('deleted');
   if (isSelected) classNames.push('selected');
   if (isEntitlementLocked) classNames.push('entitlement-locked');
+  if (isImportGhost) classNames.push('import-ghost');
+  if (isSourceGroup) classNames.push('source-group');
   if (showActionBar) classNames.push('has-action-bar');
   if (showCommentBadges && node.comments?.length > 0) classNames.push('has-comment-badge');
 
@@ -305,12 +312,15 @@ const NodeCard = ({
       data-node-id={node.id}
       data-feedback-id={`node-card-${node.id}`}
       data-feedback-label={node.title || 'Node card'}
-      title={isEntitlementLocked ? 'Upgrade to see full map' : undefined}
-      style={{ cursor: isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab')) }}
-      {...(isRoot ? {} : dragHandleProps)}
+      title={isEntitlementLocked
+        ? 'Upgrade to see full map'
+        : (isImportGhost ? 'Inferred from the URL path; this is not a page' : undefined)}
+      aria-label={isImportGhost ? `${node.title}, inferred path, not a page` : undefined}
+      style={{ cursor: isImportStructuralNode ? 'default' : (isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab'))) }}
+      {...(isRoot || isImportStructuralNode ? {} : dragHandleProps)}
     >
       {/* Connection anchor points - show when connection tool is active */}
-      {connectionTool && (
+      {connectionTool && !isImportStructuralNode && (
         <>
           <div
             className={`anchor-point anchor-top ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'top' ? 'snapped' : ''}`}
@@ -346,14 +356,14 @@ const NodeCard = ({
       </div>
 
       {/* Comment badge - show if node has comments and comments mode is active */}
-      {showCommentBadges && node.comments?.length > 0 && (
+      {showCommentBadges && !isImportStructuralNode && node.comments?.length > 0 && (
         <CommentBadge
           count={node.comments.length}
           onClick={(e) => { e.stopPropagation(); onViewNotes?.(node); }}
         />
       )}
 
-      {showThumbnails && (
+      {showThumbnails && !isImportStructuralNode && (
         <div className={`card-thumb${hasThumb && shouldLoadThumb && !thumbError ? ' card-thumb-with-image' : ''}`}>
           {thumbLoading && !thumbError && (
             <div className="thumb-loading">
@@ -432,6 +442,11 @@ const NodeCard = ({
               </>
             ) : node.title}
           </div>
+          {isImportStructuralNode ? (
+            <span className="import-structural-label">
+              {isImportGhost ? 'Inferred path' : 'Section'}
+            </span>
+          ) : null}
           {showBadge && (
             <Badge
               className={`node-status-badge status-${hasStatus ? status : 'note'}`}
@@ -447,9 +462,9 @@ const NodeCard = ({
           )}
         </div>
 
-        {showPageNumbers && (isEntitlementLocked
+        {showPageNumbers && !isImportStructuralNode && !node.hideImportedPageNumber && (isEntitlementLocked
           ? <span className="page-number entitlement-ghost-number" aria-hidden="true" />
-          : <span className="page-number">{number}</span>)}
+          : <span className="page-number">{node.importNumber || number}</span>)}
       </div>
 
       {showActionBar && (
@@ -540,7 +555,13 @@ const DraggableNodeCard = ({
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
     data: { node, number, color },
-    disabled: node.id === 'root' || node.isEntitlementLocked || node.entitlementLocked || !canEdit || connectionTool, // Disable dragging when connection tool active
+    disabled: node.id === 'root'
+      || node.isEntitlementLocked
+      || node.entitlementLocked
+      || node.nodeKind === 'import-ghost'
+      || node.nodeKind === 'source-group'
+      || !canEdit
+      || connectionTool, // Disable dragging when connection tool active
   });
 
   return (

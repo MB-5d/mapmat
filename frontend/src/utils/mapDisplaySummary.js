@@ -1,5 +1,6 @@
 import { isRenderableTextUrl } from './url';
 import { isRealHttpErrorNode, isVirtualMissingNode } from './scanStatus';
+import { isPageNode } from './treeUtils';
 
 export const DEFAULT_SCAN_LAYER_AVAILABILITY = Object.freeze({
   placementPrimary: false,
@@ -125,14 +126,19 @@ const collectMapRecords = (rootNode, orphanNodes = []) => {
   };
 
   if (rootNode) {
-    visit(rootNode, {
+    const rootMeta = {
       treeType: 'root',
       parentId: null,
       depth: 0,
       isOrphan: false,
       orphanType: null,
       isSubdomainTree: false,
-    });
+    };
+    if (rootNode.nodeKind === 'import-container') {
+      (rootNode.children || []).forEach((child) => visit(child, rootMeta));
+    } else {
+      visit(rootNode, rootMeta);
+    }
   }
 
   (Array.isArray(orphanNodes) ? orphanNodes : []).filter(Boolean).forEach((orphan) => {
@@ -158,6 +164,7 @@ export const buildMapDisplaySummary = (rootNode, orphanNodes = []) => {
   const scanLayerAvailability = { ...DEFAULT_SCAN_LAYER_AVAILABILITY };
 
   records.forEach(({ node, meta }) => {
+    if (!isPageNode(node)) return;
     maxDepth = Math.max(maxDepth, Number(meta.depth || 0));
     if (isEntitlementLockedDisplayNode(node)) return;
 

@@ -1,4 +1,5 @@
 const path = require('path');
+const { isPageNode } = require('./mapScene');
 
 const DOWNLOAD_IMAGE_FIELDS = Object.freeze([
   'fullScreenshotUrl',
@@ -235,16 +236,14 @@ function collectFallbackImageDownloadNodes(root, orphans = []) {
 
   const visit = (node, number, parentPath = [], options = {}) => {
     if (!node || typeof node !== 'object') return;
-    const pathSegments = [
-      ...parentPath,
-      {
-        id: node.id || '',
-        number,
-        title: node.title || '',
-        url: node.url || '',
-      },
-    ];
-    if (node.id) {
+    const segment = {
+      id: node.id || '',
+      number,
+      title: node.title || '',
+      url: node.url || '',
+    };
+    const pathSegments = isPageNode(node) ? [...parentPath, segment] : parentPath;
+    if (node.id && isPageNode(node)) {
       descriptors.push({
         id: String(node.id),
         number,

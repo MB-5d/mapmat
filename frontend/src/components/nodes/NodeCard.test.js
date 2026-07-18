@@ -134,6 +134,33 @@ describe('NodeCard', () => {
     expect(container.querySelector('button[aria-label="Delete"]')).toBeNull();
   });
 
+  test('renders inferred hierarchy as a non-interactive non-page card', () => {
+    act(() => {
+      root.render(
+        <NodeCard
+          node={{ id: 'ghost-1', title: 'articles', url: '', nodeKind: 'import-ghost' }}
+          number="1.2"
+          color="#0ea5e9"
+          showThumbnails
+          showPageNumbers
+          canEdit
+          showCommentAction
+          connectionTool="crosslink"
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.node-card.import-ghost')).not.toBeNull();
+    expect(container.textContent).toContain('Inferred path');
+    expect(container.querySelector('.card-thumb')).toBeNull();
+    expect(container.querySelector('.page-number')).toBeNull();
+    expect(container.querySelector('.card-actions')).toBeNull();
+    expect(container.querySelector('.anchor-point')).toBeNull();
+  });
+
   test('stack toggle handles click without starting card drag', () => {
     const onToggleStack = jest.fn();
     const onCardPointerDown = jest.fn();

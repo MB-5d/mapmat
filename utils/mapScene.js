@@ -84,6 +84,18 @@ function getChildren(node) {
   return Array.isArray(node?.children) ? node.children.filter(Boolean) : [];
 }
 
+const NON_PAGE_NODE_KINDS = new Set(['import-container', 'import-ghost', 'source-group']);
+
+function isPageNode(node) {
+  if (!node || NON_PAGE_NODE_KINDS.has(node.nodeKind)) return false;
+  try {
+    const parsed = new URL(String(node.url || '').trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function collectNodeAndDescendantIds(node, result = []) {
   if (!node || typeof node !== 'object') return result;
   const id = String(node.id || '').trim();
@@ -100,7 +112,7 @@ function countMapNodes(root, orphans = []) {
     const id = String(node.id || '');
     if (id && seen.has(id)) return;
     if (id) seen.add(id);
-    count += 1;
+    if (isPageNode(node)) count += 1;
     getChildren(node).forEach(visit);
   };
   visit(root);
@@ -218,6 +230,7 @@ function buildSummaryFromRecords(records = []) {
 
   records.forEach(({ node, meta }) => {
     if (!node || !meta) return;
+    if (!isPageNode(node)) return;
     maxDepth = Math.max(maxDepth, Number(meta.depth || 0));
     const placement = getNodePlacementForSummary(meta);
     const status = getStatusFlagsForSummary(node, meta);
@@ -257,14 +270,19 @@ function collectDisplaySummaryRecords(root, orphans = []) {
   };
 
   if (root) {
-    visit(root, {
+    const rootMeta = {
       treeType: 'root',
       parentId: null,
       depth: 0,
       isOrphan: false,
       orphanType: null,
       isSubdomainTree: false,
-    });
+    };
+    if (root.nodeKind === 'import-container') {
+      getChildren(root).forEach((child) => visit(child, rootMeta));
+    } else {
+      visit(root, rootMeta);
+    }
   }
 
   (Array.isArray(orphans) ? orphans : []).filter(Boolean).forEach((orphan) => {
@@ -549,6 +567,25 @@ function computeHorizontalLayout(root, orphans, showThumbnails, expandedStacks =
     );
   };
 
+  if (root?.nodeKind === 'import-container') {
+    let cursorY = ROOT_Y;
+    const importedNumberFor = (parentNumber, childIndex) => (
+      parentNumber ? `${parentNumber}.${childIndex + 1}` : ''
+    );
+    [...getChildren(root), ...allOrphans].forEach((treeRoot) => {
+      const treeHeight = layoutHorizontalTree(
+        treeRoot,
+        0,
+        cursorY,
+        treeRoot.importNumber || '',
+        { isOrphan: false, isImportedPeer: true },
+        importedNumberFor,
+      );
+      cursorY += treeHeight + ORPHAN_GROUP_GAP;
+    });
+    return createLayoutResult(nodes, connectors);
+  }
+
   if (root) {
     let cursorY = ROOT_Y;
     const mainNumberFor = (parentNumber, childIndex, depth) => (
@@ -797,6 +834,21 @@ function computeVerticalLayout(root, orphans, showThumbnails, expandedStacks = {
     return getRootTreeWidth(rootNode);
   };
 
+  if (root?.nodeKind === 'import-container') {
+    let importedX = 0;
+    [...getChildren(root), ...allOrphans].forEach((treeRoot) => {
+      const treeWidth = layoutRootTree(
+        treeRoot,
+        importedX,
+        ROOT_Y,
+        treeRoot.importNumber || '',
+        { isOrphan: false, isImportedPeer: true },
+      );
+      importedX += treeWidth + GAP_L1_X;
+    });
+    return createLayoutResult(nodes, connectors);
+  }
+
   if (!root) return createLayoutResult(nodes, connectors);
 
   const subdomainWidths = subdomainOrphans.map((orphan) => getRootTreeWidth(orphan));
@@ -991,7 +1043,9 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     id: layoutNode.id,
     title: node.title || node.label || node.url || 'Untitled',
     url: node.url || '',
-    number: layoutNode.number,
+    nodeKind: node.nodeKind || '',
+    hideImportedPageNumber: !!node.hideImportedPageNumber,
+    number: node.hideImportedPageNumber ? '' : (node.importNumber || layoutNode.number),
     depth: layoutNode.depth,
     parentId: layoutNode.parentId || '',
     x: layoutNode.x,
@@ -1024,6 +1078,7 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     thumbnailCaptureFailed: !!node.thumbnailCaptureFailed,
     thumbnailCaptureError: node.thumbnailCaptureError || '',
     isOrphan: !!layoutNode.isOrphan,
+    isImportedPeer: !!layoutNode.isImportedPeer,
     isSubdomainTree: !!layoutNode.isSubdomainTree,
     orphanStyle: layoutNode.orphanStyle || null,
     orphanType: layoutNode.orphanType || node.orphanType || null,
@@ -1113,6 +1168,7 @@ module.exports = {
   collectNodeAndDescendantIds,
   getThumbnailLod,
   getTargetStackParents,
+  isPageNode,
   normalizeViewport,
   rectsIntersect,
 };

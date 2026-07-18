@@ -3,6 +3,7 @@ const collaborationStore = require('./collaborationStore');
 const emailDeliveryStore = require('./emailDeliveryStore');
 const imageAssetStore = require('./imageAssetStore');
 const mapCommentStore = require('./mapCommentStore');
+const { countMapNodes } = require('../utils/mapScene');
 
 function toSqlTimestamp(value) {
   return new Date(value).toISOString().slice(0, 19).replace('T', ' ');
@@ -33,19 +34,10 @@ function safeJsonParse(value, fallback = null) {
   }
 }
 
-function countTreeNodes(node) {
-  if (!node || typeof node !== 'object') return 0;
-  return 1 + (Array.isArray(node.children)
-    ? node.children.reduce((total, child) => total + countTreeNodes(child), 0)
-    : 0);
-}
-
 function countStoredMapPages(row) {
   const root = safeJsonParse(row.root_data, null);
   const orphans = safeJsonParse(row.orphans_data, []);
-  return countTreeNodes(root) + (Array.isArray(orphans)
-    ? orphans.reduce((total, orphan) => total + countTreeNodes(orphan), 0)
-    : 0);
+  return countMapNodes(root, orphans);
 }
 
 function buildRangeClause(column, range, params) {

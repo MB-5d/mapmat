@@ -18,6 +18,19 @@ describe('largeMapPerformance', () => {
     expect(countMapNodes(root, orphans)).toBe(5);
   });
 
+  test('does not count the hidden import container as a rendered node', () => {
+    const root = {
+      id: 'container',
+      nodeKind: 'import-container',
+      children: [
+        { id: 'ghost', nodeKind: 'import-ghost' },
+        { id: 'page', nodeKind: 'page' },
+      ],
+    };
+
+    expect(countMapNodes(root)).toBe(2);
+  });
+
   test('uses the large map surface only for saved non-live maps over the threshold', () => {
     expect(shouldUseLargeMapSurface({
       nodeCount: LARGE_MAP_NODE_THRESHOLD,

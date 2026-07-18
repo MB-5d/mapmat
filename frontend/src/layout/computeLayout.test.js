@@ -43,4 +43,43 @@ describe('computeLayout orientation', () => {
     expect(about.y).toBeGreaterThan(blog.y);
     expect(layout.connectors.length).toBeGreaterThan(0);
   });
+
+  test('hides the internal import container and keeps flat pages unconnected', () => {
+    const imported = {
+      id: 'import-container',
+      nodeKind: 'import-container',
+      children: [
+        { id: 'page-a', title: 'A', url: 'https://a.test', nodeKind: 'page', children: [] },
+        { id: 'page-b', title: 'B', url: 'https://b.test', nodeKind: 'page', children: [] },
+      ],
+    };
+
+    const layout = computeLayout(imported, [], false);
+
+    expect(layout.nodes.has('import-container')).toBe(false);
+    expect(layout.nodes.has('page-a')).toBe(true);
+    expect(layout.nodes.has('page-b')).toBe(true);
+    expect(layout.nodes.get('page-a').y).toBe(layout.nodes.get('page-b').y);
+    expect(layout.connectors).toHaveLength(0);
+  });
+
+  test('keeps inferred hierarchy connectors without rendering the container', () => {
+    const imported = {
+      id: 'import-container',
+      nodeKind: 'import-container',
+      children: [{
+        id: 'host',
+        title: 'site.test',
+        nodeKind: 'import-ghost',
+        children: [{ id: 'page', title: 'Page', url: 'https://site.test/page', nodeKind: 'page', children: [] }],
+      }],
+    };
+
+    const layout = computeLayout(imported, [], false);
+
+    expect(layout.nodes.has('import-container')).toBe(false);
+    expect(layout.nodes.has('host')).toBe(true);
+    expect(layout.nodes.has('page')).toBe(true);
+    expect(layout.connectors.length).toBeGreaterThan(0);
+  });
 });

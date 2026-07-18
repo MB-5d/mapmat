@@ -90,8 +90,8 @@ describe('fileExports', () => {
   });
 
   test('adds metadata and complete map data to JSON exports', () => {
-    const root = { id: 'root', title: 'Home', children: [] };
-    const orphans = [{ id: 'orphan', title: 'Orphan', children: [] }];
+    const root = { id: 'root', title: 'Home', url: 'https://example.com', children: [] };
+    const orphans = [{ id: 'orphan', title: 'Orphan', url: 'https://example.com/orphan', children: [] }];
     const rows = buildSitemapExportRows(root, orphans);
     const metadata = buildExportMetadata({ title: 'JSON Test', pageCount: rows.length });
 
@@ -110,6 +110,34 @@ describe('fileExports', () => {
     expect(payload.root).toBe(root);
     expect(payload.orphans).toBe(orphans);
     expect(payload.connections).toHaveLength(1);
+  });
+
+  test('excludes import containers and inferred ghosts from public export rows', () => {
+    const root = {
+      id: 'container',
+      title: 'Imported URLs',
+      url: '',
+      nodeKind: 'import-container',
+      children: [{
+        id: 'ghost',
+        title: 'articles',
+        url: '',
+        nodeKind: 'import-ghost',
+        children: [{
+          id: 'page',
+          title: 'Post',
+          url: 'https://example.com/articles/post',
+          nodeKind: 'page',
+          children: [],
+        }],
+      }],
+    };
+
+    const rows = buildSitemapExportRows(root, []);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('page');
+    expect(rows[0].url).toBe('https://example.com/articles/post');
   });
 
   test('builds standard XML with only real page URLs in loc values', () => {
