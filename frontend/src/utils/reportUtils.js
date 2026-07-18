@@ -1,6 +1,7 @@
 import { getSeoMetadata, getSeoValue } from './seoMetadata';
 import { getDepthColor } from './constants';
 import { isRenderableTextUrl } from './url';
+import { isPageNode } from './treeUtils';
 import {
   getNodeHttpErrorLabel,
   getNodeStatusCode,
@@ -141,7 +142,7 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
     const levelColor = getDepthColor(colors, depth);
     const titleValue = node.title || node.url || '';
     const showFullTitle = titleValue.length > 24;
-    entries.push({
+    if (isPageNode(node)) entries.push({
       id: node.id,
       title: titleValue,
       url: node.url || '',

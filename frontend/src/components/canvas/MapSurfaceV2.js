@@ -294,7 +294,7 @@ const MapSurfaceV2 = ({
 
         {sceneNodes.map((nodeData) => {
           const node = nodeData.node;
-          const isRoot = scene?.homeNode?.id === node.id;
+          const isRoot = scene?.homeNode?.id === node.id && !node.isImportedPeer;
           const annotations = node?.annotations || {};
           const status = annotations.status || 'none';
           const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';

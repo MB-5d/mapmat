@@ -10,8 +10,11 @@ import {
   buildTxtSitemap,
 } from './fileExports';
 import {
+  IMPORT_MODES,
+  materializeImportedMap,
   parseCsv,
   parseImportFileContent,
+  parseImportSource,
 } from './importParsers';
 
 const buildSampleRows = () => buildSitemapExportRows({
@@ -51,11 +54,13 @@ const buildSampleRows = () => buildSitemapExportRows({
 ]);
 
 const expectSampleStructure = (result) => {
-  expect(result.root.title).toBe('Home');
-  expect(result.root.children[0].title).toBe('About');
-  expect(result.root.children[0].children[0].title).toBe('Team');
-  expect(result.orphans.map((node) => node.title)).toEqual(['Docs', 'PDF Asset']);
-  expect(result.orphans[0].subdomainRoot).toBe(true);
+  expect(result.root.nodeKind).toBe('import-container');
+  const [home, docs, asset] = result.root.children;
+  expect(home.title).toBe('Home');
+  expect(home.children[0].title).toBe('About');
+  expect(home.children[0].children[0].title).toBe('Team');
+  expect([docs.title, asset.title]).toEqual(['Docs', 'PDF Asset']);
+  expect(docs.subdomainRoot).toBe(true);
 };
 
 describe('importParsers', () => {
@@ -168,7 +173,9 @@ describe('importParsers', () => {
 
     expect(result.parseType).toBe('XML Sitemap');
     expect(result.count).toBe(rows.length);
-    expect(result.root.title).toBe('Imported Sites');
+    expect(result.root.nodeKind).toBe('import-container');
+    expect(result.root.children).toHaveLength(rows.length);
+    expect(result.root.children.every((node) => node.nodeKind === 'page')).toBe(true);
     expect(xml).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
     expect(xml).toContain('<loc>https://example.com/about/team</loc>');
     expect(xml).not.toContain('vellic-page:');
@@ -186,9 +193,10 @@ describe('importParsers', () => {
     const result = parseImportFileContent(csv, 'csv');
 
     expect(result.parseType).toBe('CSV sitemap');
-    expect(result.root.title).toBe('Home');
-    expect(result.root.children[0].title).toBe('Services');
-    expect(result.root.children[0].children[0].title).toBe('Consulting');
+    const home = result.root.children[0];
+    expect(home.title).toBe('Home');
+    expect(home.children[0].title).toBe('Services');
+    expect(home.children[0].children[0].title).toBe('Consulting');
   });
 
   test('imports external HTML nested links as hierarchy', () => {
@@ -205,11 +213,28 @@ describe('importParsers', () => {
     const result = parseImportFileContent(html, 'html');
 
     expect(result.parseType).toBe('HTML sitemap');
-    expect(result.root.title).toBe('Home');
-    expect(result.root.children[0].title).toBe('About');
+    const home = result.root.children[0];
+    expect(home.title).toBe('Home');
+    expect(home.children[0].title).toBe('About');
   });
 
-  test('imports strict TXT sitemap as URL-inferred structure', () => {
+  test('preserves genuine non-page section labels without treating them as pages', () => {
+    const result = parseImportFileContent(`
+      <ul>
+        <li>Resources
+          <ul><li><a href="https://external.test/guides">Guides</a></li></ul>
+        </li>
+      </ul>
+    `, 'html');
+
+    const section = result.root.children[0];
+    expect(section.title).toBe('Resources');
+    expect(section.nodeKind).toBe('source-group');
+    expect(section.url).toBe('');
+    expect(section.children[0].url).toBe('https://external.test/guides');
+  });
+
+  test('imports strict TXT sitemap as equal unconnected pages by default', () => {
     const txt = buildTxtSitemap([
       { url: 'https://external.test/' },
       { url: 'https://external.test/about' },
@@ -218,8 +243,12 @@ describe('importParsers', () => {
     const result = parseImportFileContent(txt, 'txt');
 
     expect(result.parseType).toBe('Text');
-    expect(result.root.url).toBe('https://external.test/');
-    expect(result.root.children[0].url).toBe('https://external.test/about');
+    expect(result.root.nodeKind).toBe('import-container');
+    expect(result.root.children.map((node) => node.url)).toEqual([
+      'https://external.test/',
+      'https://external.test/about',
+    ]);
+    expect(result.root.children.every((node) => node.children.length === 0)).toBe(true);
   });
 
   test('does not import non-URL CSV metadata columns as pages', () => {
@@ -230,7 +259,101 @@ describe('importParsers', () => {
 
     const result = parseImportFileContent(csv, 'csv');
 
-    expect(result.root.url).toBe('https://example.com');
-    expect(result.root.children).toEqual([]);
+    expect(result.root.children.map((node) => node.url)).toEqual(['https://example.com']);
+  });
+
+  test('previews duplicates, invalid entries, and headers before materializing', () => {
+    const preview = parseImportSource([
+      'URL',
+      'https://example.com/page#one',
+      'https://www.example.com/page#two',
+      'not-a-url',
+      'https://example.com/page?view=print',
+    ].join('\n'), 'paste');
+
+    expect(preview.diagnostics).toEqual({
+      validCount: 2,
+      duplicateCount: 1,
+      invalidCount: 1,
+      ignoredCount: 1,
+    });
+  });
+
+  test('builds URL hierarchy with non-page ghosts and shared ancestors', () => {
+    const preview = parseImportSource([
+      'https://site.test/page/articles/blog3',
+      'https://site.test/page/articles/blog4',
+      'https://docs.site.test/start',
+    ].join('\n'), 'paste');
+    const result = materializeImportedMap(preview, IMPORT_MODES.URL_HIERARCHY);
+
+    const siteRoot = result.root.children.find((node) => node.title === 'site.test');
+    expect(siteRoot.nodeKind).toBe('import-ghost');
+    expect(siteRoot.url).toBe('');
+    expect(siteRoot.children[0].title).toBe('page');
+    expect(siteRoot.children[0].children[0].title).toBe('articles');
+    expect(siteRoot.children[0].children[0].children.map((node) => node.title)).toEqual(['blog3', 'blog4']);
+    expect(result.root.children.find((node) => node.title === 'docs.site.test')).toBeTruthy();
+  });
+
+  test('produces the same flat page list for TXT, CSV, and XML', () => {
+    const urls = ['https://one.test/a', 'https://two.test/b/deep'];
+    const sources = [
+      parseImportFileContent(urls.join('\n'), 'txt'),
+      parseImportFileContent(`URL\n${urls.join('\n')}`, 'csv'),
+      parseImportFileContent(`<urlset>${urls.map((url) => `<url><loc>${url}</loc></url>`).join('')}</urlset>`, 'xml'),
+    ];
+
+    sources.forEach((result) => {
+      expect(result.root.children.map((node) => node.url)).toEqual(urls);
+      expect(result.root.children.every((node) => node.children.length === 0)).toBe(true);
+    });
+  });
+
+  test('preserves supplied flat page numbers without inventing hierarchy', () => {
+    const result = parseImportFileContent([
+      'Page Number,Page Title,URL',
+      '8,First,https://one.test/a',
+      '12,Second,https://two.test/b',
+    ].join('\n'), 'csv');
+
+    expect(result.root.children.map((node) => node.importNumber)).toEqual(['8', '12']);
+    expect(result.root.children.every((node) => node.hideImportedPageNumber === false)).toBe(true);
+    expect(result.root.children.every((node) => node.children.length === 0)).toBe(true);
+  });
+
+  test('reports malformed URL cells even when CSV hierarchy is valid', () => {
+    const preview = parseImportSource([
+      'Title,URL,Depth',
+      'Home,https://external.test,0',
+      'Child,https://external.test/child,1',
+      'Broken,not-a-url,1',
+    ].join('\n'), 'csv');
+
+    expect(preview.hasExplicitStructure).toBe(true);
+    expect(preview.diagnostics.validCount).toBe(2);
+    expect(preview.diagnostics.invalidCount).toBe(1);
+    expect(preview.diagnostics.ignoredCount).toBe(1);
+  });
+
+  test('materializes the same 100 screenshot pages across every supported URL-list format', () => {
+    const urls = Array.from({ length: 100 }, (_, index) => `https://host-${index}.test/level/${index}/page`);
+    const inputs = [
+      ['txt', urls.join('\n')],
+      ['csv', `URL\n${urls.join('\n')}`],
+      ['xml', `<urlset>${urls.map((url) => `<url><loc>${url}</loc></url>`).join('')}</urlset>`],
+      ['rss', `<rss><channel>${urls.map((url) => `<item><link>${url}</link></item>`).join('')}</channel></rss>`],
+      ['atom', `<feed>${urls.map((url) => `<entry><link href="${url}" /></entry>`).join('')}</feed>`],
+      ['html', urls.map((url) => `<a href="${url}">Page</a>`).join('\n')],
+      ['md', urls.join('\n')],
+      ['json', JSON.stringify(urls)],
+    ];
+
+    inputs.forEach(([extension, content]) => {
+      const result = parseImportFileContent(content, extension);
+      expect(result.root.children).toHaveLength(100);
+      expect(result.root.children.map((node) => node.url)).toEqual(urls);
+      expect(result.root.children.map((node) => node.title)).toEqual(Array(100).fill('page'));
+    });
   });
 });

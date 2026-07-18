@@ -2,6 +2,19 @@ export const generateId = () => `import_${Math.random().toString(36).slice(2, 10
 
 const isHttpUrl = (value) => /^https?:\/\//i.test(String(value || '').trim());
 
+export const IMPORT_SOURCE_MAX_BYTES = 10 * 1024 * 1024;
+export const IMPORT_MODES = Object.freeze({
+  PROVIDED: 'provided',
+  URL_HIERARCHY: 'url-hierarchy',
+  EXACT: 'exact',
+});
+export const IMPORT_NODE_KINDS = Object.freeze({
+  PAGE: 'page',
+  GHOST: 'import-ghost',
+  SOURCE_GROUP: 'source-group',
+  CONTAINER: 'import-container',
+});
+
 const uniqueUrls = (urls = []) => [...new Set(urls.filter((url) => isHttpUrl(url)))];
 const IMPORTED_IMAGE_STATE_FIELDS = [
   'thumbnailUrl',
@@ -94,10 +107,13 @@ const rowToNode = (row = {}) => {
 
   const node = {
     id: generateId(),
-    title: String(row.title || '').trim() || 'Untitled',
+    title: String(row.title || '').trim() || getUrlTitle(row.url),
     url: String(row.url || '').trim(),
     children: [],
+    nodeKind: isHttpUrl(row.url) ? IMPORT_NODE_KINDS.PAGE : IMPORT_NODE_KINDS.SOURCE_GROUP,
   };
+
+  if (row.number) node.importNumber = String(row.number).trim();
 
   if (pageType) node.pageType = pageType;
   if (row.description) node.seoDescription = row.description;
@@ -278,13 +294,13 @@ const TYPE_COLUMN_KEYS = ['pagetype', 'type', 'kind'];
 const ID_COLUMN_KEYS = ['id', 'pageid', 'key'];
 const PARENT_COLUMN_KEYS = ['parent', 'parentid', 'parentkey', 'parenturl', 'parentpage', 'parenttitle', 'parentnumber'];
 
-const mapStructuredRow = (row = {}, index = 0) => ({
+const mapStructuredRow = (row = {}) => ({
   id: getFirstValue(row, ID_COLUMN_KEYS),
   parent: getFirstValue(row, PARENT_COLUMN_KEYS),
   number: getFirstValue(row, NUMBER_COLUMN_KEYS),
   section: getFirstValue(row, ['section']),
   depth: getFirstValue(row, DEPTH_COLUMN_KEYS),
-  title: getFirstValue(row, TITLE_COLUMN_KEYS) || getFirstValue(row, URL_COLUMN_KEYS) || `Page ${index + 1}`,
+  title: getFirstValue(row, TITLE_COLUMN_KEYS),
   url: getFirstValue(row, URL_COLUMN_KEYS),
   pageType: getFirstValue(row, TYPE_COLUMN_KEYS) || 'Page',
   description: getFirstValue(row, ['description', 'metadescription']),
@@ -354,6 +370,8 @@ const buildImportResultFromStructuredRows = (rows, parseType) => {
   const urlRows = rows.filter((row) => isHttpUrl(row.url));
   if (!urlRows.length) return null;
 
+  const structuralRows = rows.filter((row) => row.url || row.title);
+
   const hasHierarchicalNumbers = urlRows.some((row) => {
     const number = String(row.number || '').trim().toLowerCase();
     return number === '0' || number.includes('.') || number.startsWith('s');
@@ -361,17 +379,17 @@ const buildImportResultFromStructuredRows = (rows, parseType) => {
 
   if (hasHierarchicalNumbers) {
     const result = buildImportResultFromRows(
-      urlRows.filter((row) => row.number),
+      structuralRows.filter((row) => row.number),
       parseType,
     );
     if (result) return result;
   }
 
-  const parentResult = buildImportResultFromParentRows(urlRows, parseType);
+  const parentResult = buildImportResultFromParentRows(structuralRows, parseType);
   if (parentResult) return parentResult;
 
   if (urlRows.some((row) => Number.parseInt(row.depth, 10) > 0)) {
-    return buildImportResultFromDepthRows(urlRows, parseType);
+    return buildImportResultFromDepthRows(structuralRows, parseType);
   }
 
   return null;
@@ -501,6 +519,7 @@ export const parseHtml = (text, baseUrl = '') => {
   doc.querySelectorAll('a[href]').forEach(a => {
     const href = a.getAttribute('href')?.trim();
     if (!href || href.startsWith('#')) return;
+    if (!baseUrl && !/^https?:\/\//i.test(href)) return;
 
     try {
       // Resolve relative URLs, then only keep http(s) links.
@@ -519,7 +538,9 @@ export const parseHtml = (text, baseUrl = '') => {
 const resolveHttpHref = (href, baseUrl = '') => {
   const fallbackBase = 'https://example.invalid';
   try {
-    const parsed = new URL(String(href || '').trim(), baseUrl || fallbackBase);
+    const raw = String(href || '').trim();
+    if (!baseUrl && !/^https?:\/\//i.test(raw)) return '';
+    const parsed = new URL(raw, baseUrl || fallbackBase);
     return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed.href : '';
   } catch {
     return '';
@@ -551,11 +572,11 @@ const parseHtmlListRows = (doc, baseUrl = '') => Array.from(doc.querySelectorAll
     const directLink = findDirectChild(item, (child) => (
       child.tagName?.toLowerCase() === 'a' && child.getAttribute('href')
     ));
-    const link = directLink || item.querySelector('a[href]');
+    const link = directLink;
     const url = resolveHttpHref(link?.getAttribute('href'), baseUrl);
-    if (!url) return null;
 
     const ownText = getListItemOwnText(item);
+    if (!url && !ownText) return null;
     const number = findDirectChild(item, (child) => child.classList?.contains('num'))?.textContent?.trim()
       || ownText.match(/^((?:s)?\d+(?:\.\d+)*)\s/i)?.[1]
       || '';
@@ -566,7 +587,7 @@ const parseHtmlListRows = (doc, baseUrl = '') => Array.from(doc.querySelectorAll
     return {
       number,
       depth: getListItemDepth(item),
-      title: link.textContent?.trim() || ownText.replace(url, '').trim() || url,
+      title: link?.textContent?.trim() || ownText.replace(url, '').trim() || url,
       url,
       pageType,
     };
@@ -731,8 +752,6 @@ const parseMarkdownListRows = (text) => text
     const content = match[2].trim();
     const linkMatch = content.match(/\[([^\]]+)]\((https?:\/\/[^)]+)\)/i);
     const urlMatch = linkMatch?.[2] || content.match(/https?:\/\/[^\s<>"')\]]+/i)?.[0] || '';
-    if (!isHttpUrl(urlMatch)) return null;
-
     const number = content.match(/^((?:s)?\d+(?:\.\d+)*)[.)]?\s+/i)?.[1] || '';
     const typeMatch = content.match(/\s-\s([^-\n]+)\s*$/);
     const title = linkMatch?.[1]
@@ -747,7 +766,7 @@ const parseMarkdownListRows = (text) => text
       number,
       depth: Math.floor(indent / 2),
       title: unescapeMarkdownText(title),
-      url: urlMatch,
+      url: isHttpUrl(urlMatch) ? urlMatch : '',
       pageType: typeMatch?.[1]?.trim() || 'Page',
     };
   })
@@ -801,16 +820,199 @@ export const parseStructuredTextIndex = (text) => {
   return rows.length ? buildImportResultFromRows(rows, 'Text index') : null;
 };
 
-export const parseImportFileContent = (text, ext = '') => {
-  const normalizedExt = String(ext || '').toLowerCase();
-  let result = null;
-  let urls = [];
-  let parseType = 'Text';
+const getTextByteLength = (text) => {
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(String(text || '')).length;
+  return String(text || '').length * 2;
+};
 
-  if (normalizedExt === 'json') {
-    result = parseVellicJson(text);
-    if (result) return result;
+const cleanUrlCandidate = (value) => String(value || '')
+  .trim()
+  .replace(/^['"(<[]+/, '')
+  .replace(/[>'")\],.;]+$/, '');
+
+export const normalizeImportUrl = (value) => {
+  const raw = cleanUrlCandidate(value);
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    parsed.hash = '';
+    if (/\/index\.(html?|php|aspx)$/i.test(parsed.pathname)) {
+      parsed.pathname = parsed.pathname.replace(/\/index\.(html?|php|aspx)$/i, '/');
+    }
+    if (parsed.pathname !== '/') parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./i, '');
+    const port = parsed.port ? `:${parsed.port}` : '';
+    return {
+      url: raw,
+      key: `${parsed.hostname}${port}${parsed.pathname || '/'}${parsed.search}`,
+      parsed,
+    };
+  } catch {
+    return null;
   }
+};
+
+const getUrlTitle = (value) => {
+  const normalized = normalizeImportUrl(value);
+  if (!normalized) return 'Untitled';
+  const parts = normalized.parsed.pathname.split('/').filter(Boolean);
+  const rawTitle = parts[parts.length - 1] || normalized.parsed.hostname;
+  try {
+    return decodeURIComponent(rawTitle).replace(/[-_]+/g, ' ').trim() || normalized.parsed.hostname;
+  } catch {
+    return rawTitle.replace(/[-_]+/g, ' ').trim() || normalized.parsed.hostname;
+  }
+};
+
+const flattenPageNodes = (root, orphans = []) => {
+  const pages = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (normalizeImportUrl(node.url)) pages.push(node);
+    (node.children || []).forEach(visit);
+  };
+  visit(root);
+  (orphans || []).forEach(visit);
+  return pages;
+};
+
+const dedupePageRecords = (records = []) => {
+  const seen = new Set();
+  const pages = [];
+  let duplicateCount = 0;
+  let invalidCount = 0;
+
+  records.forEach((record, index) => {
+    const normalized = normalizeImportUrl(record?.url || record);
+    if (!normalized) {
+      invalidCount += 1;
+      return;
+    }
+    if (seen.has(normalized.key)) {
+      duplicateCount += 1;
+      return;
+    }
+    seen.add(normalized.key);
+    const source = typeof record === 'object' ? record : {};
+    pages.push({
+      ...source,
+      id: source.id || generateId(),
+      title: String(source.title || '').trim() || getUrlTitle(normalized.url),
+      url: normalized.url,
+      children: [],
+      nodeKind: IMPORT_NODE_KINDS.PAGE,
+      importNumber: source.importNumber || source.number || '',
+      importOrder: index,
+      hideImportedPageNumber: !(source.importNumber || source.number),
+    });
+  });
+
+  return { pages, duplicateCount, invalidCount };
+};
+
+const getCsvCandidates = (text) => {
+  const rows = splitCsvRows(text);
+  if (!rows.length) return { candidates: [], invalidCount: 0, ignoredCount: 0 };
+  const headers = rows[0].map(normalizeHeader);
+  const urlIndexes = headers
+    .map((header, index) => (URL_COLUMN_KEYS.includes(header) ? index : -1))
+    .filter((index) => index >= 0);
+  if (!urlIndexes.length) {
+    return {
+      candidates: rows.flat().filter((value) => isHttpUrl(cleanUrlCandidate(value))),
+      invalidCount: 0,
+      ignoredCount: 0,
+    };
+  }
+  const values = rows.slice(1).flatMap((row) => urlIndexes.map((index) => String(row[index] || '').trim())).filter(Boolean);
+  return {
+    candidates: values.filter((value) => normalizeImportUrl(value)),
+    invalidCount: values.filter((value) => !normalizeImportUrl(value)).length,
+    ignoredCount: 1,
+  };
+};
+
+const getXmlCandidates = (text, feed = false) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'text/xml');
+  if (doc.querySelector('parsererror')) {
+    return { candidates: parsePlainText(text), invalidCount: 1, ignoredCount: 0 };
+  }
+  const values = [];
+  if (feed) {
+    Array.from(doc.getElementsByTagName('item')).forEach((item) => {
+      const value = item.getElementsByTagName('link')[0]?.textContent?.trim();
+      if (value) values.push(value);
+    });
+    Array.from(doc.getElementsByTagName('entry')).forEach((entry) => {
+      Array.from(entry.getElementsByTagName('link')).forEach((link) => {
+        const value = link.getAttribute('href')?.trim();
+        if (value) values.push(value);
+      });
+    });
+  } else {
+    Array.from(doc.getElementsByTagName('loc')).forEach((loc) => {
+      const value = loc.textContent?.trim();
+      if (value) values.push(value);
+    });
+  }
+  return {
+    candidates: values.filter((value) => normalizeImportUrl(value)),
+    invalidCount: values.filter((value) => !normalizeImportUrl(value)).length,
+    ignoredCount: 0,
+  };
+};
+
+const getTextCandidates = (text) => {
+  const lines = String(text || '').split(/\r?\n/);
+  const candidates = [];
+  let invalidCount = 0;
+  let ignoredCount = 0;
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (/^(url|urls|address|location|link)s?\s*[:|,]?$/i.test(trimmed) || /^#/.test(trimmed)) {
+      ignoredCount += 1;
+      return;
+    }
+    const matches = trimmed.match(/https?:\/\/[^\s<>"']+/gi) || [];
+    if (!matches.length) {
+      invalidCount += 1;
+      return;
+    }
+    matches.forEach((match) => candidates.push(cleanUrlCandidate(match)));
+  });
+  return { candidates, invalidCount, ignoredCount };
+};
+
+const getSourceCandidates = (text, ext) => {
+  if (ext === 'csv') return getCsvCandidates(text);
+  if (ext === 'xml') return getXmlCandidates(text, text.includes('<rss') || text.includes('<feed'));
+  if (ext === 'rss' || ext === 'atom') return getXmlCandidates(text, true);
+  if (ext === 'html' || ext === 'htm') {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/html');
+    const values = Array.from(doc.querySelectorAll('a[href]'))
+      .map((link) => link.getAttribute('href')?.trim())
+      .filter((value) => /^https?:\/\//i.test(value || ''));
+    return {
+      candidates: values.filter((value) => normalizeImportUrl(value)),
+      invalidCount: values.filter((value) => !normalizeImportUrl(value)).length,
+      ignoredCount: 0,
+    };
+  }
+  if (ext === 'md' || ext === 'markdown' || ext === 'json') {
+    const values = String(text || '').match(/https?:\/\/[^\s<>"')\]]+/gi) || [];
+    return { candidates: values.map(cleanUrlCandidate), invalidCount: 0, ignoredCount: 0 };
+  }
+  return getTextCandidates(text);
+};
+
+const getParsedSource = (text, normalizedExt) => {
+  let structuredResult = null;
+  let urls = [];
+  let records = [];
+  let parseType = normalizedExt === 'paste' ? 'Pasted URLs' : 'Text';
 
   if (normalizedExt === 'xml') {
     if (text.includes('<rss') || text.includes('<feed')) {
@@ -824,139 +1026,227 @@ export const parseImportFileContent = (text, ext = '') => {
     urls = parseRssAtom(text);
     parseType = 'RSS/Atom';
   } else if (normalizedExt === 'html' || normalizedExt === 'htm') {
-    result = parseStructuredHtml(text);
-    if (result) return result;
-    urls = parseHtml(text);
-    parseType = 'HTML';
+    structuredResult = parseStructuredHtml(text);
+    if (structuredResult) {
+      records = flattenPageNodes(structuredResult.root, structuredResult.orphans);
+    } else {
+      const doc = new DOMParser().parseFromString(text, 'text/html');
+      records = [...parseHtmlListRows(doc), ...parseHtmlTableRows(doc)].filter((row) => normalizeImportUrl(row.url));
+      urls = records.length ? records : parseHtml(text);
+    }
+    parseType = structuredResult?.parseType || 'HTML';
   } else if (normalizedExt === 'csv') {
-    result = parseStructuredCsv(text);
-    if (result) return result;
-    urls = parseCsv(text);
-    parseType = 'CSV';
+    structuredResult = parseStructuredCsv(text);
+    records = structuredResult
+      ? flattenPageNodes(structuredResult.root, structuredResult.orphans)
+      : parseCsvTable(text).map(mapStructuredRow).filter((row) => normalizeImportUrl(row.url));
+    urls = records.length ? records : parseCsv(text);
+    parseType = structuredResult?.parseType || 'CSV';
   } else if (normalizedExt === 'md' || normalizedExt === 'markdown') {
-    result = parseStructuredMarkdown(text);
-    if (result) return result;
-    urls = parseMarkdown(text);
-    parseType = 'Markdown';
+    structuredResult = parseStructuredMarkdown(text);
+    records = structuredResult
+      ? flattenPageNodes(structuredResult.root, structuredResult.orphans)
+      : [...parseMarkdownListRows(text), ...parseMarkdownTableRows(text)].filter((row) => normalizeImportUrl(row.url));
+    urls = records.length ? records : parseMarkdown(text);
+    parseType = structuredResult?.parseType || 'Markdown';
   } else {
-    result = parseStructuredTextIndex(text);
-    if (result) return result;
-    urls = parsePlainText(text);
+    structuredResult = normalizedExt === 'paste' ? null : parseStructuredTextIndex(text);
+    urls = structuredResult ? flattenPageNodes(structuredResult.root, structuredResult.orphans) : parsePlainText(text);
+    parseType = structuredResult?.parseType || parseType;
   }
 
-  const tree = buildTreeFromUrls(urls);
-  return tree
-    ? {
-      parseType,
-      count: urls.length,
-      root: tree,
-      orphans: [],
-      connections: [],
-      colors: null,
-      connectionColors: null,
-    }
-    : { parseType, count: 0, root: null, orphans: [], connections: [], colors: null, connectionColors: null };
+  return { structuredResult, urls, records, parseType };
 };
 
-export const buildTreeFromUrls = (urls) => {
-  if (!urls.length) return null;
+export const parseImportSource = (text, ext = '') => {
+  const sourceText = String(text || '');
+  if (getTextByteLength(sourceText) > IMPORT_SOURCE_MAX_BYTES) {
+    throw new Error('Import files must be 10 MB or smaller');
+  }
 
-  // Group URLs by domain
-  const byDomain = {};
-  for (const url of urls) {
-    try {
-      const u = new URL(url);
-      const domain = u.hostname;
-      if (!byDomain[domain]) byDomain[domain] = [];
-      byDomain[domain].push(url);
-    } catch {
-      // Skip invalid URLs
+  const normalizedExt = String(ext || '').replace(/^\./, '').toLowerCase() || 'txt';
+  if (normalizedExt === 'json') {
+    const exactResult = parseVellicJson(sourceText);
+    if (exactResult) {
+      const pageCount = flattenPageNodes(exactResult.root, exactResult.orphans).length;
+      return {
+        exactBackup: true,
+        exactResult,
+        parseType: exactResult.parseType,
+        sourceFormat: 'json',
+        pages: flattenPageNodes(exactResult.root, exactResult.orphans),
+        structuredResult: exactResult,
+        hasExplicitStructure: true,
+        diagnostics: {
+          validCount: pageCount,
+          duplicateCount: 0,
+          invalidCount: 0,
+          ignoredCount: 0,
+        },
+      };
     }
   }
 
-  const domains = Object.keys(byDomain);
+  const parsed = getParsedSource(sourceText, normalizedExt);
+  const sourceDiagnostics = getSourceCandidates(sourceText, normalizedExt);
+  const sourceRecords = parsed.records?.length
+    ? parsed.records
+    : (parsed.structuredResult
+      ? flattenPageNodes(parsed.structuredResult.root, parsed.structuredResult.orphans)
+      : (sourceDiagnostics.candidates.length ? sourceDiagnostics.candidates : parsed.urls));
+  const deduped = dedupePageRecords(sourceRecords);
 
-  // If only one domain, build hierarchical tree
-  if (domains.length === 1) {
-    const domain = domains[0];
-    const domainUrls = byDomain[domain];
-
-    // Find the root URL (shortest path or homepage)
-    const sorted = [...domainUrls].sort((a, b) => {
-      const pathA = new URL(a).pathname;
-      const pathB = new URL(b).pathname;
-      return pathA.length - pathB.length;
-    });
-
-    const rootUrl = sorted[0];
-    const root = {
-      id: generateId(),
-      title: domain,
-      url: rootUrl,
-      children: []
-    };
-
-    // Build tree based on URL paths
-    const urlMap = new Map();
-    urlMap.set(rootUrl, root);
-
-    for (const url of sorted.slice(1)) {
-      try {
-        const u = new URL(url);
-        const pathParts = u.pathname.split('/').filter(Boolean);
-        const title = pathParts[pathParts.length - 1] || u.pathname || 'Page';
-
-        const node = {
-          id: generateId(),
-          title: decodeURIComponent(title).replace(/[-_]/g, ' '),
-          url: url,
-          children: []
-        };
-
-        // Find parent by matching path
-        let parent = root;
-        let parentPath = '';
-        for (let i = 0; i < pathParts.length - 1; i++) {
-          parentPath += '/' + pathParts[i];
-          const parentUrl = `${u.origin}${parentPath}`;
-          if (urlMap.has(parentUrl)) {
-            parent = urlMap.get(parentUrl);
-          }
-        }
-
-        parent.children.push(node);
-        urlMap.set(url, node);
-      } catch {
-        // Skip invalid URLs
-      }
-    }
-
-    return root;
-  }
-
-  // Multiple domains: create a root with domain children
-  const root = {
-    id: generateId(),
-    title: 'Imported Sites',
-    url: urls[0],
-    children: []
+  return {
+    exactBackup: false,
+    parseType: parsed.parseType,
+    sourceFormat: normalizedExt,
+    pages: deduped.pages,
+    structuredResult: parsed.structuredResult,
+    hasExplicitStructure: Boolean(parsed.structuredResult),
+    diagnostics: {
+      validCount: deduped.pages.length,
+      duplicateCount: deduped.duplicateCount,
+      invalidCount: parsed.structuredResult && normalizedExt === 'txt'
+        ? deduped.invalidCount
+        : sourceDiagnostics.invalidCount + deduped.invalidCount,
+      ignoredCount: sourceDiagnostics.ignoredCount,
+    },
   };
+};
 
-  for (const domain of domains) {
-    const domainUrls = byDomain[domain];
-    const domainNode = {
-      id: generateId(),
-      title: domain,
-      url: domainUrls[0],
-      children: domainUrls.slice(1).map(url => ({
-        id: generateId(),
-        title: new URL(url).pathname || 'Page',
-        url: url,
-        children: []
-      }))
-    };
-    root.children.push(domainNode);
+const cloneStructuredNode = (node, seen) => {
+  if (!node) return null;
+  const normalized = normalizeImportUrl(node.url);
+  if (normalized && seen.has(normalized.key)) return null;
+  if (normalized) seen.add(normalized.key);
+  const children = (node.children || []).map((child) => cloneStructuredNode(child, seen)).filter(Boolean);
+  if (!normalized && !children.length) return null;
+  return {
+    ...node,
+    id: node.id || generateId(),
+    title: String(node.title || '').trim() || (normalized ? getUrlTitle(normalized.url) : 'Section'),
+    url: normalized?.url || '',
+    nodeKind: normalized ? IMPORT_NODE_KINDS.PAGE : IMPORT_NODE_KINDS.SOURCE_GROUP,
+    hideImportedPageNumber: normalized ? !node.importNumber : true,
+    children,
+  };
+};
+
+const createImportContainer = (children, importMode, parseType) => ({
+  id: generateId(),
+  title: 'Imported URLs',
+  url: '',
+  nodeKind: IMPORT_NODE_KINDS.CONTAINER,
+  children: children.filter(Boolean),
+  importMeta: {
+    mode: importMode,
+    parseType,
+    sourceNumberingOnly: true,
+  },
+});
+
+const makeGhostNode = (title) => ({
+  id: generateId(),
+  title,
+  url: '',
+  nodeKind: IMPORT_NODE_KINDS.GHOST,
+  hideImportedPageNumber: true,
+  children: [],
+});
+
+const mergePageIntoNode = (target, page) => {
+  const children = target.children || [];
+  Object.assign(target, {
+    ...page,
+    id: target.id,
+    children,
+    nodeKind: IMPORT_NODE_KINDS.PAGE,
+  });
+};
+
+const buildUrlHierarchyRoots = (pages = []) => {
+  const hostRoots = new Map();
+
+  pages.forEach((page) => {
+    const normalized = normalizeImportUrl(page.url);
+    if (!normalized) return;
+    const hostKey = `${normalized.parsed.hostname}${normalized.parsed.port ? `:${normalized.parsed.port}` : ''}`;
+    let hostEntry = hostRoots.get(hostKey);
+    if (!hostEntry) {
+      const rootNode = makeGhostNode(hostKey);
+      hostEntry = { root: rootNode, paths: new Map([['/', rootNode]]) };
+      hostRoots.set(hostKey, hostEntry);
+    }
+
+    const pathParts = normalized.parsed.pathname.split('/').filter(Boolean);
+    if (!pathParts.length) {
+      if (!normalized.parsed.search) mergePageIntoNode(hostEntry.root, page);
+      else hostEntry.root.children.push({ ...page, id: page.id || generateId(), children: [] });
+      return;
+    }
+
+    let parent = hostEntry.root;
+    let path = '';
+    pathParts.forEach((segment, index) => {
+      path += `/${segment}`;
+      const isLeaf = index === pathParts.length - 1;
+      if (isLeaf && normalized.parsed.search) {
+        parent.children.push({ ...page, id: page.id || generateId(), children: [] });
+        return;
+      }
+      let node = hostEntry.paths.get(path);
+      if (!node) {
+        node = makeGhostNode(getUrlTitle(`${normalized.parsed.protocol}//${hostKey}${path}`));
+        parent.children.push(node);
+        hostEntry.paths.set(path, node);
+      }
+      if (isLeaf) mergePageIntoNode(node, page);
+      parent = node;
+    });
+  });
+
+  return Array.from(hostRoots.values()).map(({ root }) => root);
+};
+
+export const materializeImportedMap = (source, mode = IMPORT_MODES.PROVIDED) => {
+  if (!source) return null;
+  if (source.exactBackup) return { ...source.exactResult, importMode: IMPORT_MODES.EXACT };
+  if (!source.pages?.length) return null;
+
+  let children;
+  if (mode === IMPORT_MODES.URL_HIERARCHY) {
+    children = buildUrlHierarchyRoots(source.pages);
+  } else if (source.hasExplicitStructure && source.structuredResult?.root) {
+    const seen = new Set();
+    children = [source.structuredResult.root, ...(source.structuredResult.orphans || [])]
+      .map((node) => cloneStructuredNode(node, seen))
+      .filter(Boolean);
+  } else {
+    children = source.pages.map((page) => ({ ...page, children: [] }));
   }
 
-  return root;
+  const root = createImportContainer(children, mode, source.parseType);
+  return {
+    parseType: source.parseType,
+    count: source.diagnostics.validCount,
+    root,
+    orphans: [],
+    connections: [],
+    colors: null,
+    connectionColors: null,
+    importMode: mode,
+  };
+};
+
+export const parseImportFileContent = (text, ext = '', mode = IMPORT_MODES.PROVIDED) => (
+  materializeImportedMap(parseImportSource(text, ext), mode)
+);
+
+export const buildTreeFromUrls = (urls) => {
+  const deduped = dedupePageRecords(urls);
+  return createImportContainer(
+    buildUrlHierarchyRoots(deduped.pages),
+    IMPORT_MODES.URL_HIERARCHY,
+    'URLs',
+  );
 };

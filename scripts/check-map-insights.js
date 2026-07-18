@@ -94,4 +94,27 @@ assert.ok(analysis.findings.some((finding) => finding.title === 'Images missing 
 assert.ok(analysis.pageInsights.find((entry) => entry.pageId === 'duplicate')?.score < 100);
 assert.ok(Number.isFinite(analysis.overallScore));
 
+const importedAnalysis = analyzeMapInsights({
+  root: {
+    id: 'import-container',
+    nodeKind: 'import-container',
+    children: [{
+      id: 'import-ghost',
+      title: 'articles',
+      nodeKind: 'import-ghost',
+      url: '',
+      children: [{
+        id: 'import-page',
+        title: 'Post',
+        nodeKind: 'page',
+        url: 'https://example.com/articles/post',
+        children: [],
+      }],
+    }],
+  },
+  orphans: [],
+});
+assert.strictEqual(importedAnalysis.totals.pages, 1);
+assert.deepStrictEqual(importedAnalysis.pageInsights.map((entry) => entry.pageId), ['import-page']);
+
 console.log('Map Insights fixture check passed.');

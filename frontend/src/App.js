@@ -116,9 +116,10 @@ import {
 } from './utils/mapDisplaySummary';
 import {
   buildExpandedStackMap,
-  countNodes,
+  countPageNodes,
   findNodeById,
   findParent,
+  isPageNode,
   isDescendantOf,
   shouldStackChildren,
   checkLayoutInvariants,
@@ -140,7 +141,10 @@ import {
   getSitemapExportFilenameBase,
 } from './utils/fileExports';
 import {
-  parseImportFileContent,
+  IMPORT_MODES,
+  IMPORT_SOURCE_MAX_BYTES,
+  materializeImportedMap,
+  parseImportSource,
   stripImportedImageState,
 } from './utils/importParsers';
 import { computeLayout, getNodeH } from './layout/computeLayout';
@@ -404,18 +408,20 @@ function limitImportedMapToPageCount(imported, pageLimit) {
   const remaining = { value: safeLimit };
   const keptNodeIds = new Set();
   const cloneNode = (node) => {
-    if (!node || remaining.value <= 0) return null;
-    remaining.value -= 1;
+    if (!node) return null;
+    const countsAsPage = isPageNode(node);
+    if (countsAsPage && remaining.value <= 0) return null;
+    if (countsAsPage) remaining.value -= 1;
     if (node.id) keptNodeIds.add(node.id);
     const nextNode = {
       ...node,
       children: [],
     };
     (node.children || []).forEach((child) => {
-      if (remaining.value <= 0) return;
       const nextChild = cloneNode(child);
       if (nextChild) nextNode.children.push(nextChild);
     });
+    if (!countsAsPage && node.nodeKind !== 'import-container' && nextNode.children.length === 0) return null;
     return nextNode;
   };
 
@@ -431,7 +437,8 @@ function limitImportedMapToPageCount(imported, pageLimit) {
   const connections = (imported.connections || []).filter((connection) => (
     keptNodeIds.has(connection?.sourceNodeId) && keptNodeIds.has(connection?.targetNodeId)
   ));
-  const importedCount = countNodes(root) + orphans.reduce((total, orphan) => total + countNodes(orphan), 0);
+  const importedCount = countPageNodes(root)
+    + orphans.reduce((total, orphan) => total + countPageNodes(orphan), 0);
 
   return {
     ...imported,
@@ -697,6 +704,7 @@ function addScanLimitGhosts(rootNode, orphanNodes = [], entitlement = null) {
   if (visibleNodes.some(isEntitlementLockedNode)) {
     return { root: rootNode, orphans: orphanNodes };
   }
+  const visiblePageNodes = visibleNodes.filter(isPageNode);
 
   const root = cloneScanNode(rootNode);
   const orphans = (orphanNodes || []).map(cloneScanNode);
@@ -710,7 +718,7 @@ function addScanLimitGhosts(rootNode, orphanNodes = [], entitlement = null) {
     // Use fallback preview URLs for imported or malformed roots.
   }
 
-  const { rootGhostCount, subdomainGhostCount } = getScanLimitGhostCounts(entitlement, visibleNodes.length);
+  const { rootGhostCount, subdomainGhostCount } = getScanLimitGhostCounts(entitlement, visiblePageNodes.length);
 
   root.children = [
     ...(root.children || []),
@@ -2263,7 +2271,7 @@ const getImageCaptureStats = ({
       allCaptured: false,
     };
   }
-  const nodes = collectAllNodesWithOrphans(rootNode, orphanNodes).filter((node) => node?.url);
+  const nodes = collectAllNodesWithOrphans(rootNode, orphanNodes).filter(isPageNode);
   const hasCapturedAsset = (node) => (
     isStoredScreenshotAsset(node?.[assetKey])
     && !invalidAssetIds.has(node?.id)
@@ -2384,7 +2392,7 @@ const buildForestIndex = (rootNode, orphanNodes = []) => {
 
 function getDisplayScanLayerAvailability(rootNode, orphanNodes = []) {
   const nodesForCounts = collectAllNodesWithOrphans(rootNode, orphanNodes)
-    .filter((node) => !isEntitlementLockedNode(node));
+    .filter((node) => !isEntitlementLockedNode(node) && isPageNode(node));
   const forestIndex = buildForestIndex(rootNode, orphanNodes);
   const realOrphans = (orphanNodes || []).filter((orphan) => !isEntitlementLockedNode(orphan));
   const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
@@ -3388,6 +3396,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
   const [importPageLimitModal, setImportPageLimitModal] = useState(null);
   const [blankUploadDragActive, setBlankUploadDragActive] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -9573,13 +9582,13 @@ export default function App({ currentRoute, navigateToRoute }) {
         return {
           id,
           ...(cachedNode || visibleNode || {}),
-          url: cachedNode?.url || visibleNode?.url || '__large_map_selected_node__',
+          url: cachedNode?.url || visibleNode?.url || '',
         };
-      });
+      }).filter(isPageNode);
       return {
-        targetIds: new Set(selectedIds),
+        targetIds: new Set(candidates.map((node) => node.id)),
         candidates,
-        total: selectedIds.length,
+        total: candidates.length,
         cachedCount: 0,
         unavailableCount: 0,
       };
@@ -9590,7 +9599,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => baseIds.has(node.id))
       : allNodes;
-    const targetNodes = scopedNodes.filter((node) => node?.url);
+    const targetNodes = scopedNodes.filter(isPageNode);
     const orderedTargets = orderThumbnailNodes(targetNodes);
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
@@ -10429,7 +10438,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => scopedIds.has(node.id))
       : allNodes;
-    const orderedTargets = orderThumbnailNodes(scopedNodes.filter((node) => node?.url));
+    const orderedTargets = orderThumbnailNodes(scopedNodes.filter(isPageNode));
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
     let candidates = [];
@@ -10457,7 +10466,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return orderThumbnailNodes(
       scopedNodes.filter((node) => {
         const invalidIds = assetType === 'thumb' ? invalidThumbnailAssetIds : invalidFullScreenshotAssetIds;
-        return hasStoredImageAsset(node?.[assetKey]) && !invalidIds.has(node.id);
+        return isPageNode(node) && hasStoredImageAsset(node?.[assetKey]) && !invalidIds.has(node.id);
       })
     );
   }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidThumbnailAssetIds, invalidFullScreenshotAssetIds, orderThumbnailNodes]);
@@ -10475,8 +10484,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         title: node.title || '',
         url: node.url || '',
       };
-      const pathSegments = [...parentPath, segment];
-      if (!selectedIds || selectedIds.has(node.id)) {
+      const pathSegments = isPageNode(node) ? [...parentPath, segment] : parentPath;
+      if (isPageNode(node) && (!selectedIds || selectedIds.has(node.id))) {
         descriptors.push({
           ...segment,
           pathSegments,
@@ -12716,7 +12725,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
         trackEvent('scan_completed', {
           hostname,
-          page_count: countNodes(root),
+          page_count: countPageNodes(root),
           partial: 'true',
           partial_reason: normalizedPartialReason || '',
           preserved_existing_map: 'true',
@@ -12779,7 +12788,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           manualConnections,
         });
       }
-      const realPageCount = countNodes(merged.root);
+      const realPageCount = countPageNodes(merged.root);
       const displayMerged = addScanLimitGhosts(merged.root, merged.orphans, data.entitlement || null);
       const displayScanLayerAvailability = getDisplayScanLayerAvailability(displayMerged.root, displayMerged.orphans);
       const nextConnections = shouldMergeScanResult
@@ -14052,7 +14061,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const getUsagePageCount = useCallback(() => {
     if (!root) return 0;
     return collectAllNodesWithOrphans(root, orphans)
-      .filter((node) => !isEntitlementLockedNode(node))
+      .filter((node) => !isEntitlementLockedNode(node) && isPageNode(node))
       .length;
   }, [orphans, root]);
 
@@ -15583,6 +15592,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const openNodeMenu = (nodeId, event) => {
     if (!nodeId || !event) return;
+    const menuNode = findNodeInCurrentMap(nodeId);
+    if (menuNode?.nodeKind === 'import-ghost' || menuNode?.nodeKind === 'source-group') return;
     if (!canEdit()) return;
     if (!contentRef.current) return;
     event.preventDefault();
@@ -15621,6 +15632,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleNodeClick = (node, event) => {
     if (!node) return;
+    if (node.nodeKind === 'import-ghost' || node.nodeKind === 'source-group') return;
     if (suppressNodeClickRef.current) {
       suppressNodeClickRef.current = false;
       return;
@@ -15664,6 +15676,9 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const openLargeMapNodeMenu = (nodeId, event) => {
     if (!nodeId || !event) return;
+    const menuNode = largeMapNodeCacheRef.current.get(String(nodeId))
+      || largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, nodeId));
+    if (menuNode?.nodeKind === 'import-ghost' || menuNode?.nodeKind === 'source-group') return;
     if (!canEdit()) return;
     if (!contentRef.current) return;
     event.preventDefault();
@@ -15693,6 +15708,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleLargeMapNodeDoubleClick = (nodeData) => {
     if (!nodeData || !canvasRef.current) return;
+    const node = nodeData.node || nodeData;
+    if (node.nodeKind === 'import-ghost' || node.nodeKind === 'source-group') return;
     if (isEntitlementLockedNode(nodeData.node || nodeData)) {
       openPlansModal('locked-node');
       return;
@@ -18216,8 +18233,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     const importedColors = imported.colors || DEFAULT_COLORS;
     const importedConnectionColors = imported.connectionColors || DEFAULT_CONNECTION_COLORS;
     const importedPageCount = Math.max(1,
-      countNodes(importedRoot)
-      + importedOrphans.reduce((total, orphan) => total + countNodes(orphan), 0)
+      countPageNodes(importedRoot)
+      + importedOrphans.reduce((total, orphan) => total + countPageNodes(orphan), 0)
     );
     const sourceCount = Math.max(importedPageCount, Math.floor(Number(originalPageCount || importedPageCount)));
     const entitlementMeta = partial ? {
@@ -18267,13 +18284,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       scheduleResetViewRef,
       attempts: 20,
     });
-    setUrlInput(nextRoot.url || '');
+    const firstImportedPage = collectAllNodesWithOrphans(nextRoot, nextOrphans).find(isPageNode);
+    setUrlInput(firstImportedPage?.url || '');
     setMapName(defaultName || imported.defaultMapName || '');
     setShowImportModal(false);
     showToast(
       partial
         ? `Imported ${formatEntitlementCount(importedPageCount)} of ${formatEntitlementCount(sourceCount)} pages from ${imported.parseType}`
-        : `Imported ${formatEntitlementCount(importedPageCount)} pages from ${imported.parseType}`,
+        : `Imported ${formatEntitlementCount(importedPageCount)} pages from ${imported.parseType}. Use Images when you're ready to capture screenshots.`,
       partial ? 'warning' : 'success'
     );
     return true;
@@ -18292,6 +18310,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const openImportModalFlow = useCallback(() => {
     if (!requireImportAuth()) return;
+    setImportPreview(null);
     setShowImportModal(true);
   }, [requireImportAuth]);
 
@@ -18300,52 +18319,101 @@ export default function App({ currentRoute, navigateToRoute }) {
     blankUploadInputRef.current?.click();
   }, [requireImportAuth]);
 
-  // Process imported file (shared by both browse and drag-drop)
+  const closeImportModal = useCallback(() => {
+    setShowImportModal(false);
+    setImportPreview(null);
+    setImportLoading(false);
+  }, []);
+
+  const reviewImportSource = async (text, ext, sourceName, defaultMapName) => {
+    setImportLoading(true);
+    try {
+      const preview = parseImportSource(text, ext);
+      setImportPreview({
+        ...preview,
+        sourceName,
+        defaultMapName,
+      });
+      setShowImportModal(true);
+      if (!preview.diagnostics.validCount) {
+        showToast(`No valid URLs found in ${sourceName}`, 'error');
+      }
+    } catch (err) {
+      console.error('Import preview error:', err);
+      showToast(`Import failed: ${err.message || 'Unknown error'}`, 'error');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  // Read an imported file into the shared preview flow.
   const processImportFile = async (file) => {
     if (!file) return;
     if (!requireImportAuth()) return;
-
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const supportedExtensions = new Set(['json', 'xml', 'rss', 'atom', 'html', 'htm', 'csv', 'md', 'markdown', 'txt']);
+    if (!supportedExtensions.has(ext)) {
+      showToast('Unsupported file type', 'error');
+      return;
+    }
+    if (Number(file.size || 0) > IMPORT_SOURCE_MAX_BYTES) {
+      showToast('Import files must be 10 MB or smaller', 'error');
+      return;
+    }
     setImportLoading(true);
-
     try {
       const text = await file.text();
-      // Use file extension - don't rely on file.type which is often empty for XML
-      const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      const imported = parseImportFileContent(text, ext);
-      const defaultMapName = deriveImportedMapNameFromFileName(file.name);
+      await reviewImportSource(
+        text,
+        ext,
+        file.name || 'Imported file',
+        deriveImportedMapNameFromFileName(file.name),
+      );
+    } catch (err) {
+      console.error('Import read error:', err);
+      showToast(`Import failed: ${err.message || 'Unknown error'}`, 'error');
+      setImportLoading(false);
+    }
+  };
 
+  const handlePasteImportReview = async (text) => {
+    if (!requireImportAuth()) return;
+    await reviewImportSource(text, 'paste', 'Pasted URLs', 'Imported URLs');
+  };
+
+  const confirmImportPreview = async (mode) => {
+    if (!importPreview || !requireImportAuth()) return;
+    setImportLoading(true);
+    try {
+      const imported = materializeImportedMap(importPreview, mode || IMPORT_MODES.PROVIDED);
       if (!imported?.root) {
-        showToast(`No URLs found in ${imported?.parseType || 'file'}`, 'error');
-        setImportLoading(false);
+        showToast('Could not build a map from these URLs', 'error');
         return;
       }
-
-      const importedPageCount = Math.max(1,
-        countNodes(imported.root)
-        + (imported.orphans || []).reduce((total, orphan) => total + countNodes(orphan), 0)
-      );
+      const importedPageCount = countPageNodes(imported.root)
+        + (imported.orphans || []).reduce((total, orphan) => total + countPageNodes(orphan), 0);
       const importLimitBlock = getImportPageLimitBlock(importedPageCount);
-
+      const defaultMapName = importPreview.defaultMapName || '';
       if (importLimitBlock) {
         setImportPageLimitModal({
           ...importLimitBlock,
-          fileName: file.name || 'Imported file',
+          fileName: importPreview.sourceName || 'Imported URLs',
           defaultMapName,
-          parseType: imported.parseType || 'file',
+          parseType: imported.parseType || 'URLs',
           imported: { ...imported, defaultMapName },
         });
         setShowImportModal(false);
-        setImportLoading(false);
+        setImportPreview(null);
         return;
       }
-
       applyImportedMap({ ...imported, defaultMapName }, { defaultName: defaultMapName });
+      setImportPreview(null);
     } catch (err) {
       console.error('Import error:', err);
       showToast(`Import failed: ${err.message || 'Unknown error'}`, 'error');
+    } finally {
+      setImportLoading(false);
     }
-
-    setImportLoading(false);
   };
 
   // Handle file selection via browse button
@@ -20881,12 +20949,16 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       <ImportModal
         show={showImportModal}
-        onClose={() => setShowImportModal(false)}
+        onClose={closeImportModal}
         onDrop={handleImportDrop}
         onDragOver={handleImportDragOver}
         onDragLeave={handleImportDragLeave}
         onFileChange={handleFileImport}
+        onPasteReview={handlePasteImportReview}
+        onImport={confirmImportPreview}
+        onReset={() => setImportPreview(null)}
         loading={importLoading}
+        preview={importPreview}
       />
 
       {importPageLimitModal && (

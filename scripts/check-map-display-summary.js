@@ -62,6 +62,14 @@ const orphans = [
   },
 ];
 
+const addFixtureUrls = (node) => {
+  if (!node) return;
+  node.url = node.url || `https://example.test/${node.id}`;
+  (node.children || []).forEach(addFixtureUrls);
+};
+addFixtureUrls(root);
+orphans.forEach(addFixtureUrls);
+
 const summary = buildMapDisplaySummary(root, orphans);
 assert.strictEqual(summary.maxDepth, 3);
 assert.strictEqual(summary.scanLayerAvailability.placementPrimary, true);

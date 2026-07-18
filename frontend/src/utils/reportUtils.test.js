@@ -1,4 +1,5 @@
 import {
+  buildReportEntries,
   buildReportStats,
   getReportPageType,
   getReportTypesForNode,
@@ -114,5 +115,26 @@ describe('reportUtils', () => {
     expect(stats.total).toBe(25);
     expect(stats.standard).toBe(33);
     expect(stats.missing).toBe(17);
+  });
+
+  test('excludes import containers and inferred ghosts from report entries', () => {
+    const entries = buildReportEntries({
+      id: 'container',
+      nodeKind: 'import-container',
+      children: [{
+        id: 'ghost',
+        nodeKind: 'import-ghost',
+        url: '',
+        children: [{
+          id: 'page',
+          nodeKind: 'page',
+          title: 'Page',
+          url: 'https://example.com/page',
+          children: [],
+        }],
+      }],
+    }, [], new Map(), null, {});
+
+    expect(entries.map((entry) => entry.id)).toEqual(['page']);
   });
 });

@@ -102,12 +102,15 @@ assert.strictEqual(noThumbnailScene.homeNode.h, DEFAULT_LAYOUT.NODE_H_COLLAPSED,
 const largeRoot = {
   id: 'large-root',
   title: 'Large Root',
+  url: 'https://large.example.com',
   children: Array.from({ length: 100 }, (_, parentIndex) => ({
     id: `large-parent-${parentIndex}`,
     title: `Parent ${parentIndex}`,
+    url: `https://large.example.com/${parentIndex}`,
     children: Array.from({ length: 50 }, (_, childIndex) => ({
       id: `large-child-${parentIndex}-${childIndex}`,
       title: `Child ${parentIndex}-${childIndex}`,
+      url: `https://large.example.com/${parentIndex}/${childIndex}`,
       thumbnailUrl: `/screenshots/large_${parentIndex}_${childIndex}_thumb_v1.jpg`,
       fullScreenshotUrl: `/screenshots/large_${parentIndex}_${childIndex}_full_v1.jpg`,
     })),
@@ -222,5 +225,46 @@ const emptyViewportScene = buildMapScene({
 assert.strictEqual(emptyViewportScene.visibleNodeCount, 0);
 assert(emptyViewportScene.homeNode, 'empty viewport scene should still expose home node for centering');
 assert.strictEqual(emptyViewportScene.homeNode.id, 'large-root');
+
+const importedRoot = {
+  id: 'import-container',
+  title: 'Imported URLs',
+  url: '',
+  nodeKind: 'import-container',
+  children: [
+    {
+      id: 'import-ghost',
+      title: 'example.com',
+      url: '',
+      nodeKind: 'import-ghost',
+      children: [{
+        id: 'import-page-1',
+        title: 'Page one',
+        url: 'https://example.com/page-one',
+        nodeKind: 'page',
+        hideImportedPageNumber: true,
+      }],
+    },
+    {
+      id: 'import-page-2',
+      title: 'Page two',
+      url: 'https://another.example/page-two',
+      nodeKind: 'page',
+      hideImportedPageNumber: true,
+    },
+  ],
+};
+const importedLayout = computeSceneLayout(importedRoot, [], { showThumbnails: false });
+assert.strictEqual(countMapNodes(importedRoot), 2, 'only real imported pages should count');
+assert(!importedLayout.nodes.some((node) => node.id === 'import-container'), 'hidden import container should not render');
+assert(importedLayout.nodes.some((node) => node.id === 'import-ghost'), 'inferred hierarchy should render');
+const importedScene = buildMapScene({
+  root: importedRoot,
+  viewport: { x: -200, y: -200, w: 2000, h: 1200, zoom: 1 },
+  showThumbnails: false,
+});
+assert(importedScene.nodes.some((node) => node.nodeKind === 'import-ghost'));
+assert(importedScene.nodes.filter((node) => node.nodeKind === 'page').every((node) => node.number === ''));
+assert(importedScene.homeNode.isImportedPeer, 'the first imported peer should not become the map root');
 
 console.log('map scene checks passed');

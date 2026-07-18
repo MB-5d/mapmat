@@ -8,7 +8,7 @@ export const countMapNodes = (root, orphans = []) => {
     const id = String(node.id || '');
     if (id && seen.has(id)) return;
     if (id) seen.add(id);
-    count += 1;
+    if (node.nodeKind !== 'import-container') count += 1;
     if (Array.isArray(node.children)) {
       node.children.forEach(visit);
     }

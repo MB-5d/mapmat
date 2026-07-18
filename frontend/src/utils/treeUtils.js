@@ -25,6 +25,24 @@ export const countNodes = (node) => {
   return 1 + (node.children || []).reduce((sum, c) => sum + countNodes(c), 0);
 };
 
+const NON_PAGE_NODE_KINDS = new Set(['import-container', 'import-ghost', 'source-group']);
+
+export const isPageNode = (node) => {
+  if (!node || NON_PAGE_NODE_KINDS.has(node.nodeKind)) return false;
+  try {
+    const parsed = new URL(String(node.url || '').trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+export const countPageNodes = (node) => {
+  if (!node) return 0;
+  return (isPageNode(node) ? 1 : 0)
+    + (node.children || []).reduce((sum, child) => sum + countPageNodes(child), 0);
+};
+
 export const findNodeById = (node, id) => {
   if (!node) return null;
   if (node.id === id) return node;

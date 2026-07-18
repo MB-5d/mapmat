@@ -1,5 +1,5 @@
 import { computeLayout } from '../layout/computeLayout';
-import { shouldStackChildren } from './treeUtils';
+import { countPageNodes, isPageNode, shouldStackChildren } from './treeUtils';
 import { STACK_THRESHOLD } from './constants';
 
 const makeNode = (id, overrides = {}) => ({
@@ -51,5 +51,25 @@ describe('stacking rules', () => {
       collapsed: true,
     });
     expect(layout.nodes.has('l2-1')).toBe(false);
+  });
+});
+
+describe('page node contract', () => {
+  test('counts only real HTTP pages in imported trees', () => {
+    const root = {
+      id: 'container',
+      nodeKind: 'import-container',
+      children: [{
+        id: 'ghost',
+        nodeKind: 'import-ghost',
+        url: '',
+        children: [makeNode('real', { nodeKind: 'page' })],
+      }],
+    };
+
+    expect(isPageNode(root)).toBe(false);
+    expect(isPageNode(root.children[0])).toBe(false);
+    expect(isPageNode(root.children[0].children[0])).toBe(true);
+    expect(countPageNodes(root)).toBe(1);
   });
 });

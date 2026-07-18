@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { detectChallengePage } = require('./scanPageClassification');
+const { isPageNode } = require('./mapScene');
 
 const CATEGORIES = Object.freeze({
   seo: 'seo',
@@ -124,16 +125,20 @@ function collectPages(root, orphans = []) {
   const visit = (node, depth = 0, parent = null, tree = 'root') => {
     if (!node || seen.has(node.id || node.url)) return;
     seen.add(node.id || node.url);
-    pages.push({
-      node,
-      id: node.id || node.url || `page-${pages.length + 1}`,
-      url: node.url || '',
-      title: normalizeText(node.title),
-      depth,
-      parentId: parent?.id || null,
-      tree,
-    });
-    (node.children || []).forEach((child) => visit(child, depth + 1, node, tree));
+    const page = isPageNode(node);
+    if (page) {
+      pages.push({
+        node,
+        id: node.id || node.url || `page-${pages.length + 1}`,
+        url: node.url || '',
+        title: normalizeText(node.title),
+        depth,
+        parentId: parent?.id || null,
+        tree,
+      });
+    }
+    const nextDepth = node.nodeKind === 'import-container' ? depth : depth + 1;
+    (node.children || []).forEach((child) => visit(child, nextDepth, page ? node : parent, tree));
   };
 
   visit(root, 0, null, 'root');
