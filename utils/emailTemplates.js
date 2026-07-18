@@ -1,3 +1,5 @@
+const { appSemantics, primitiveColors } = require('../scripts/design-system-source');
+
 const EMAIL_TEMPLATE_KEYS = Object.freeze({
   COLLABORATION_INVITE: 'collaboration.invite',
   COLLABORATION_ACCESS_REQUEST_CREATED: 'collaboration.access_request.created',
@@ -8,7 +10,23 @@ const EMAIL_TEMPLATE_KEYS = Object.freeze({
   AUTH_EMAIL_VERIFICATION: 'auth.email_verification',
   AUTH_PASSWORD_RESET: 'auth.password_reset',
   MARKETING_CONTACT: 'marketing.contact',
+  MARKETING_CONTACT_CONFIRMATION: 'marketing.contact.confirmation',
+  FEEDBACK_INTERNAL: 'feedback.submitted.internal',
+  FEEDBACK_CONFIRMATION: 'feedback.submitted.confirmation',
   PROMO_CODE_SHARED: 'promo_code.shared',
+});
+
+// Email clients require inline values. Resolve them from the shared Vellic
+// primitives so email markup cannot introduce an independent color palette.
+const VELLIC_EMAIL_THEME = Object.freeze({
+  background: primitiveColors.neutral['100'],
+  card: primitiveColors.neutral.white,
+  accentSoft: appSemantics.light['ui-color-accent-soft'],
+  text: primitiveColors.neutral['900'],
+  secondary: primitiveColors.neutral['600'],
+  action: primitiveColors.brand['700'],
+  onAction: primitiveColors.neutral.white,
+  border: primitiveColors.neutral['300'],
 });
 
 function normalizeBaseUrl(value) {
@@ -80,6 +98,74 @@ function formatInviterLabel({ inviterName, inviterEmail }) {
     || 'Someone';
 }
 
+function renderDetailRowsHtml(detailPairs = []) {
+  return detailPairs
+    .filter((pair) => pair && pair.label && pair.value !== null && pair.value !== undefined && String(pair.value).trim())
+    .map((pair) => `
+      <tr>
+        <td style="padding:8px 12px 8px 0;width:132px;color:${VELLIC_EMAIL_THEME.secondary};font-size:13px;line-height:20px;vertical-align:top;">${escapeHtml(pair.label)}</td>
+        <td style="padding:8px 0;color:${VELLIC_EMAIL_THEME.text};font-size:14px;line-height:20px;vertical-align:top;word-break:break-word;">${escapeHtml(pair.value)}</td>
+      </tr>`)
+    .join('');
+}
+
+function renderEmailShell({
+  heading,
+  preheader = '',
+  contentHtml = '',
+  footer = 'If you were not expecting this email, you can safely ignore it.',
+  appBaseUrl = getDefaultAppBaseUrl(),
+}) {
+  const normalizedAppBaseUrl = normalizeBaseUrl(appBaseUrl) || getDefaultAppBaseUrl();
+  const logoUrl = buildAppUrl(normalizedAppBaseUrl, '/vellic-logo.png');
+  const privacyUrl = buildAppUrl(normalizedAppBaseUrl, '/privacy');
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>${escapeHtml(heading)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:${VELLIC_EMAIL_THEME.background};">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader || heading)}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:${VELLIC_EMAIL_THEME.background};">
+      <tr><td align="center" style="padding:40px 16px;">
+        <table role="presentation" width="560" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:560px;background:${VELLIC_EMAIL_THEME.card};border:1px solid ${VELLIC_EMAIL_THEME.border};border-radius:12px;box-shadow:0 8px 24px rgba(15,23,42,.10);">
+          <tr><td style="padding:32px;font-family:'Sora',Arial,Helvetica,sans-serif;color:${VELLIC_EMAIL_THEME.text};">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+              <tr>
+                <td style="padding:0 0 20px;vertical-align:middle;">
+                  <img src="${escapeHtml(logoUrl)}" width="124" height="32" alt="Vellic" style="display:block;width:124px;height:32px;border:0;">
+                </td>
+              </tr>
+              <tr><td><h1 style="margin:0 0 20px;font-size:24px;font-weight:600;line-height:32px;color:${VELLIC_EMAIL_THEME.text};">${escapeHtml(heading)}</h1></td></tr>
+              <tr><td>${contentHtml}</td></tr>
+              <tr><td style="padding-top:24px;">
+                <div style="border-top:1px solid ${VELLIC_EMAIL_THEME.border};padding-top:12px;color:${VELLIC_EMAIL_THEME.secondary};font-size:13px;line-height:20px;">
+                  ${footer ? `<p style="margin:0 0 12px;">${escapeHtml(footer)}</p>` : ''}
+                  <p style="margin:0;">Vellic &middot; <a href="mailto:support@vellic.io" style="color:${VELLIC_EMAIL_THEME.secondary};">Support</a> &middot; <a href="${escapeHtml(privacyUrl)}" style="color:${VELLIC_EMAIL_THEME.secondary};">Privacy</a></p>
+                </div>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function renderCtaHtml({ url, label }) {
+  return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 0;"><tr><td bgcolor="${VELLIC_EMAIL_THEME.action}" style="border-radius:8px;"><a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 20px;color:${VELLIC_EMAIL_THEME.onAction};text-decoration:none;font-family:'Sora',Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;line-height:20px;">${escapeHtml(label)}</a></td></tr></table>`;
+}
+
+function renderMessageHtml(label, message) {
+  if (!message) return '';
+  return `<div style="margin-top:16px;padding:16px;background:${VELLIC_EMAIL_THEME.background};border:1px solid ${VELLIC_EMAIL_THEME.border};border-radius:8px;"><p style="margin:0 0 8px;color:${VELLIC_EMAIL_THEME.secondary};font-size:12px;font-weight:600;line-height:18px;text-transform:uppercase;">${escapeHtml(label)}</p><p style="margin:0;color:${VELLIC_EMAIL_THEME.text};font-size:14px;line-height:22px;white-space:pre-wrap;word-break:break-word;">${escapeHtml(message)}</p></div>`;
+}
+
 function renderActionEmail({
   subject,
   intro,
@@ -90,22 +176,10 @@ function renderActionEmail({
   actionLabel = 'Open Vellic',
   footer = 'If you were not expecting this email, you can safely ignore it.',
 }) {
-  const safeSubject = escapeHtml(subject);
-  const safeIntro = escapeHtml(intro);
-  const safeInstructions = instructions ? escapeHtml(instructions) : null;
-  const safeAppBaseUrl = escapeHtml(appBaseUrl);
-  const safeActionUrl = escapeHtml(actionUrl || appBaseUrl);
-  const safeActionLabel = escapeHtml(actionLabel);
-  const safeFooter = footer ? escapeHtml(footer) : null;
-  const safePairs = detailPairs
-    .filter((pair) => pair && pair.label && pair.value)
-    .map((pair) => ({
-      label: escapeHtml(pair.label),
-      value: escapeHtml(pair.value),
-    }));
+  const normalizedPairs = detailPairs.filter((pair) => pair && pair.label && pair.value);
 
   const textLines = [intro];
-  safePairs.forEach((pair) => {
+  normalizedPairs.forEach((pair) => {
     textLines.push(`${pair.label}: ${pair.value}`);
   });
   if (instructions) {
@@ -118,18 +192,17 @@ function renderActionEmail({
     textLines.push(footer);
   }
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2937; line-height: 1.5;">
-      <h1 style="font-size: 22px; margin-bottom: 16px;">${safeSubject}</h1>
-      <p style="margin: 0 0 12px;">${safeIntro}</p>
-      ${safePairs.map((pair) => `<p style="margin: 0 0 8px;"><strong>${pair.label}:</strong> ${pair.value}</p>`).join('')}
-      ${safeInstructions ? `<p style="margin: 12px 0 16px;">${safeInstructions}</p>` : ''}
-      <p style="margin: 0 0 20px;">
-        <a href="${safeActionUrl}" style="display: inline-block; padding: 10px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px;">${safeActionLabel}</a>
-      </p>
-      ${safeFooter ? `<p style="margin: 0; color: #6b7280; font-size: 14px;">${safeFooter}</p>` : ''}
-    </div>
-  `.trim();
+  const html = renderEmailShell({
+    heading: subject,
+    preheader: intro,
+    appBaseUrl,
+    footer,
+    contentHtml: `
+      <p style="margin:0 0 12px;font-size:16px;line-height:24px;">${escapeHtml(intro)}</p>
+      ${normalizedPairs.length ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:8px;">${renderDetailRowsHtml(normalizedPairs)}</table>` : ''}
+      ${instructions ? `<p style="margin:16px 0 0;color:${VELLIC_EMAIL_THEME.secondary};font-size:16px;line-height:24px;">${escapeHtml(instructions)}</p>` : ''}
+      ${renderCtaHtml({ url: actionUrl || appBaseUrl, label: actionLabel })}`,
+  });
 
   return {
     subject,
@@ -147,16 +220,10 @@ function renderCodeEmail({
   footer = 'If you were not expecting this email, you can safely ignore it.',
   appBaseUrl = getDefaultAppBaseUrl(),
 }) {
-  const safeSubject = escapeHtml(subject);
-  const safeIntro = escapeHtml(intro);
   const safeCode = escapeHtml(String(code || '').trim());
-  const safeInstructions = escapeHtml(instructions);
-  const safeFooter = footer ? escapeHtml(footer) : null;
   const expiryLabel = Number.isFinite(Number(expiresMinutes)) && Number(expiresMinutes) > 0
     ? `This code expires in ${Number(expiresMinutes)} minutes.`
     : null;
-  const safeExpiryLabel = expiryLabel ? escapeHtml(expiryLabel) : null;
-  const safeAppBaseUrl = escapeHtml(appBaseUrl);
 
   const textLines = [
     intro,
@@ -170,7 +237,7 @@ function renderCodeEmail({
 
   textLines.push('');
   textLines.push(instructions);
-  textLines.push(safeAppBaseUrl);
+  textLines.push(appBaseUrl);
 
   if (footer) {
     textLines.push('');
@@ -180,22 +247,21 @@ function renderCodeEmail({
   return {
     subject,
     text: textLines.join('\n'),
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2937; line-height: 1.5;">
-        <h1 style="font-size: 22px; margin-bottom: 16px;">${safeSubject}</h1>
-        <p style="margin: 0 0 12px;">${safeIntro}</p>
-        <div style="margin: 20px 0; padding: 20px; border-radius: 12px; background: #f3f4f6; border: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-bottom: 8px;">Verification code</div>
-          <div style="font-size: 34px; font-weight: 700; letter-spacing: 0.28em; color: #111827;">${safeCode}</div>
+    html: renderEmailShell({
+      heading: subject,
+      preheader: intro,
+      appBaseUrl,
+      footer,
+      contentHtml: `
+        <p style="margin:0 0 20px;font-size:16px;line-height:24px;">${escapeHtml(intro)}</p>
+        <div style="padding:24px;background:${VELLIC_EMAIL_THEME.accentSoft};border-radius:12px;text-align:center;">
+          <div style="margin-bottom:8px;color:${VELLIC_EMAIL_THEME.secondary};font-size:12px;font-weight:600;line-height:18px;text-transform:uppercase;">Verification code</div>
+          <div style="color:${VELLIC_EMAIL_THEME.text};font-size:32px;font-weight:700;line-height:40px;letter-spacing:.18em;">${safeCode}</div>
+          ${expiryLabel ? `<div style="margin-top:8px;color:${VELLIC_EMAIL_THEME.secondary};font-size:13px;line-height:20px;">${escapeHtml(expiryLabel)}</div>` : ''}
         </div>
-        ${safeExpiryLabel ? `<p style="margin: 0 0 8px; color: #6b7280;">${safeExpiryLabel}</p>` : ''}
-        <p style="margin: 0 0 16px;">${safeInstructions}</p>
-        <p style="margin: 0 0 20px;">
-          <a href="${safeAppBaseUrl}" style="display: inline-block; padding: 10px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px;">Open Vellic</a>
-        </p>
-        ${safeFooter ? `<p style="margin: 0; color: #6b7280; font-size: 14px;">${safeFooter}</p>` : ''}
-      </div>
-    `.trim(),
+        <p style="margin:20px 0 0;color:${VELLIC_EMAIL_THEME.secondary};font-size:16px;line-height:24px;">${escapeHtml(instructions)}</p>
+        ${renderCtaHtml({ url: appBaseUrl, label: 'Open Vellic' })}`,
+    }),
   };
 }
 
@@ -394,29 +460,181 @@ function renderMarketingContactEmail(payload = {}) {
     message,
   ];
 
-  const safeSubject = escapeHtml(subject);
-  const safeIntro = escapeHtml(`${name} submitted the ${targetLabel} contact form.`);
-  const safePairs = detailPairs.map((pair) => ({
-    label: escapeHtml(pair.label),
-    value: escapeHtml(pair.value),
-  }));
-  const safeMessage = escapeHtml(message);
-
   return {
     subject,
     text: textLines.join('\n'),
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2937; line-height: 1.5;">
-        <h1 style="font-size: 22px; margin-bottom: 16px;">${safeSubject}</h1>
-        <p style="margin: 0 0 12px;">${safeIntro}</p>
-        ${safePairs.map((pair) => `<p style="margin: 0 0 8px;"><strong>${pair.label}:</strong> ${pair.value}</p>`).join('')}
-        <div style="margin: 16px 0 0; padding: 16px; border-radius: 8px; background: #f9fafb; border: 1px solid #e5e7eb;">
-          <p style="margin: 0 0 8px;"><strong>Message:</strong></p>
-          <p style="margin: 0; white-space: pre-wrap;">${safeMessage}</p>
-        </div>
-        <p style="margin: 16px 0 0; color: #6b7280; font-size: 14px;">Reply directly to this email to follow up.</p>
-      </div>
-    `.trim(),
+    html: renderEmailShell({
+      heading: subject,
+      preheader: `${name} submitted the ${targetLabel} contact form.`,
+      contentHtml: `
+        <p style="margin:0 0 12px;font-size:16px;line-height:24px;">${escapeHtml(`${name} submitted the ${targetLabel} contact form.`)}</p>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${renderDetailRowsHtml(detailPairs)}</table>
+        ${renderMessageHtml('Message', message)}
+        <p style="margin:16px 0 0;color:${VELLIC_EMAIL_THEME.secondary};font-size:13px;line-height:20px;">Reply directly to this email to follow up.</p>`,
+      footer: `This message was submitted through the Vellic ${targetKey === 'support' ? 'support' : 'contact'} form.`,
+    }),
+  };
+}
+
+function renderMarketingContactConfirmationEmail(payload = {}) {
+  const targetKey = String(payload.targetKey || '').trim().toLowerCase() === 'support'
+    ? 'support'
+    : 'inquiries';
+  const name = trimText(payload.name, 120);
+  const reason = trimText(payload.reason, 120) || 'your message';
+  const heading = targetKey === 'support'
+    ? 'We received your support request'
+    : 'Thanks for contacting Vellic';
+  const intro = targetKey === 'support'
+    ? `${name ? `${name}, w` : 'W'}e received your support request and will look into it.`
+    : `${name ? `${name}, t` : 'T'}hanks for reaching out. Your message is with the Vellic team.`;
+  const detailPairs = [{ label: 'Topic', value: reason }];
+  const text = [intro, `Topic: ${reason}`, '', 'You can reply to this email if you need to add context.'].join('\n');
+
+  return {
+    subject: heading,
+    text,
+    html: renderEmailShell({
+      heading,
+      preheader: intro,
+      contentHtml: `
+        <p style="margin:0 0 12px;font-size:16px;line-height:24px;">${escapeHtml(intro)}</p>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${renderDetailRowsHtml(detailPairs)}</table>
+        <p style="margin:16px 0 0;color:${VELLIC_EMAIL_THEME.secondary};font-size:16px;line-height:24px;">You can reply to this email if you need to add context.</p>`,
+      footer: 'This confirmation was sent because this address was entered in a Vellic contact form.',
+    }),
+  };
+}
+
+const FEEDBACK_INTENT_COPY = Object.freeze({
+  broken: {
+    heading: 'Something appears to be broken.',
+    confirmationHeading: 'We’ll look into this',
+    confirmationBody: 'Thanks for the report. We’ll review what happened and look into what broke.',
+  },
+  confusing: {
+    heading: 'A user found something confusing.',
+    confirmationHeading: 'Thanks for flagging this',
+    confirmationBody: 'We’ll review what felt unclear and use your feedback to make Vellic easier to understand.',
+  },
+  idea: {
+    heading: 'A user shared an idea.',
+    confirmationHeading: 'Thanks for the idea',
+    confirmationBody: 'Your idea is now with the Vellic team for review.',
+  },
+  like: {
+    heading: 'A user shared something they liked.',
+    confirmationHeading: 'Glad to hear it',
+    confirmationBody: 'Thanks for telling us what worked well for you.',
+  },
+  dislike: {
+    heading: 'A user shared something they disliked.',
+    confirmationHeading: 'Thanks for being direct',
+    confirmationBody: 'We’ll review what did not work well for you.',
+  },
+});
+
+const FEEDBACK_SCOPE_COPY = Object.freeze({
+  whole_app: { label: 'Whole app', body: 'This feedback applies across the Vellic app.' },
+  flow: { label: 'This flow', body: 'This feedback applies to the flow the user was completing.' },
+  specific_thing: { label: 'Specific thing', body: 'This feedback applies to a specific component or element.' },
+});
+
+function normalizeFeedbackPayload(payload = {}) {
+  const intent = FEEDBACK_INTENT_COPY[payload.intent] ? payload.intent : 'idea';
+  const scope = FEEDBACK_SCOPE_COPY[payload.scope] ? payload.scope : 'whole_app';
+  const contextValue = payload.context && typeof payload.context === 'object'
+    ? JSON.stringify(payload.context)
+    : payload.context;
+  return {
+    intent,
+    scope,
+    intentCopy: FEEDBACK_INTENT_COPY[intent],
+    scopeCopy: FEEDBACK_SCOPE_COPY[scope],
+    actorName: trimText(payload.actorName || payload.actor_name, 120) || 'Anonymous',
+    actorEmail: trimText(payload.actorEmail || payload.actor_email, 240),
+    rating: Number.isFinite(Number(payload.rating)) ? String(Number(payload.rating)) : null,
+    message: trimText(payload.message, 4000),
+    surface: trimText(payload.surface, 160),
+    routePath: trimText(payload.routePath || payload.route_path, 500),
+    routeSection: trimText(payload.routeSection || payload.route_section, 240),
+    mapId: trimText(payload.mapId || payload.map_id, 160),
+    shareId: trimText(payload.shareId || payload.share_id, 160),
+    component: trimText(payload.componentLabel || payload.component_label || payload.componentKey || payload.component_key, 240),
+    screenshotUrl: trimText(payload.screenshotUrl || payload.screenshot_url || payload.screenshotPath || payload.screenshot_path, 1000),
+    context: trimText(contextValue, 1000),
+    allowFollowUp: Boolean(payload.allowFollowUp ?? payload.allow_follow_up),
+    submittedAt: formatDateLabel(payload.submittedAt || payload.submitted_at || payload.createdAt || payload.created_at),
+  };
+}
+
+function renderFeedbackInternalEmail(payload = {}) {
+  const feedback = normalizeFeedbackPayload(payload);
+  const detailPairs = [
+    { label: 'Intent', value: feedback.intent },
+    { label: 'Scope', value: feedback.scopeCopy.label },
+    { label: 'Scope context', value: feedback.scopeCopy.body },
+    feedback.rating ? { label: 'Satisfaction', value: `${feedback.rating} / 5` } : null,
+    feedback.surface ? { label: 'Surface', value: feedback.surface } : null,
+    feedback.routePath ? { label: 'Route', value: feedback.routePath } : null,
+    feedback.routeSection ? { label: 'Route section', value: feedback.routeSection } : null,
+    feedback.mapId ? { label: 'Map', value: feedback.mapId } : null,
+    feedback.shareId ? { label: 'Share', value: feedback.shareId } : null,
+    feedback.component ? { label: 'Selected component', value: feedback.component } : null,
+    feedback.screenshotUrl ? { label: 'Screenshot', value: feedback.screenshotUrl } : null,
+    feedback.context ? { label: 'Additional context', value: feedback.context } : null,
+    { label: 'Submitted by', value: feedback.actorName },
+    feedback.actorEmail ? { label: 'Contact', value: feedback.actorEmail } : null,
+    { label: 'Follow-up', value: feedback.allowFollowUp && feedback.actorEmail ? 'Allowed — reply to this email' : 'Not permitted' },
+    feedback.submittedAt ? { label: 'Submitted', value: feedback.submittedAt } : null,
+  ].filter(Boolean);
+  const textLines = [
+    feedback.intentCopy.heading,
+    feedback.scopeCopy.body,
+    ...detailPairs.map((pair) => `${pair.label}: ${pair.value}`),
+  ];
+  if (feedback.message) textLines.push('', 'Message:', feedback.message);
+
+  return {
+    subject: `Vellic feedback: ${feedback.intentCopy.heading}`,
+    text: textLines.join('\n'),
+    html: renderEmailShell({
+      heading: feedback.intentCopy.heading,
+      preheader: feedback.scopeCopy.body,
+      contentHtml: `
+        <div style="margin-bottom:16px;padding:16px;background:${VELLIC_EMAIL_THEME.accentSoft};border-radius:12px;color:${VELLIC_EMAIL_THEME.text};font-size:14px;line-height:22px;">${escapeHtml(feedback.scopeCopy.body)}</div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${renderDetailRowsHtml(detailPairs)}</table>
+        ${renderMessageHtml('Feedback message', feedback.message)}`,
+      footer: 'This internal alert was created from the Vellic Feedback tab.',
+    }),
+  };
+}
+
+function renderFeedbackConfirmationEmail(payload = {}) {
+  const feedback = normalizeFeedbackPayload(payload);
+  const detailPairs = [
+    { label: 'Feedback type', value: feedback.intent },
+    { label: 'Scope', value: feedback.scopeCopy.label },
+  ];
+  const text = [
+    feedback.intentCopy.confirmationBody,
+    ...detailPairs.map((pair) => `${pair.label}: ${pair.value}`),
+    '',
+    'Because you allowed follow-up, the Vellic team may reply to this address.',
+  ].join('\n');
+
+  return {
+    subject: feedback.intentCopy.confirmationHeading,
+    text,
+    html: renderEmailShell({
+      heading: feedback.intentCopy.confirmationHeading,
+      preheader: feedback.intentCopy.confirmationBody,
+      contentHtml: `
+        <p style="margin:0 0 12px;font-size:16px;line-height:24px;">${escapeHtml(feedback.intentCopy.confirmationBody)}</p>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${renderDetailRowsHtml(detailPairs)}</table>
+        <p style="margin:16px 0 0;color:${VELLIC_EMAIL_THEME.secondary};font-size:13px;line-height:20px;">Because you allowed follow-up, the Vellic team may reply to this address.</p>`,
+      footer: 'This confirmation was sent because you allowed follow-up on feedback submitted to Vellic.',
+    }),
   };
 }
 
@@ -482,6 +700,12 @@ function renderTemplatedEmail({ templateKey, payload }) {
       return renderAuthPasswordResetEmail(payload);
     case EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT:
       return renderMarketingContactEmail(payload);
+    case EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT_CONFIRMATION:
+      return renderMarketingContactConfirmationEmail(payload);
+    case EMAIL_TEMPLATE_KEYS.FEEDBACK_INTERNAL:
+      return renderFeedbackInternalEmail(payload);
+    case EMAIL_TEMPLATE_KEYS.FEEDBACK_CONFIRMATION:
+      return renderFeedbackConfirmationEmail(payload);
     case EMAIL_TEMPLATE_KEYS.PROMO_CODE_SHARED:
       return renderPromoCodeSharedEmail(payload);
     default:

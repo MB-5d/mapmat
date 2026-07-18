@@ -12,6 +12,7 @@ const emailDeliveryStore = require('../stores/emailDeliveryStore');
 const {
   JOB_TYPES,
   processEmailDeliveryJobAsync,
+  queueFeedbackSubmissionEmailsAsync,
   queueTemplatedEmailAsync,
 } = require('../utils/emailDelivery');
 const { EMAIL_TEMPLATE_KEYS } = require('../utils/emailTemplates');
@@ -107,6 +108,35 @@ async function main() {
       },
     },
     {
+      templateKey: EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT_CONFIRMATION,
+      payload: {
+        targetKey: 'support',
+        name: 'QA Contact',
+        reason: 'Delivery check',
+      },
+    },
+    {
+      templateKey: EMAIL_TEMPLATE_KEYS.FEEDBACK_INTERNAL,
+      payload: {
+        intent: 'broken',
+        scope: 'specific_thing',
+        actorName: 'QA Feedback User',
+        actorEmail: 'qa-feedback@example.com',
+        message: 'The share selector did not update.',
+        componentLabel: 'Share access selector',
+        screenshotUrl: 'https://api.vellic.io/uploads/feedback/qa.png',
+        allowFollowUp: true,
+      },
+    },
+    {
+      templateKey: EMAIL_TEMPLATE_KEYS.FEEDBACK_CONFIRMATION,
+      payload: {
+        intent: 'idea',
+        scope: 'whole_app',
+        allowFollowUp: true,
+      },
+    },
+    {
       templateKey: EMAIL_TEMPLATE_KEYS.PROMO_CODE_SHARED,
       payload: {
         offerLabel: 'Pro free month',
@@ -156,6 +186,53 @@ async function main() {
       provider: delivery.provider || null,
       resultStatus: deliveryResult.status || null,
     });
+  }
+
+  const anonymousFeedback = await queueFeedbackSubmissionEmailsAsync({
+    feedback: {
+      id: 'feedback-email-check-anonymous',
+      intent: 'confusing',
+      scope: 'whole_app',
+      actor_name: 'Anonymous',
+      actor_email: null,
+      allow_follow_up: 0,
+      created_at: new Date().toISOString(),
+    },
+  });
+  if (anonymousFeedback.length !== 1 || anonymousFeedback[0].status !== 'fulfilled') {
+    throw new Error('Anonymous feedback should queue only the internal notification.');
+  }
+  const anonymousDelivery = anonymousFeedback[0].value.delivery;
+  const anonymousJob = await jobStore.getJobByIdAsync(anonymousFeedback[0].value.jobId);
+  if (anonymousDelivery.to_email !== 'support@vellic.io' || anonymousDelivery.reply_to_email) {
+    throw new Error('Anonymous confusing feedback must route to support without Reply-To.');
+  }
+  if (!JSON.parse(anonymousJob.payload).suppressDefaultReplyTo) {
+    throw new Error('Anonymous feedback must suppress the default Reply-To header.');
+  }
+  await processEmailDeliveryJobAsync(anonymousJob);
+
+  const followUpFeedback = await queueFeedbackSubmissionEmailsAsync({
+    feedback: {
+      id: 'feedback-email-check-follow-up',
+      intent: 'idea',
+      scope: 'flow',
+      actor_name: 'QA Feedback User',
+      actor_email: 'qa-feedback@example.com',
+      allow_follow_up: 1,
+      created_at: new Date().toISOString(),
+    },
+  });
+  if (followUpFeedback.length !== 2 || followUpFeedback.some((entry) => entry.status !== 'fulfilled')) {
+    throw new Error('Follow-up feedback should queue internal and confirmation emails.');
+  }
+  const followUpInternal = followUpFeedback.find((entry) => entry.kind === 'internal').value;
+  if (followUpInternal.delivery.to_email !== 'hello@vellic.io'
+    || followUpInternal.delivery.reply_to_email !== 'qa-feedback@example.com') {
+    throw new Error('Idea feedback with permission must route to hello with submitter Reply-To.');
+  }
+  for (const entry of followUpFeedback) {
+    await processEmailDeliveryJobAsync(await jobStore.getJobByIdAsync(entry.value.jobId));
   }
 
   const recentDeliveries = await emailDeliveryStore.listEmailDeliveriesAsync({}, {

@@ -33,6 +33,7 @@ const {
 const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
 const { buildHealthSnapshot: getEmailHealthSnapshot, sendEmailAsync } = require('../utils/emailProvider');
 const { EMAIL_TEMPLATE_KEYS, renderTemplatedEmail } = require('../utils/emailTemplates');
+const { queueFeedbackSubmissionEmailsAsync, queueTemplatedEmailAsync } = require('../utils/emailDelivery');
 const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
 const { MAP_INSIGHTS_VERSION, analyzeMapInsights } = require('../utils/mapInsights');
 const { recordUsageEvent } = require('../utils/usageMetering');
@@ -1872,6 +1873,21 @@ router.post('/contact', async (req, res) => {
       return res.status(503).json({ error: 'Email delivery is not configured.' });
     }
 
+    try {
+      await queueTemplatedEmailAsync({
+        templateKey: EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT_CONFIRMATION,
+        toEmail: email,
+        payload: {
+          targetKey,
+          name,
+          reason,
+          appBaseUrl: process.env.APP_BASE_URL || undefined,
+        },
+      });
+    } catch (error) {
+      console.error('Marketing contact confirmation queue error:', error);
+    }
+
     return res.status(201).json({
       ok: true,
       contact: {
@@ -1985,6 +2001,18 @@ router.post('/feedback', async (req, res) => {
     });
 
     const refreshed = await feedbackStore.getFeedbackItemByIdAsync(created.id);
+    const screenshotUrl = refreshed?.screenshot_path
+      ? new URL(refreshed.screenshot_path, `${getNodeAssetUploadBaseUrl(req)}/`).toString()
+      : null;
+    const feedbackEmailResults = await queueFeedbackSubmissionEmailsAsync({
+      feedback: refreshed,
+      screenshotUrl,
+    });
+    feedbackEmailResults
+      .filter((result) => result.status === 'rejected')
+      .forEach((result) => {
+        console.error(`Feedback ${result.kind} email queue error:`, result.error);
+      });
     return res.status(201).json({
       feedback: serializeFeedbackItem(refreshed),
     });
