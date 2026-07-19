@@ -86,7 +86,8 @@ Start from:
 Use these as the intended staging values:
 
 ```env
-FRONTEND_URL=https://staging.vellic.io
+FRONTEND_URL=https://app-staging.vellic.io,https://staging.vellic.io
+APP_BASE_URL=https://app-staging.vellic.io
 ALLOW_VERCEL_PREVIEWS=true
 NODE_ENV=production
 DB_PROVIDER=postgres

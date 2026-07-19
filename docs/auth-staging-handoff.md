@@ -55,7 +55,8 @@ Important limits / caveats:
 - Stay tightly focused on auth/staging/domain/email/OAuth setup.
 
 Staging context from earlier work:
-- Existing default staging frontend URL in repo docs/examples: https://staging.vellic.io
+- Staging marketing URL: https://staging.vellic.io
+- Staging app URL: https://app-staging.vellic.io
 - Existing default staging backend URL in repo docs/examples: https://api-staging.vellic.io
 - Google OAuth may require owned/verified domains, so if needed we should prefer my newly purchased domain over the default vercel.app / railway.app staging domains.
 - .env.staging.example and frontend/.env.staging.example were already updated with the new auth-related placeholders.

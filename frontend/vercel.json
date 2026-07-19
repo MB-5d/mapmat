@@ -10,7 +10,7 @@
       "has": [
         {
           "type": "host",
-          "value": "^(staging\\.vellic\\.io|mapmat-staging\\.vercel\\.app|.*\\.vercel\\.app)$"
+          "value": "^(app-staging\\.vellic\\.io|mapmat-staging\\.vercel\\.app|.*\\.vercel\\.app)$"
         }
       ],
       "headers": [
@@ -28,7 +28,7 @@
         {
           "type": "header",
           "key": "host",
-          "value": "^app\\.vellic\\.io$"
+          "value": "^(app\\.vellic\\.io|app-staging\\.vellic\\.io)$"
         }
       ],
       "destination": "/app",

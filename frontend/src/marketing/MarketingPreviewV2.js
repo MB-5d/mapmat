@@ -631,7 +631,7 @@ const exampleCards = [
     mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleRaycastImage,
     alt: 'Vellic canvas showing a large visual sitemap audit with thousands of page cards and top-of-page screenshots',
-    linkUrl: 'https://staging.vellic.io/share/wd5bpg',
+    linkUrl: 'https://app-staging.vellic.io/share/wd5bpg',
   },
   {
     title: 'Medium site audit',
@@ -639,7 +639,7 @@ const exampleCards = [
     mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleAnthropicImage,
     alt: 'Vellic canvas showing a medium website audit with subdomains, orphan pages, and full-page screenshots',
-    linkUrl: 'https://staging.vellic.io/share/amh6jd',
+    linkUrl: 'https://app-staging.vellic.io/share/amh6jd',
   },
 ];
 

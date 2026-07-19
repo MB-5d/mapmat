@@ -5,7 +5,7 @@
 const tls = require('tls');
 
 const DEFAULT_API_BASE = 'https://api-staging.vellic.io';
-const DEFAULT_FRONTEND_ORIGIN = 'https://staging.vellic.io';
+const DEFAULT_FRONTEND_ORIGIN = 'https://app-staging.vellic.io';
 const API_BASE = normalizeBaseUrl(process.env.STAGING_API_BASE || process.env.API_BASE || DEFAULT_API_BASE);
 const FRONTEND_ORIGIN = normalizeOrigin(
   process.env.STAGING_FRONTEND_ORIGIN || process.env.FRONTEND_ORIGIN || DEFAULT_FRONTEND_ORIGIN

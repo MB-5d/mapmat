@@ -253,7 +253,8 @@ describe('MarketingPreviewV2', () => {
     const hostMatcher = new RegExp(hostCondition.value);
 
     expect(robotsRule.headers).toContainEqual({ key: 'X-Robots-Tag', value: 'noindex, nofollow' });
-    expect(hostMatcher.test('staging.vellic.io')).toBe(true);
+    expect(hostMatcher.test('app-staging.vellic.io')).toBe(true);
+    expect(hostMatcher.test('staging.vellic.io')).toBe(false);
     expect(hostMatcher.test('mapmat-staging.vercel.app')).toBe(true);
     expect(hostMatcher.test('preview-123.vercel.app')).toBe(true);
     expect(hostMatcher.test('vellic.io')).toBe(false);
@@ -511,8 +512,8 @@ describe('MarketingPreviewV2', () => {
       exampleButtons[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
 
-    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/wd5bpg', { target: '_blank' });
-    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/amh6jd', { target: '_blank' });
+    expect(openApp).toHaveBeenCalledWith('https://app-staging.vellic.io/share/wd5bpg', { target: '_blank' });
+    expect(openApp).toHaveBeenCalledWith('https://app-staging.vellic.io/share/amh6jd', { target: '_blank' });
   });
 
   test('renders public pricing plans without the internal Solo plan', () => {

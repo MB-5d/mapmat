@@ -4,11 +4,13 @@ Use this after staging auth passes.
 
 ## Final URLs
 
-- Main app: `https://vellic.io`
+- Marketing site: `https://vellic.io`
+- Main app: `https://app.vellic.io`
 - API: `https://api.vellic.io`
 - Optional website redirect: `https://www.vellic.io` -> `https://vellic.io`
 - Staging stays separate:
   - `https://staging.vellic.io`
+  - `https://app-staging.vellic.io`
   - `https://api-staging.vellic.io`
 
 ## Railway Production Env
@@ -16,8 +18,8 @@ Use this after staging auth passes.
 Set these on the production backend service:
 
 ```env
-FRONTEND_URL=https://vellic.io
-APP_BASE_URL=https://vellic.io
+FRONTEND_URL=https://app.vellic.io,https://vellic.io
+APP_BASE_URL=https://app.vellic.io
 NODE_ENV=production
 DB_PROVIDER=postgres
 DATABASE_URL=<Railway production Postgres URL>
@@ -66,8 +68,8 @@ REACT_APP_SCREENSHOT_JOB_PIPELINE_ENABLED=true
 In the OAuth web client:
 
 - Authorized JavaScript origins:
-  - `https://vellic.io`
-  - `https://staging.vellic.io`
+  - `https://app.vellic.io`
+  - `https://app-staging.vellic.io`
 - Authorized redirect URIs:
   - `https://api.vellic.io/auth/google/callback`
   - `https://api-staging.vellic.io/auth/google/callback`

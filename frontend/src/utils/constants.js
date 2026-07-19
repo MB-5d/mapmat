@@ -5,8 +5,8 @@ export const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002
 const getDefaultAppOrigin = () => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    if (hostname === 'staging.vellic.io' || hostname === 'mapmat-staging.vercel.app') {
-      return 'https://staging.vellic.io';
+    if (hostname === 'app-staging.vellic.io' || hostname === 'mapmat-staging.vercel.app') {
+      return 'https://app-staging.vellic.io';
     }
   }
   return 'https://app.vellic.io';
