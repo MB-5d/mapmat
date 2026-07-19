@@ -10705,17 +10705,24 @@ body {
 .plans-modal-pricing-card__cta.ui-btn,
 .plans-modal-pricing-card__current {
   width: 100%;
-  min-height: 32px;
+  height: var(--unit-40);
+  min-height: var(--unit-40);
 }
 
 .plans-modal-pricing-card__current {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0 16px;
   border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
+  background: var(--ui-input-disabled-bg);
   color: var(--ui-color-muted);
-  font-weight: 800;
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  line-height: var(--type-button-md-line-height);
+  letter-spacing: var(--type-button-md-letter-spacing);
+  white-space: nowrap;
 }
 
 .plans-modal-pricing-card__screenshot-note {

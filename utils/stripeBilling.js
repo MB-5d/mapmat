@@ -1149,6 +1149,15 @@ function getSubscriptionPrice(subscription) {
   };
 }
 
+function getSubscriptionPlanItem(subscription) {
+  const items = Array.isArray(subscription?.items?.data) ? subscription.items.data : [];
+  return items.find((item) => getPlanPriceConfigByStripePrice(item?.price?.id)) || null;
+}
+
+function isActiveStripeSubscriptionStatus(status) {
+  return ['active', 'trialing', 'past_due', 'unpaid'].includes(String(status || '').trim().toLowerCase());
+}
+
 function getRecurringAddOnGrantEntries({ addOn, item, subscription, account }) {
   const entitlements = addOn?.entitlements || {};
   const itemQuantity = Math.max(0, Math.floor(Number(item?.quantity || 0)));
@@ -1299,8 +1308,21 @@ async function createPlanCheckoutSessionAsync({
   const extraEditorAddOn = safeExtraEditorQuantity > 0
     ? getRecurringAddOnPriceConfig('extra_editor', plan.billingCycle)
     : null;
-  if (account?.stripe_subscription_id && ['active', 'trialing', 'past_due', 'unpaid'].includes(String(account.stripe_subscription_status || '').toLowerCase())) {
-    throw new BillingError('Use the billing portal to change this subscription.', 409, 'BILLING_PORTAL_REQUIRED');
+  if (account?.stripe_subscription_id && isActiveStripeSubscriptionStatus(account.stripe_subscription_status)) {
+    if (safeExtraEditorQuantity > 0) {
+      throw new BillingError(
+        'Change your plan first, then add extra editors after the plan update is complete.',
+        409,
+        'BILLING_SUBSCRIPTION_UPDATE_LIMITED'
+      );
+    }
+    return createPlanChangePortalSessionAsync({
+      user,
+      account,
+      plan,
+      returnPath,
+      stripeClient: stripe,
+    });
   }
   const customerId = await getOrCreateStripeCustomerAsync({ stripe, account, user });
   const lineItems = [{ price: plan.priceId, quantity: 1 }];
@@ -1411,9 +1433,22 @@ async function createBundleCheckoutSessionAsync({
   if (
     plan
     && account?.stripe_subscription_id
-    && ['active', 'trialing', 'past_due', 'unpaid'].includes(String(account.stripe_subscription_status || '').toLowerCase())
+    && isActiveStripeSubscriptionStatus(account.stripe_subscription_status)
   ) {
-    throw new BillingError('Use the billing portal to change this subscription.', 409, 'BILLING_PORTAL_REQUIRED');
+    if (normalizedAddOns.length === 0) {
+      return createPlanChangePortalSessionAsync({
+        user,
+        account,
+        plan,
+        returnPath,
+        stripeClient: stripe,
+      });
+    }
+    throw new BillingError(
+      'Change your plan first, then buy credit packs after the plan update is complete.',
+      409,
+      'BILLING_SUBSCRIPTION_UPDATE_LIMITED'
+    );
   }
   const customerId = await getOrCreateStripeCustomerAsync({ stripe, account, user });
   const hasSubscriptionAddOns = normalizedAddOns.some(({ addOn }) => (
@@ -1470,6 +1505,60 @@ async function createPortalSessionAsync({ user, account, returnPath = '/app' }) 
   const payload = {
     customer: customerId,
     return_url: buildReturnUrl(returnPath, 'portal_return'),
+  };
+  if (portalConfigurationId) payload.configuration = portalConfigurationId;
+  return stripe.billingPortal.sessions.create(payload);
+}
+
+async function createPlanChangePortalSessionAsync({
+  user,
+  account,
+  plan,
+  returnPath = '/app',
+  stripeClient: providedStripeClient = null,
+}) {
+  const stripe = providedStripeClient || getStripeClient();
+  const subscriptionId = normalizeText(account?.stripe_subscription_id);
+  if (!subscriptionId) {
+    throw new BillingError('No active subscription is available for this plan change.', 404, 'BILLING_SUBSCRIPTION_NOT_FOUND');
+  }
+
+  const customerId = await getOrCreateStripeCustomerAsync({ stripe, account, user });
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const planItem = getSubscriptionPlanItem(subscription);
+  if (!planItem?.id) {
+    throw new BillingError(
+      'Stripe could not find the current plan item for this subscription.',
+      409,
+      'BILLING_SUBSCRIPTION_PLAN_ITEM_NOT_FOUND'
+    );
+  }
+  if (planItem.price?.id === plan.priceId) {
+    throw new BillingError('This subscription is already on the selected plan.', 409, 'BILLING_PLAN_ALREADY_ACTIVE');
+  }
+
+  const stripeConfig = getStripeConfig();
+  const portalConfigurationId = resolveConfiguredPrice(stripeConfig.portalConfigurationEnv);
+  const payload = {
+    customer: customerId,
+    return_url: buildReturnUrl(returnPath, 'portal_return'),
+    flow_data: {
+      type: 'subscription_update_confirm',
+      after_completion: {
+        type: 'redirect',
+        redirect: {
+          return_url: buildReturnUrl(returnPath, 'success'),
+        },
+      },
+      subscription_update_confirm: {
+        subscription: subscriptionId,
+        items: [{
+          id: planItem.id,
+          price: plan.priceId,
+          quantity: 1,
+        }],
+      },
+    },
   };
   if (portalConfigurationId) payload.configuration = portalConfigurationId;
   return stripe.billingPortal.sessions.create(payload);
