@@ -758,7 +758,7 @@ router.post('/maps/:id/access-requests', async (req, res) => {
       mapId: id,
       requesterUserId: req.user.id,
       requestedRole,
-      message: String(message || '').trim().slice(0, 1000) || null,
+      message: String(message || '').trim().slice(0, 200) || null,
     });
 
     await recordMapActivityBestEffortAsync({
@@ -1226,9 +1226,10 @@ router.get('/collaboration/access-requests', async (req, res) => {
 
 // POST /api/collaboration/invites/:inviteId/accept - accept invite from inbox
 router.post('/collaboration/invites/id/:inviteId/accept', async (req, res) => {
+  let invite = null;
   try {
     const { inviteId } = req.params;
-    const invite = await collaborationStore.getInviteByIdAsync(inviteId);
+    invite = await collaborationStore.getInviteByIdAsync(inviteId);
     const { invite: acceptedInvite, membership } = await acceptInviteForUserAsync(invite, req.user);
     recordUsageEvent(req, 'invite_accepted', 1, {
       mapId: acceptedInvite.map_id,
@@ -1244,7 +1245,10 @@ router.post('/collaboration/invites/id/:inviteId/accept', async (req, res) => {
     });
   } catch (error) {
     if (error?.status) {
-      return res.status(error.status).json({ error: error.message });
+      return res.status(error.status).json({
+        error: error.message,
+        invite: serializeInvite(invite),
+      });
     }
     console.error('Accept invite by id error:', error);
     res.status(500).json({ error: 'Failed to accept invite' });
@@ -1273,13 +1277,14 @@ router.post('/collaboration/invites/id/:inviteId/decline', async (req, res) => {
 
 // POST /api/collaboration/invites/:token/accept - accept invite as logged-in user
 router.post('/collaboration/invites/:token/accept', async (req, res) => {
+  let invite = null;
   try {
     const { token } = req.params;
     if (!token || token.length < 12) {
       return res.status(400).json({ error: 'Invalid invite token' });
     }
 
-    const invite = await collaborationStore.getInviteByTokenAsync(token);
+    invite = await collaborationStore.getInviteByTokenAsync(token);
     if (!invite) return res.status(404).json({ error: 'Invite not found' });
 
     const { invite: acceptedInvite, membership } = await acceptInviteForUserAsync(invite, req.user);
@@ -1297,7 +1302,10 @@ router.post('/collaboration/invites/:token/accept', async (req, res) => {
     });
   } catch (error) {
     if (error?.status) {
-      return res.status(error.status).json({ error: error.message });
+      return res.status(error.status).json({
+        error: error.message,
+        invite: serializeInvite(invite),
+      });
     }
     console.error('Accept invite error:', error);
     res.status(500).json({ error: 'Failed to accept invite' });

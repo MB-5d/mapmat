@@ -37,7 +37,6 @@ export default function MapAccessGate({
   const requestPending = requestStatus === 'submitting';
   const requestSubmitted = requestStatus === 'submitted';
   const requestDisabled = requestStatus === 'disabled';
-  const requestedRoleLabel = formatRoleLabel(requestedRole).toLowerCase();
 
   let title = 'You do not currently have access to this map';
   let description = 'If the map owners allow it, you can request access from here.';
@@ -97,9 +96,10 @@ export default function MapAccessGate({
             <TextareaInput
               id="access-request-message"
               className="route-gate-textarea"
-              rows={4}
+              rows={2}
+              maxLength={200}
               value={requestMessage}
-              onChange={(event) => onRequestMessageChange?.(event.target.value)}
+              onChange={(event) => onRequestMessageChange?.(event.target.value.slice(0, 200))}
               placeholder="Briefly explain why you need access."
               disabled={requestPending || requestDisabled}
             />
@@ -161,7 +161,7 @@ export default function MapAccessGate({
               loading={requestPending}
             >
               {!requestPending ? <Send size={16} /> : null}
-              <span>{requestSubmitted ? 'Request sent' : `Request ${requestedRoleLabel} access`}</span>
+              <span>{requestSubmitted ? 'Request sent' : 'Request access'}</span>
             </Button>
           )}
         </div>

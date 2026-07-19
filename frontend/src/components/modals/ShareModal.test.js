@@ -318,7 +318,7 @@ describe('ShareModal', () => {
     expect(container.textContent).not.toContain('before they can be invited');
   });
 
-  test('hides unavailable collaboration roles and owner invite options', () => {
+  test('hides unavailable invite roles while approval selector keeps access levels', () => {
     act(() => {
       root.render(
         <ShareModal
@@ -377,7 +377,7 @@ describe('ShareModal', () => {
 
     const requestRoleOptions = Array.from(container.querySelectorAll('.share-collab-request-actions option'))
       .map((option) => option.textContent.trim());
-    expect(requestRoleOptions).toEqual(['Viewer', 'Commenter']);
+    expect(requestRoleOptions).toEqual(['Viewer', 'Commenter', 'Editor']);
   });
 
   test('shows member avatars without redundant owner or self badges', () => {
@@ -479,5 +479,38 @@ describe('ShareModal', () => {
 
     sendButton = getSendButton();
     expect(sendButton.disabled).toBe(false);
+  });
+
+  test('submits the share email form with the same send action', () => {
+    const onSendEmail = jest.fn();
+
+    act(() => {
+      root.render(
+        <ShareModal
+          show
+          onClose={jest.fn()}
+          accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
+          sharePermission="view"
+          onChangePermission={jest.fn()}
+          linkCopied={false}
+          onCopyLink={jest.fn()}
+          shareEmails="person@example.com"
+          onShareEmailsChange={jest.fn()}
+          onSendEmail={onSendEmail}
+          collaborationEnabled={false}
+          collaborationMemberships={[]}
+          collaborationInvites={[]}
+          collaborationAccessRequests={[]}
+        />
+      );
+    });
+
+    const form = container.querySelector('form.share-email-section');
+
+    act(() => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    expect(onSendEmail).toHaveBeenCalledTimes(1);
   });
 });

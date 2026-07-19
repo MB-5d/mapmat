@@ -3162,6 +3162,77 @@ body {
   backdrop-filter: blur(10px);
 }
 
+.route-gate-backdrop {
+  overflow: hidden;
+}
+
+.route-gate-backdrop .content-shell--route-gate-blurred {
+  filter: blur(18px);
+  opacity: 0.56;
+  pointer-events: none;
+  user-select: none;
+}
+
+.route-gate-preview-map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 120px 48px 72px;
+  pointer-events: none;
+  filter: blur(16px);
+  opacity: 0.7;
+  transform: scale(1.04);
+}
+
+.route-gate-preview-content {
+  position: relative;
+  width: min(980px, 78vw);
+  height: min(560px, 56vh);
+}
+
+.route-gate-preview-node {
+  width: 176px;
+  height: 88px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-sm);
+  background: linear-gradient(135deg, var(--ui-color-surface), var(--ui-color-surface-muted));
+  box-shadow: var(--shadow-card);
+}
+
+.route-gate-preview-node-root {
+  position: absolute;
+  left: 50%;
+  top: 10%;
+  width: 220px;
+  height: 104px;
+  transform: translateX(-50%);
+  border-color: var(--ui-color-primary-border);
+}
+
+.route-gate-preview-branch {
+  position: absolute;
+  display: grid;
+  gap: 28px;
+}
+
+.route-gate-preview-branch-left {
+  left: 7%;
+  top: 34%;
+}
+
+.route-gate-preview-branch-right {
+  right: 5%;
+  top: 28%;
+}
+
+.route-gate-preview-branch-bottom {
+  left: 40%;
+  top: 47%;
+}
+
 .route-gate-card {
   width: min(560px, 100%);
   padding: 28px;
@@ -3247,7 +3318,7 @@ body {
 
 .route-gate-textarea {
   width: 100%;
-  min-height: 108px;
+  min-height: 68px;
   resize: vertical;
   padding: 14px 16px;
   border-radius: 16px;
@@ -12800,6 +12871,7 @@ body {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
+  margin: 0;
 }
 
 .share-email-input {

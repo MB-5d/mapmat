@@ -622,6 +622,10 @@ export async function getMapSummary(id, params = {}) {
   return fetchApi(`/api/maps/${id}/summary${query.toString() ? `?${query.toString()}` : ''}`);
 }
 
+export async function getMapAccessPreview(id) {
+  return fetchApi(`/api/maps/${id}/access-preview`);
+}
+
 export async function getMapScene(id, params = {}, options = {}) {
   const query = new URLSearchParams();
   Object.entries(params || {}).forEach(([key, value]) => {

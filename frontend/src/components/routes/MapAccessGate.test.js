@@ -47,8 +47,10 @@ describe('MapAccessGate', () => {
 
     const textarea = container.querySelector('textarea');
     const requestButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Request viewer access')
+      button.textContent.includes('Request access')
     );
+
+    expect(textarea.getAttribute('maxlength')).toBe('200');
 
     act(() => {
       setTextareaValue(textarea, 'Need review access');

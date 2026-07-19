@@ -224,11 +224,31 @@ function listPendingInvitesForEmailAsync(inviteeEmail, { limit = 100, offset = 0
 }
 
 function getInviteByIdAsync(inviteId) {
-  return adapter.queryOneAsync('SELECT * FROM map_invites WHERE id = ?', [inviteId]);
+  return adapter.queryOneAsync(`
+    SELECT i.*,
+      maps.name as map_name,
+      maps.url as map_url,
+      inviter.email as inviter_email,
+      inviter.name as inviter_name
+    FROM map_invites i
+    INNER JOIN maps ON maps.id = i.map_id
+    LEFT JOIN users inviter ON i.inviter_user_id = inviter.id
+    WHERE i.id = ?
+  `, [inviteId]);
 }
 
 function getInviteByTokenAsync(token) {
-  return adapter.queryOneAsync('SELECT * FROM map_invites WHERE token = ?', [token]);
+  return adapter.queryOneAsync(`
+    SELECT i.*,
+      maps.name as map_name,
+      maps.url as map_url,
+      inviter.email as inviter_email,
+      inviter.name as inviter_name
+    FROM map_invites i
+    INNER JOIN maps ON maps.id = i.map_id
+    LEFT JOIN users inviter ON i.inviter_user_id = inviter.id
+    WHERE i.token = ?
+  `, [token]);
 }
 
 function getPendingInviteByMapAndEmailAsync(mapId, inviteeEmail) {

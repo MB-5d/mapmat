@@ -2426,6 +2426,25 @@ router.get('/maps/:id/summary', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/maps/:id/access-preview - safe title-only preview for access gates
+router.get('/maps/:id/access-preview', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const map = await mapStore.getMapByIdAsync(id);
+    if (!map) return res.status(404).json({ error: 'Map not found' });
+
+    res.json({
+      map: {
+        id: map.id,
+        name: map.name || 'Untitled map',
+      },
+    });
+  } catch (error) {
+    console.error('Get map access preview error:', error);
+    res.status(500).json({ error: 'Failed to get map preview' });
+  }
+});
+
 // GET /api/maps/:id/scene - Get a viewport-sized canvas scene for large maps
 router.get('/maps/:id/scene', requireAuth, async (req, res) => {
   try {

@@ -90,6 +90,7 @@ import {
   getMapNameConflictMessage,
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
+import { canManageCollaborationForRole, normalizeCollaborationRole } from './utils/collaborationPermissions';
 import classNames from './utils/classNames';
 import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './utils/scanPrefill';
 import {
@@ -5631,9 +5632,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     return collaborationMemberships.find((member) => sameId(member.userId, currentUser.id))?.role || 'viewer';
   }, [collaborationMemberships, currentMap?.user_id, currentUser?.id]);
   const currentCollaborationRole = useMemo(
-    () => String(mapPermissions?.role || inferredCollaborationRole || 'viewer').trim().toLowerCase() || 'viewer',
+    () => normalizeCollaborationRole(mapPermissions?.role || inferredCollaborationRole),
     [inferredCollaborationRole, mapPermissions?.role],
   );
+  const canManageCollaborationForCurrentRoleValue = canManageCollaborationForRole(currentCollaborationRole);
   const pendingInviteForCurrentRoute = useMemo(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'map' || !currentRoute?.mapId) {
       return null;
@@ -5641,7 +5643,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return (pendingMapInvites || []).find((invite) => sameId(invite.mapId, currentRoute.mapId)) || null;
   }, [currentRoute?.mapId, currentRoute?.section, currentRoute?.surface, pendingMapInvites]);
   const canManageCollaborationMembersValue = (
-    ['owner', 'editor'].includes(currentCollaborationRole)
+    canManageCollaborationForCurrentRoleValue
     || (canManageSharesValue && canViewCollaborationPanelValue)
   );
   const canSendCollaborationInvitesResolvedValue = (
@@ -5661,7 +5663,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     ? ''
     : 'Your account does not have permission to create share links for this map.';
   const canOpenCollaborationModalValue = COLLABORATION_UI_ENABLED && isLoggedIn && (
-    canViewCollaborationPanelValue
+    canManageCollaborationForCurrentRoleValue
+    || canViewCollaborationPanelValue
     || canSelfServeCollaborationValue
     || canSendCollaborationInvitesResolvedValue
   );
@@ -6798,6 +6801,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           loadedShareRouteKeyRef.current = shareRouteKey;
           setRouteMapGateState({
             mapId: share.mapId,
+            mapName: share.name || share.mapName || share.root?.title || '',
             loading: false,
             errorStatus: 403,
             errorMessage: `This link requires ${requestedRole} access to the saved map.`,
@@ -8679,6 +8683,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     setRouteMapGateState((previous) => ({
       mapId,
+      mapName: previous?.mapName || '',
       loading: false,
       errorStatus: previous?.errorStatus || null,
       errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
@@ -8699,6 +8704,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       setRouteMapGateState((previous) => ({
         mapId,
+        mapName: previous?.mapName || '',
         loading: false,
         errorStatus: previous?.errorStatus || 403,
         errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
@@ -8718,18 +8724,22 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (error?.status === 409 && /pending invite/i.test(error.message || '')) {
         await loadPendingMapInvites({ silent: true });
       }
+      const requestErrorMessage = error?.status === 404 && /^not found$/i.test(error?.message || '')
+        ? 'Access requests are not available for this map right now.'
+        : (error?.message || 'Failed to send access request.');
       setRouteMapGateState((previous) => ({
         mapId,
+        mapName: previous?.mapName || '',
         loading: false,
         errorStatus: previous?.errorStatus || error?.status || null,
         errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
         requestStatus: error?.status === 403 ? 'disabled' : 'idle',
-        requestError: error?.message || 'Failed to send access request.',
+        requestError: requestErrorMessage,
         requestedRole,
         source: previous?.source || null,
       }));
       showToast(
-        error?.message || 'Failed to send access request.',
+        requestErrorMessage,
         error?.status === 403 ? 'warning' : 'error'
       );
     }
@@ -11954,6 +11964,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
       setRouteMapGateState({
         mapId: currentRoute.mapId,
+        mapName: '',
         loading: false,
         errorStatus: null,
         errorMessage: '',
@@ -11967,6 +11978,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     let cancelled = false;
     setRouteMapGateState((previous) => ({
       mapId: currentRoute.mapId,
+      mapName: previous?.mapId === currentRoute.mapId ? previous?.mapName || '' : '',
       loading: true,
       errorStatus: null,
       errorMessage: '',
@@ -11980,11 +11992,16 @@ export default function App({ currentRoute, navigateToRoute }) {
         setRouteMapGateState(null);
         setRouteAccessRequestMessage('');
       })
-      .catch((error) => {
+      .catch(async (error) => {
         if (cancelled) return;
         clearLoadedMapView();
+        const preview = (error?.status === 404 || error?.status === 403)
+          ? await api.getMapAccessPreview(currentRoute.mapId).catch(() => null)
+          : null;
+        if (cancelled) return;
         setRouteMapGateState({
           mapId: currentRoute.mapId,
+          mapName: preview?.map?.name || '',
           loading: false,
           errorStatus: error?.status || null,
           errorMessage: error?.message || 'Failed to load map',
@@ -12067,6 +12084,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           token: currentRoute.inviteToken,
           status: 'error',
           error: error?.message || 'Failed to accept invite.',
+          invite: error?.payload?.invite || null,
         });
       });
 
@@ -18573,6 +18591,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       isDefaultWorkspaceScanModalVisible
       || (isUnsavedScannedMap && !!root?.url)
     );
+  const routeGateActive = (
+    showInviteAcceptGate && inviteAcceptState?.status !== 'auth_required'
+  ) || (
+    showMapAccessGate && !showInviteAcceptGate
+  );
+  const routeGateMapTitle = (
+    showInviteAcceptGate
+      ? inviteAcceptState?.invite?.mapName
+      : pendingInviteForCurrentRoute?.mapName || routeMapGateState?.mapName
+  ) || currentMap?.name || mapName || 'Shared sitemap';
+  const showRouteGatePreviewCanvas = routeGateActive && !hasMap;
 
   const renderCompletedConnection = (conn) => {
     const path = generateConnectionPath(conn);
@@ -18749,7 +18778,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         urlInput={urlInput}
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
-        hasMap={hasMap}
+        hasMap={hasMap || routeGateActive}
         appHome={showAppHomeGrid}
         floating={showShareLoadingCanvas || showInviteAcceptCanvas}
         showScanBar={showTopbarScanBar}
@@ -18769,7 +18798,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
         showClearUrl={!!urlInput.trim()}
-        mapName={mapName}
+        mapName={routeGateActive && !hasMap ? routeGateMapTitle : mapName}
         isEditingMapName={isEditingMapName}
         onMapNameChange={(e) => setMapName(e.target.value)}
         onMapNameBlur={commitMapNameEdit}
@@ -18796,7 +18825,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       />
 
       <div
-        className={`canvas ${hasMap ? 'has-map' : ''} ${showAppHomeGrid || showInviteAcceptCanvas ? 'app-home' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
+        className={`canvas ${hasMap || routeGateActive ? 'has-map' : ''} ${showAppHomeGrid || showInviteAcceptCanvas ? 'app-home' : ''} ${routeGateActive ? 'route-gate-backdrop' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
         ref={canvasRef}
         style={{
           '--canvas-pan-x': `${canvasRenderPan.x || 0}px`,
@@ -18810,6 +18839,29 @@ export default function App({ currentRoute, navigateToRoute }) {
         onScroll={resetCanvasNativeScroll}
        
       >
+        {showRouteGatePreviewCanvas && (
+          <div className="route-gate-preview-map" aria-hidden="true">
+            <div className="route-gate-preview-content">
+              <div className="route-gate-preview-node route-gate-preview-node-root" />
+              <div className="route-gate-preview-branch route-gate-preview-branch-left">
+                {[0, 1, 2, 3].map((index) => (
+                  <div className="route-gate-preview-node" key={`left-${index}`} />
+                ))}
+              </div>
+              <div className="route-gate-preview-branch route-gate-preview-branch-right">
+                {[0, 1, 2, 3, 4].map((index) => (
+                  <div className="route-gate-preview-node" key={`right-${index}`} />
+                ))}
+              </div>
+              <div className="route-gate-preview-branch route-gate-preview-branch-bottom">
+                {[0, 1, 2].map((index) => (
+                  <div className="route-gate-preview-node" key={`bottom-${index}`} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {showInviteAcceptGate && inviteAcceptState?.status !== 'auth_required' && (
           <InviteAcceptGate
             status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
@@ -19041,7 +19093,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             onDragEnd={handleDndDragEnd}
           >
             <div
-              className={`content-shell ${useLargeMapSurface ? 'large-map-shell' : ''}`}
+              className={`content-shell ${useLargeMapSurface ? 'large-map-shell' : ''} ${routeGateActive ? 'content-shell--route-gate-blurred' : ''}`}
               ref={contentShellRef}
             >
             <div
@@ -19865,7 +19917,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowCollaborationModal(true);
                 },
                 canOpenShare: canOpenShareModalValue,
-                canOpenCollaborate: canOpenCollaborationModalValue && !isReaderOnlyMapRoleValue,
+                canOpenCollaborate: canOpenCollaborationModalValue && canManageCollaborationForCurrentRoleValue,
                 hasMap,
                 hasSavedMap: !!currentMap?.id,
                 showVersionHistory: showVersionHistoryDrawer,
@@ -20172,7 +20224,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         onShareEmailsChange={setShareEmails}
         onSendEmail={sendShareEmail}
         collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn && currentMap?.id && (
-          canViewCollaborationPanel()
+          canManageCollaborationForCurrentRoleValue
+          || canViewCollaborationPanel()
           || canSelfServeCollaborationValue
         )}
         collaborationAvailable={Boolean(currentMap?.id)}
