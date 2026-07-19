@@ -23,8 +23,7 @@ describe('InviteInboxModal', () => {
     jest.clearAllMocks();
   });
 
-  test('refreshes and accepts invites', () => {
-    const onRefresh = jest.fn();
+  test('accepts invites without a refresh action', () => {
     const onAccept = jest.fn();
     const invite = {
       id: 'inv-1',
@@ -39,7 +38,6 @@ describe('InviteInboxModal', () => {
           show
           invites={[invite]}
           onClose={jest.fn()}
-          onRefresh={onRefresh}
           onAccept={onAccept}
           onDecline={jest.fn()}
         />
@@ -57,12 +55,59 @@ describe('InviteInboxModal', () => {
     );
 
     act(() => {
-      refreshButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       acceptButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(container.textContent).toContain('Invited by: Jordan');
-    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(refreshButton).toBeUndefined();
     expect(onAccept).toHaveBeenCalledWith(invite);
+  });
+
+  test('hides not found on empty state and sends an invite from the composer', () => {
+    const onSendInvite = jest.fn();
+    const onSelectedMapIdChange = jest.fn();
+    const onInviteEmailChange = jest.fn();
+
+    act(() => {
+      root.render(
+        <InviteInboxModal
+          show
+          invites={[]}
+          error="Not found"
+          loading={false}
+          eligibleMaps={[
+            { id: 'map-1', name: 'Current Map', role: 'owner' },
+            { id: 'map-2', name: 'Other Map', role: 'editor' },
+          ]}
+          selectedMapId="map-1"
+          onSelectedMapIdChange={onSelectedMapIdChange}
+          inviteEmail="person@example.com"
+          onInviteEmailChange={onInviteEmailChange}
+          inviteRole="viewer"
+          inviteRoleOptions={['viewer', 'commenter']}
+          onInviteRoleChange={jest.fn()}
+          onSendInvite={onSendInvite}
+          onClose={jest.fn()}
+          onAccept={jest.fn()}
+          onDecline={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('No pending invites right now.');
+    expect(container.textContent).not.toContain('Not found');
+    expect(container.textContent).not.toContain('Refresh');
+    expect(container.querySelector('[role="combobox"]')?.value).toBe('Current Map');
+
+    const inviteButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.trim() === 'Invite'
+    );
+
+    act(() => {
+      inviteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSelectedMapIdChange).not.toHaveBeenCalled();
+    expect(onSendInvite).toHaveBeenCalledTimes(1);
   });
 });

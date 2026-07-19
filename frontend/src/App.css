@@ -13322,6 +13322,37 @@ body {
   gap: 10px;
 }
 
+.invite-inbox-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-10);
+  margin-bottom: var(--unit-16);
+  padding-bottom: var(--unit-16);
+  border-bottom: 1px solid var(--ui-color-border);
+}
+
+.invite-inbox-map-combobox {
+  position: relative;
+}
+
+.invite-inbox-map-options {
+  position: absolute;
+  top: calc(100% + var(--unit-8));
+  left: 0;
+  right: 0;
+  z-index: 12;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.invite-inbox-map-empty {
+  padding: var(--unit-10) var(--unit-12);
+}
+
+.invite-inbox-invite-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
 .invite-inbox-item {
   display: flex;
   align-items: stretch;
@@ -13403,7 +13434,8 @@ body {
 @media (max-width: 720px) {
   .share-collab-settings-grid,
   .share-email-section,
-  .share-collab-invite-row {
+  .share-collab-invite-row,
+  .invite-inbox-invite-row {
     grid-template-columns: 1fr;
   }
 

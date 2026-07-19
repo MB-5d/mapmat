@@ -1617,6 +1617,14 @@ const getPendingAccessRequestsErrorMessage = (error) => {
   return rawMessage || 'Failed to load pending access requests.';
 };
 
+const getPendingMapInvitesErrorMessage = (error) => {
+  const rawMessage = String(error?.message || '').trim();
+  if (error?.status === 404 || rawMessage.toLowerCase() === 'not found') {
+    return '';
+  }
+  return rawMessage || 'Failed to load pending invites.';
+};
+
 const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COEDITING_EXPERIMENT_ENABLED,
   false
@@ -3203,6 +3211,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [collaborationAccessRequests, setCollaborationAccessRequests] = useState([]);
   const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
   const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
+  const [inviteInboxSelectedMapId, setInviteInboxSelectedMapId] = useState('');
+  const [inviteInboxEmail, setInviteInboxEmail] = useState('');
+  const [inviteInboxRole, setInviteInboxRole] = useState('viewer');
   const [showInviteInboxModal, setShowInviteInboxModal] = useState(false);
   const [showAccessRequestsInboxModal, setShowAccessRequestsInboxModal] = useState(false);
   const [pendingMapInvites, setPendingMapInvites] = useState([]);
@@ -5636,6 +5647,54 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canManageCollaborationSettingsValue = !!effectiveFeatureGates.collabSettingsManage;
   const canViewAccessRequestsValue = !!effectiveFeatureGates.accessRequestsView;
   const canViewPresenceValue = !!effectiveFeatureGates.presenceView;
+  const inviteInboxEligibleMapsValue = useMemo(() => {
+    const byId = new Map();
+    const addMap = (map) => {
+      if (!map?.id) return;
+      const role = sameId(map.user_id, currentUser?.id)
+        ? 'owner'
+        : normalizeCollaborationRole(map.membership_role || map.membershipRole);
+      if (!canManageCollaborationForRole(role)) return;
+      byId.set(String(map.id), {
+        id: map.id,
+        name: map.name || map.rootSummary?.title || 'Untitled Map',
+        role,
+      });
+    };
+
+    (projects || []).forEach((project) => {
+      (project?.maps || []).forEach(addMap);
+    });
+    addMap(currentMap);
+
+    const maps = Array.from(byId.values());
+    if (!currentMap?.id) return maps;
+    return maps.sort((left, right) => {
+      if (sameId(left.id, currentMap.id)) return -1;
+      if (sameId(right.id, currentMap.id)) return 1;
+      return 0;
+    });
+  }, [currentMap, currentUser?.id, projects]);
+  const inviteInboxRoleOptionsValue = useMemo(() => {
+    const selectedMapIsCurrent = currentMap?.id && sameId(inviteInboxSelectedMapId, currentMap.id);
+    if (selectedMapIsCurrent && collaborationInviteRoleOptionsValue.length > 0) {
+      return collaborationInviteRoleOptionsValue;
+    }
+    const planKey = String(currentUser?.entitlements?.plan?.key || '').trim().toLowerCase();
+    const editorGrantExtra = Number(currentUser?.entitlements?.limits?.editors?.grantExtra || 0);
+    const isTeamTrial = currentUser?.entitlements?.trial?.active
+      && String(currentUser?.entitlements?.trial?.kind || '').trim().toLowerCase() === 'team';
+    const canInviteEditor = isTeamTrial || editorGrantExtra > 0 || !['free', 'pro'].includes(planKey);
+    return canInviteEditor ? ['viewer', 'commenter', 'editor'] : ['viewer', 'commenter'];
+  }, [
+    collaborationInviteRoleOptionsValue,
+    currentMap?.id,
+    currentUser?.entitlements?.limits?.editors?.grantExtra,
+    currentUser?.entitlements?.plan?.key,
+    currentUser?.entitlements?.trial?.active,
+    currentUser?.entitlements?.trial?.kind,
+    inviteInboxSelectedMapId,
+  ]);
   const inferredCollaborationRole = useMemo(() => {
     if (!currentUser?.id) return 'viewer';
     if (currentMap?.user_id && sameId(currentMap.user_id, currentUser.id)) return 'owner';
@@ -5745,6 +5804,26 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (collaborationInviteRoleOptionsValue.includes(collaborationInviteRole)) return;
     setCollaborationInviteRole(collaborationInviteRoleOptionsValue[0]);
   }, [collaborationInviteRole, collaborationInviteRoleOptionsValue]);
+
+  useEffect(() => {
+    if (!showInviteInboxModal || inviteInboxEligibleMapsValue.length === 0) return;
+    const currentEligibleMap = currentMap?.id
+      ? inviteInboxEligibleMapsValue.find((map) => sameId(map.id, currentMap.id))
+      : null;
+    const selectedMapStillEligible = inviteInboxEligibleMapsValue.some((map) => sameId(map.id, inviteInboxSelectedMapId));
+    if (selectedMapStillEligible) return;
+    if (currentEligibleMap) {
+      setInviteInboxSelectedMapId(currentEligibleMap.id);
+      return;
+    }
+    setInviteInboxSelectedMapId(inviteInboxEligibleMapsValue[0].id);
+  }, [currentMap?.id, inviteInboxEligibleMapsValue, inviteInboxSelectedMapId, showInviteInboxModal]);
+
+  useEffect(() => {
+    if (!inviteInboxRoleOptionsValue.length) return;
+    if (inviteInboxRoleOptionsValue.includes(inviteInboxRole)) return;
+    setInviteInboxRole(inviteInboxRoleOptionsValue[0]);
+  }, [inviteInboxRole, inviteInboxRoleOptionsValue]);
 
   useEffect(() => {
     seenActivityIdsRef.current = new Set();
@@ -6666,7 +6745,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setPendingMapInvites(invites || []);
     } catch (error) {
       setPendingMapInvites([]);
-      setPendingMapInvitesError(error.message || 'Failed to load pending invites.');
+      setPendingMapInvitesError(getPendingMapInvitesErrorMessage(error));
     } finally {
       setPendingMapInvitesLoading(false);
     }
@@ -7369,6 +7448,68 @@ export default function App({ currentRoute, navigateToRoute }) {
     guardAccountCanCreateWork,
     handleEntitlementError,
     loadCollaborationData,
+    showToast,
+  ]);
+
+  const sendInviteFromInbox = useCallback(async () => {
+    if (!guardAccountCanCreateWork('Inviting collaborators')) return;
+    const selectedMap = inviteInboxEligibleMapsValue.find((map) => sameId(map.id, inviteInboxSelectedMapId));
+    if (!selectedMap) {
+      showToast('Choose a map before sending an invite.', 'warning');
+      return;
+    }
+    const email = String(inviteInboxEmail || '').trim();
+    if (!email) {
+      showToast('Enter an email address to invite.', 'warning');
+      return;
+    }
+    if (
+      inviteInboxRoleOptionsValue.length > 0
+      && !inviteInboxRoleOptionsValue.includes(inviteInboxRole)
+    ) {
+      showToast('That invite role is not available for this map.', 'warning');
+      return;
+    }
+
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.createMapInvite(selectedMap.id, {
+        email,
+        role: inviteInboxRole,
+      });
+      trackEvent('invite_sent', {
+        map_id: String(selectedMap.id),
+        role: inviteInboxRole,
+        surface: 'invite_inbox',
+      });
+      setInviteInboxEmail('');
+      showToast('Invite sent', 'success');
+      await Promise.all([
+        loadPendingMapInvites({ silent: true }),
+        currentMap?.id && sameId(currentMap.id, selectedMap.id) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      if (handleEntitlementError(error, 'This account has reached its editor limit.')) {
+        setPendingMapInvitesError(error.message || 'Plan limit reached.');
+        return;
+      }
+      setPendingMapInvitesError(error.message || 'Failed to create invite.');
+      showToast(error.message || 'Failed to create invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [
+    currentMap?.id,
+    guardAccountCanCreateWork,
+    handleEntitlementError,
+    inviteInboxEligibleMapsValue,
+    inviteInboxEmail,
+    inviteInboxRole,
+    inviteInboxRoleOptionsValue,
+    inviteInboxSelectedMapId,
+    loadCollaborationData,
+    loadPendingMapInvites,
     showToast,
   ]);
 
@@ -20307,6 +20448,15 @@ export default function App({ currentRoute, navigateToRoute }) {
         invites={pendingMapInvites}
         loading={pendingMapInvitesLoading}
         error={pendingMapInvitesError}
+        eligibleMaps={inviteInboxEligibleMapsValue}
+        selectedMapId={inviteInboxSelectedMapId}
+        onSelectedMapIdChange={setInviteInboxSelectedMapId}
+        inviteEmail={inviteInboxEmail}
+        onInviteEmailChange={setInviteInboxEmail}
+        inviteRole={inviteInboxRole}
+        inviteRoleOptions={inviteInboxRoleOptionsValue}
+        onInviteRoleChange={setInviteInboxRole}
+        onSendInvite={sendInviteFromInbox}
         onClose={() => {
           setShowInviteInboxModal(false);
           setPendingMapInvitesError('');
@@ -20314,7 +20464,6 @@ export default function App({ currentRoute, navigateToRoute }) {
             navigateToRoute(getActiveAppRoute(), { replace: true });
           }
         }}
-        onRefresh={() => loadPendingMapInvites()}
         onAccept={handleAcceptPendingInvite}
         onDecline={handleDeclinePendingInvite}
       />
