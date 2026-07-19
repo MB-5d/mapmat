@@ -21,6 +21,7 @@ import Avatar from '../ui/Avatar';
 import Button from '../ui/Button';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLocale } from '../../contexts/LocaleContext';
 import { APP_BRAND_NAME } from '../../utils/constants';
 
 const FIGMA_CAPTURE_TOOLS_ENABLED = process.env.NODE_ENV !== 'production';
@@ -68,6 +69,7 @@ const Topbar = ({
   pendingAccessRequestCount = 0,
 }) => {
   const { isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onShowSupport, onLogout, onLogin, onSignup } = useAuth();
+  const { t } = useLocale();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
   const figmaAccountMenuAppliedRef = useRef('');
@@ -189,24 +191,24 @@ const Topbar = ({
               buttonStyle="mono"
               size="md"
               onClick={handleAccountToggle}
-              title="Account menu"
+              title={t('Account menu')}
               aria-expanded={showAccountMenu}
               aria-haspopup="menu"
               startIcon={accountTriggerIcon}
-              label={currentUser?.name || 'Account'}
+              label={currentUser?.name || t('Account')}
             />
             {hasPendingAccountNotifications ? (
               <span className="topbar-account-notification-dot" aria-hidden="true" />
             ) : null}
             {showAccountMenu && (
               <MenuPanel className="account-menu" role="menu">
-                <div className="ui-menu-section" role="group" aria-label="Collaboration">
-                  <MenuSectionHeader>Collaboration</MenuSectionHeader>
+                <div className="ui-menu-section" role="group" aria-label={t('Collaboration')}>
+                  <MenuSectionHeader>{t('Collaboration')}</MenuSectionHeader>
                   <MenuItem
                     className="account-menu-item"
                     role="menuitem"
                     icon={<Mail size={16} />}
-                    label="Invites"
+                    label={t('Invites')}
                     badge={pendingInviteCount > 0 ? (
                       <span className="account-menu-item-badge">{pendingInviteCount > 9 ? '9+' : pendingInviteCount}</span>
                     ) : null}
@@ -219,7 +221,7 @@ const Topbar = ({
                     className="account-menu-item"
                     role="menuitem"
                     icon={<ShieldCheck size={16} />}
-                    label="Requests"
+                    label={t('Requests')}
                     badge={pendingAccessRequestCount > 0 ? (
                       <span className="account-menu-item-badge">{pendingAccessRequestCount > 9 ? '9+' : pendingAccessRequestCount}</span>
                     ) : null}
@@ -230,13 +232,13 @@ const Topbar = ({
                   />
                 </div>
                 <MenuDivider className="account-menu-divider" />
-                <div className="ui-menu-section" role="group" aria-label="Workspace">
-                  <MenuSectionHeader>Workspace</MenuSectionHeader>
+                <div className="ui-menu-section" role="group" aria-label={t('Workspace')}>
+                  <MenuSectionHeader>{t('Workspace')}</MenuSectionHeader>
                   <MenuItem
                     className="account-menu-item"
                     role="menuitem"
                     icon={<Network size={16} />}
-                    label="Maps"
+                    label={t('Maps')}
                     onClick={() => {
                       closeMenu();
                       onShowProjects();
@@ -246,7 +248,7 @@ const Topbar = ({
                     className="account-menu-item"
                     role="menuitem"
                     icon={<History size={16} />}
-                    label="History"
+                    label={t('History')}
                     onClick={() => {
                       closeMenu();
                       onShowHistory();
@@ -254,13 +256,13 @@ const Topbar = ({
                   />
                 </div>
                 <MenuDivider className="account-menu-divider" />
-                <div className="ui-menu-section" role="group" aria-label="Account">
-                  <MenuSectionHeader>Account</MenuSectionHeader>
+                <div className="ui-menu-section" role="group" aria-label={t('Account')}>
+                  <MenuSectionHeader>{t('Account')}</MenuSectionHeader>
                   <MenuItem
                     className="account-menu-item"
                     role="menuitem"
                     icon={<UserCircle size={16} />}
-                    label="Profile"
+                    label={t('Profile')}
                     onClick={() => {
                       closeMenu();
                       onShowProfile();
@@ -270,7 +272,7 @@ const Topbar = ({
                     className="account-menu-item account-menu-item--external"
                     role="menuitem"
                     icon={<CreditCard size={16} />}
-                    label="Billing"
+                    label={t('Billing')}
                     endSlot={<ExternalLink className="account-menu-external-icon" size={14} aria-hidden="true" />}
                     onClick={() => {
                       closeMenu();
@@ -281,7 +283,7 @@ const Topbar = ({
                     className="account-menu-item"
                     role="menuitem"
                     icon={<Settings2 size={16} />}
-                    label="Settings"
+                    label={t('Settings')}
                     onClick={() => {
                       closeMenu();
                       onShowSettings();
@@ -291,7 +293,7 @@ const Topbar = ({
                     className="account-menu-item"
                     role="menuitem"
                     icon={<MessageCircle size={16} />}
-                    label="Support"
+                    label={t('Support')}
                     onClick={() => {
                       closeMenu();
                       onShowSupport?.();
@@ -301,7 +303,7 @@ const Topbar = ({
                     className="account-menu-item account-menu-logout"
                     role="menuitem"
                     icon={<LogOut size={16} />}
-                    label="Log out"
+                    label={t('Log out')}
                     onClick={() => {
                       closeMenu();
                       onLogout();
@@ -317,11 +319,11 @@ const Topbar = ({
             type="primary"
             buttonStyle="brand"
             size="md"
-            title="Sign up / log in"
+            title={t('Sign up / log in')}
             onClick={onSignup || onLogin}
             startIcon={<LogIn size={18} />}
           >
-            Sign up / log in
+            {t('Sign up / log in')}
           </Button>
         )}
       </div>

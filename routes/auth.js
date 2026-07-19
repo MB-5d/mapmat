@@ -197,6 +197,9 @@ function buildClientUser(user, entitlements = null) {
     : !!String(user.password_hash || '').trim();
   const emailVerified = isUserEmailVerified(user);
   const authProvider = normalizeAuthProviderForClient(user.auth_provider);
+  const preferredLocale = ['en', 'es'].includes(String(user.preferred_locale || '').trim().toLowerCase())
+    ? String(user.preferred_locale).trim().toLowerCase()
+    : null;
 
   const clientUser = {
     id: user.id,
@@ -211,6 +214,7 @@ function buildClientUser(user, entitlements = null) {
     authProvider,
     authMode: authProvider,
     hasPassword,
+    preferredLocale,
   };
 
   if (entitlements) {
@@ -1556,7 +1560,7 @@ router.get('/me', authMiddleware, async (req, res) => {
 router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (req, res) => {
   try {
     await authStore.ensureAuthSchemaAsync();
-    const { name, email, currentPassword, newPassword } = req.body || {};
+    const { name, email, currentPassword, newPassword, preferredLocale } = req.body || {};
     let emailNormalized = null;
 
     if (email !== undefined) {
@@ -1571,6 +1575,10 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
           return res.status(400).json({ error: 'An account with this email already exists' });
         }
       }
+    }
+
+    if (preferredLocale !== undefined && !['en', 'es'].includes(String(preferredLocale).trim().toLowerCase())) {
+      return res.status(400).json({ error: 'Choose a supported language' });
     }
 
     if (newPassword) {
@@ -1602,6 +1610,13 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
 
     if (emailNormalized && emailNormalized !== normalizeEmail(req.user.email)) {
       await authStore.updateUserEmailAsync(req.user.id, emailNormalized);
+    }
+
+    if (preferredLocale !== undefined) {
+      await authStore.updateUserPreferredLocaleAsync(
+        req.user.id,
+        String(preferredLocale).trim().toLowerCase()
+      );
     }
 
     const updated = await authStore.getPublicUserByIdAsync(req.user.id);

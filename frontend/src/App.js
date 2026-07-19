@@ -152,6 +152,7 @@ import {
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
 import { useConsent } from './contexts/ConsentContext';
+import { useLocale } from './contexts/LocaleContext';
 import { useCoeditingLive, COEDITING_LIVE_STATUS } from './hooks/useCoeditingLive';
 import {
   ROUTE_SURFACES,
@@ -3109,6 +3110,7 @@ export const __testing = {
 
 export default function App({ currentRoute, navigateToRoute }) {
   const { consent, openSettings: openPrivacySettings } = useConsent();
+  const { locale, setLocale, t } = useLocale();
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [thumbnailScopeIds, setThumbnailScopeIds] = useState(null);
@@ -4527,6 +4529,25 @@ export default function App({ currentRoute, navigateToRoute }) {
       toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
     }
   }, []);
+
+  const handleLocaleChange = useCallback(async (nextLocale) => {
+    const previousLocale = locale;
+    const normalizedLocale = setLocale(nextLocale);
+    if (!currentUser) return;
+
+    try {
+      const response = await api.updateProfile({ preferredLocale: normalizedLocale });
+      if (response?.user) setCurrentUser(response.user);
+    } catch (error) {
+      setLocale(previousLocale);
+      showToast(t('Language preference could not be saved.'), 'error');
+    }
+  }, [currentUser, locale, setLocale, showToast, t]);
+
+  useEffect(() => {
+    if (!currentUser?.preferredLocale || currentUser.preferredLocale === locale) return;
+    setLocale(currentUser.preferredLocale);
+  }, [currentUser?.preferredLocale, locale, setLocale]);
 
   const dismissToast = () => {
     if (toastTimeoutRef.current) {
@@ -21126,6 +21147,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
         consent={consent}
         onOpenPrivacySettings={openPrivacySettings}
+        onLocaleChange={handleLocaleChange}
       />
 
       <SupportDrawer

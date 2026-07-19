@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import SettingsDrawer from './SettingsDrawer';
+import { LocaleProvider } from '../../contexts/LocaleContext';
 
 describe('SettingsDrawer', () => {
   let container;
@@ -30,17 +31,19 @@ describe('SettingsDrawer', () => {
 
     act(() => {
       root.render(
-        <SettingsDrawer
-          isOpen
-          onClose={jest.fn()}
-          theme="auto"
-          onThemeChange={onThemeChange}
-          mapOrientation="vertical"
-          onMapOrientationChange={onMapOrientationChange}
-          showPageNumbers={false}
-          onTogglePageNumbers={onTogglePageNumbers}
-          consent={{ analytics: false, experienceResearch: false }}
-        />
+        <LocaleProvider>
+          <SettingsDrawer
+            isOpen
+            onClose={jest.fn()}
+            theme="auto"
+            onThemeChange={onThemeChange}
+            mapOrientation="vertical"
+            onMapOrientationChange={onMapOrientationChange}
+            showPageNumbers={false}
+            onTogglePageNumbers={onTogglePageNumbers}
+            consent={{ analytics: false, experienceResearch: false }}
+          />
+        </LocaleProvider>
       );
     });
 
@@ -68,16 +71,18 @@ describe('SettingsDrawer', () => {
 
     act(() => {
       root.render(
-        <SettingsDrawer
-          isOpen
-          onClose={jest.fn()}
-          theme="auto"
-          onThemeChange={jest.fn()}
-          showPageNumbers={false}
-          onTogglePageNumbers={jest.fn()}
-          consent={{ analytics: true, experienceResearch: false }}
-          onOpenPrivacySettings={onOpenPrivacySettings}
-        />
+        <LocaleProvider>
+          <SettingsDrawer
+            isOpen
+            onClose={jest.fn()}
+            theme="auto"
+            onThemeChange={jest.fn()}
+            showPageNumbers={false}
+            onTogglePageNumbers={jest.fn()}
+            consent={{ analytics: true, experienceResearch: false }}
+            onOpenPrivacySettings={onOpenPrivacySettings}
+          />
+        </LocaleProvider>
       );
     });
 
@@ -93,5 +98,34 @@ describe('SettingsDrawer', () => {
     });
 
     expect(onOpenPrivacySettings).toHaveBeenCalledTimes(1);
+  });
+
+  test('switches language using the existing segmented control', () => {
+    act(() => {
+      root.render(
+        <LocaleProvider>
+          <SettingsDrawer
+            isOpen
+            onClose={jest.fn()}
+            theme="auto"
+            onThemeChange={jest.fn()}
+            showPageNumbers={false}
+            onTogglePageNumbers={jest.fn()}
+            consent={{ analytics: false, experienceResearch: false }}
+          />
+        </LocaleProvider>
+      );
+    });
+
+    const spanishButton = Array.from(container.querySelectorAll('.ui-segmented-control__option')).find((button) =>
+      button.textContent.includes('Español')
+    );
+
+    act(() => {
+      spanishButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Configuración');
+    expect(document.documentElement.lang).toBe('es');
   });
 });

@@ -6,6 +6,13 @@ import path from 'path';
 import Topbar from './Topbar';
 import { AuthProvider } from '../../contexts/AuthContext';
 
+jest.mock('../../contexts/LocaleContext', () => ({
+  useLocale: () => ({
+    locale: 'en',
+    t: (source) => source,
+  }),
+}));
+
 const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 
 describe('Topbar', () => {
