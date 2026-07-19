@@ -1,7 +1,11 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 
 import AccessRequestInboxModal from './AccessRequestInboxModal';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 
 describe('AccessRequestInboxModal', () => {
   let container;
@@ -65,5 +69,25 @@ describe('AccessRequestInboxModal', () => {
     });
 
     expect(onApprove).toHaveBeenCalledWith(request, 'editor');
+  });
+
+  test('uses a quiet empty state without refresh or raw not found copy', () => {
+    act(() => {
+      root.render(
+        <AccessRequestInboxModal
+          show
+          requests={[]}
+          error="Not found"
+          onClose={jest.fn()}
+          onApprove={jest.fn()}
+          onDeny={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('No pending access requests right now.');
+    expect(container.textContent).not.toContain('Not found');
+    expect(container.textContent).not.toContain('Refresh');
+    expect(appCss).toContain('.share-collab-empty {\n  font-size: 13px;\n  color: var(--color-text-secondary);');
   });
 });

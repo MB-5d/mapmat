@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Check, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Check, ShieldCheck } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
 import Button from '../ui/Button';
@@ -30,7 +30,6 @@ const AccessRequestInboxModal = ({
   loading = false,
   error = '',
   onClose,
-  onRefresh,
   onApprove,
   onDeny,
 }) => {
@@ -51,20 +50,8 @@ const AccessRequestInboxModal = ({
       title="Requests"
       subtitle="Review pending map access requests that require an owner decision."
       className="invite-inbox-drawer"
-      actions={(
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={onRefresh}
-          loading={loading}
-          startIcon={!loading ? <RefreshCw size={14} /> : null}
-        >
-          Refresh
-        </Button>
-      )}
     >
-          {error ? (
+          {error && requests.length > 0 ? (
             <div className="share-collab-error">{error}</div>
           ) : null}
 

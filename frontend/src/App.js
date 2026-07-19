@@ -1609,6 +1609,14 @@ const mergeCollaborationSettingsPatch = (currentSettings, patch = {}) => {
   return nextSettings;
 };
 
+const getPendingAccessRequestsErrorMessage = (error) => {
+  const rawMessage = String(error?.message || '').trim();
+  if (error?.status === 404 || rawMessage.toLowerCase() === 'not found') {
+    return '';
+  }
+  return rawMessage || 'Failed to load pending access requests.';
+};
+
 const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COEDITING_EXPERIMENT_ENABLED,
   false
@@ -6675,7 +6683,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setPendingAccessRequests(accessRequests || []);
     } catch (error) {
       setPendingAccessRequests([]);
-      setPendingAccessRequestsError(error.message || 'Failed to load pending access requests.');
+      setPendingAccessRequestsError(getPendingAccessRequestsErrorMessage(error));
     } finally {
       setPendingAccessRequestsLoading(false);
     }
@@ -20323,7 +20331,6 @@ export default function App({ currentRoute, navigateToRoute }) {
             navigateToRoute(getActiveAppRoute(), { replace: true });
           }
         }}
-        onRefresh={() => loadPendingAccessRequests()}
         onApprove={handleApprovePendingAccessRequest}
         onDeny={handleDenyPendingAccessRequest}
       />

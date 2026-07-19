@@ -13293,8 +13293,8 @@ body {
 }
 
 .share-collab-empty {
-  font-size: 12px;
-  color: var(--ui-color-muted);
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 
 .share-collab-error {
@@ -14726,7 +14726,7 @@ body {
 
 [data-theme="dark"] .share-collab-meta,
 [data-theme="dark"] .share-collab-empty {
-  color: var(--ui-color-muted);
+  color: var(--color-text-secondary);
 }
 
 [data-theme="dark"] .invite-inbox-subtitle,
