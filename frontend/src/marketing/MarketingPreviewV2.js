@@ -27,12 +27,17 @@ import { getBillingConfig, submitMarketingContact, submitMarketingMailingListSig
 import Accordion from '../components/ui/Accordion';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
-import Field from '../components/ui/Field';
 import IconButton from '../components/ui/IconButton';
 import Modal from '../components/ui/Modal';
-import SelectInput from '../components/ui/SelectInput';
-import TextareaInput from '../components/ui/TextareaInput';
 import TextInput from '../components/ui/TextInput';
+import SupportContactForm from '../components/support/SupportContactForm';
+import {
+  CONTACT_CARDS,
+  CONTACT_SUBMIT_STATUS,
+  createContactFormState,
+  emptyContactForm,
+  validateContactForm,
+} from '../components/support/supportContactConfig';
 import { ROUTE_SURFACES } from '../utils/appRoutes';
 import {
   BILLING_CYCLE_OPTIONS,
@@ -643,39 +648,7 @@ const exampleCards = [
   },
 ];
 
-const contactCards = [
-  {
-    key: 'inquiries',
-    title: 'Inquiries and feedback',
-    text: 'Questions, demo requests, ideas, partnerships, and early product feedback.',
-    cta: 'Contact us',
-    email: 'hello@vellic.io',
-    reasonOptions: ['Demo request', 'Product feedback', 'Partnership', 'General question', 'Other'],
-  },
-  {
-    key: 'support',
-    title: 'Product support',
-    text: 'Help with maps, scans, screenshots, exports, account access, or product issues.',
-    cta: 'Get help',
-    email: 'support@vellic.io',
-    reasonOptions: ['Scan issue', 'Screenshots', 'Exports', 'Account access', 'Other'],
-  },
-];
-
-const emptyContactForm = {
-  name: '',
-  email: '',
-  reason: '',
-  reasonDetail: '',
-  message: '',
-};
-
-const CONTACT_SUBMIT_STATUS = Object.freeze({
-  IDLE: 'idle',
-  SUBMITTING: 'submitting',
-  SUCCESS: 'success',
-  ERROR: 'error',
-});
+const contactCards = CONTACT_CARDS;
 
 const MAILING_LIST_SUBMIT_STATUS = Object.freeze({
   IDLE: 'idle',
@@ -1445,7 +1418,7 @@ function ContactFormModal({
   onSubmit,
 }) {
   const title = target ? `${target.cta}: ${target.title}` : 'Contact Vellic';
-  const reasonOptions = target?.reasonOptions?.length ? target.reasonOptions : ['General question', 'Other'];
+  const reasonOptions = target?.reasonOptions?.length ? target.reasonOptions : ['General inquiry', 'Other'];
   const isSubmitting = submitStatus === CONTACT_SUBMIT_STATUS.SUBMITTING;
   const isSubmitted = submitted || submitStatus === CONTACT_SUBMIT_STATUS.SUCCESS;
 
@@ -1485,71 +1458,18 @@ function ContactFormModal({
           </div>
         </div>
       ) : (
-        <form id="marketing-v2-contact-form" className="marketing-v2-contact-form" onSubmit={onSubmit}>
-          <div className="marketing-v2-contact-form__row">
-            <TextInput
-              id="marketing-v2-contact-name"
-              label="Name"
-              value={form.name}
-              onChange={(event) => onChange('name', event.target.value)}
-              placeholder="Your name"
-              autoComplete="name"
-              required
-              error={errors.name}
-              disabled={isSubmitting}
-            />
-            <TextInput
-              id="marketing-v2-contact-email"
-              type="email"
-              label="Email"
-              value={form.email}
-              onChange={(event) => onChange('email', event.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-              required
-              error={errors.email}
-              disabled={isSubmitting}
-            />
-          </div>
-          <div className="marketing-v2-contact-form__row">
-            <SelectInput
-              id="marketing-v2-contact-reason"
-              label="Reason"
-              value={form.reason || reasonOptions[0]}
-              onChange={(event) => onChange('reason', event.target.value)}
-              disabled={isSubmitting}
-            >
-              {reasonOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </SelectInput>
-            <TextInput
-              id="marketing-v2-contact-reason-detail"
-              label="Reason details"
-              value={form.reasonDetail}
-              onChange={(event) => onChange('reasonDetail', event.target.value)}
-              placeholder="Optional detail"
-              disabled={isSubmitting}
-            />
-          </div>
-          <Field label="Message" htmlFor="marketing-v2-contact-message" required error={errors.message}>
-            <TextareaInput
-              id="marketing-v2-contact-message"
-              value={form.message}
-              onChange={(event) => onChange('message', event.target.value)}
-              placeholder="What should we know?"
-              rows={5}
-              invalid={Boolean(errors.message)}
-              required
-              disabled={isSubmitting}
-            />
-          </Field>
-          {submitError ? (
-            <p className="marketing-v2-modal-note marketing-v2-modal-note--error" role="alert">
-              {submitError}
-            </p>
-          ) : null}
-        </form>
+        <SupportContactForm
+          formId="marketing-v2-contact-form"
+          idPrefix="marketing-v2-contact"
+          className="marketing-v2-contact-form"
+          form={form}
+          errors={errors}
+          submitError={submitError}
+          isSubmitting={isSubmitting}
+          reasonOptions={reasonOptions}
+          onChange={onChange}
+          onSubmit={onSubmit}
+        />
       )}
     </Modal>
   );
@@ -1817,10 +1737,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
   const openContactModal = (target) => {
     setContactTarget(target);
-    setContactForm({
-      ...emptyContactForm,
-      reason: target.reasonOptions[0],
-    });
+    setContactForm(createContactFormState(target));
     setContactErrors({});
     setContactSubmitStatus(CONTACT_SUBMIT_STATUS.IDLE);
     setContactSubmitError('');
@@ -1850,13 +1767,8 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
     event.preventDefault();
     if (!contactTarget) return;
     if (contactSubmitStatus === CONTACT_SUBMIT_STATUS.SUBMITTING) return;
-    const nextErrors = {};
-    const name = contactForm.name.trim();
-    const email = contactForm.email.trim();
-    const message = contactForm.message.trim();
-    if (!name) nextErrors.name = 'Enter your name.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) nextErrors.email = 'Enter a valid email address.';
-    if (!message) nextErrors.message = 'Enter a message.';
+
+    const { errors: nextErrors, values } = validateContactForm(contactForm);
     if (Object.keys(nextErrors).length > 0) {
       setContactErrors(nextErrors);
       setContactSubmitStatus(CONTACT_SUBMIT_STATUS.IDLE);
@@ -1864,7 +1776,6 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
       return;
     }
 
-    const reason = contactForm.reason || contactTarget.reasonOptions[0];
     setContactErrors({});
     setContactSubmitted(false);
     setContactSubmitStatus(CONTACT_SUBMIT_STATUS.SUBMITTING);
@@ -1873,11 +1784,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
     try {
       await submitMarketingContact({
         targetKey: contactTarget.key,
-        name,
-        email,
-        reason,
-        reasonDetail: contactForm.reasonDetail.trim(),
-        message,
+        ...values,
         sourceUrl: typeof window !== 'undefined' ? window.location.href : '',
       });
       setContactSubmitStatus(CONTACT_SUBMIT_STATUS.SUCCESS);

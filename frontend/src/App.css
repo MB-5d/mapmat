@@ -7674,6 +7674,62 @@ body {
   gap: 10px;
 }
 
+.support-contact-form {
+  display: grid;
+  gap: var(--unit-16);
+}
+
+.support-contact-form__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--unit-16);
+}
+
+.support-contact-form--stacked .support-contact-form__row {
+  grid-template-columns: 1fr;
+}
+
+.support-contact-form__error {
+  margin: 0;
+  color: var(--ui-status-danger-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.support-drawer-card {
+  gap: var(--unit-16);
+}
+
+.support-drawer-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.support-drawer-actions .ui-btn {
+  flex: 1 1 150px;
+}
+
+.support-drawer-confirmation {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
+}
+
+.support-drawer-confirmation .support-drawer-actions {
+  grid-column: 1 / -1;
+}
+
+.support-drawer-confirmation__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--ui-radius-md);
+  color: var(--ui-status-success-text);
+  background: rgba(22, 163, 74, 0.12);
+}
+
 .drawer-pill {
   font-size: 11px;
   font-weight: 600;

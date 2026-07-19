@@ -46,6 +46,7 @@ import InviteInboxModal from './components/modals/InviteInboxModal';
 import WelcomeModal from './components/modals/WelcomeModal';
 import ProfileDrawer from './components/drawers/ProfileDrawer';
 import SettingsDrawer from './components/drawers/SettingsDrawer';
+import SupportDrawer from './components/drawers/SupportDrawer';
 import VersionHistoryDrawer from './components/drawers/VersionHistoryDrawer';
 import ProjectsModal from './components/modals/ProjectsModal';
 import PromptModal from './components/modals/PromptModal';
@@ -3395,6 +3396,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
+  const [showSupportDrawer, setShowSupportDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
@@ -7926,6 +7928,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowImageReportDrawer(false);
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowVersionHistoryDrawer(false);
   }, [isLoggedIn, openAuthModal]);
 
@@ -8392,6 +8395,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setShowAccessRequestsInboxModal(false);
         setShowProfileDrawer(false);
         setShowSettingsDrawer(false);
+        setShowSupportDrawer(false);
         setShowVersionHistoryDrawer(false);
         setShowImageReportDrawer(false);
         if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
@@ -8425,6 +8429,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowAccessRequestsInboxModal(false);
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
+      setShowSupportDrawer(false);
       setShowVersionHistoryDrawer(false);
       if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
         navigateToRoute(createAppHomeRoute(), { replace: true });
@@ -8495,6 +8500,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleShowInviteInbox = useCallback(async () => {
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowProjectsModal(false);
     setShowHistoryModal(false);
     setShowVersionHistoryDrawer(false);
@@ -8509,6 +8515,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleShowAccessRequestsInbox = useCallback(async () => {
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowProjectsModal(false);
     setShowHistoryModal(false);
     setShowVersionHistoryDrawer(false);
@@ -8759,6 +8766,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleShowProfile = useCallback(() => {
     setShowProfileDrawer(true);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
     setShowImageReportDrawer(false);
@@ -8770,6 +8778,19 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleShowSettings = useCallback(() => {
     setShowSettingsDrawer(true);
     setShowProfileDrawer(false);
+    setShowSupportDrawer(false);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
+    setShowVersionHistoryDrawer(false);
+    setShowProjectsModal(false);
+    setShowHistoryModal(false);
+  }, []);
+
+  const handleShowSupport = useCallback(() => {
+    setShowSupportDrawer(true);
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
     setShowImageReportDrawer(false);
@@ -8799,6 +8820,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowImageReportDrawer(false);
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowVersionHistoryDrawer(false);
   }, [isLoggedIn, openAuthModal]);
 
@@ -8811,6 +8833,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     onShowProfile: handleShowProfile,
     onShowBilling: handleShowBilling,
     onShowSettings: handleShowSettings,
+    onShowSupport: handleShowSupport,
   }), [
     isLoggedIn,
     currentUser,
@@ -8820,6 +8843,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     handleShowProfile,
     handleShowBilling,
     handleShowSettings,
+    handleShowSupport,
   ]);
 
   const startMapNameEdit = useCallback(() => {
@@ -13831,6 +13855,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowSupportDrawer(false);
             setShowProjectsModal(false);
             setShowHistoryModal(false);
           }
@@ -13845,6 +13870,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowSupportDrawer(false);
             setShowVersionHistoryDrawer(false);
             setShowProjectsModal(false);
             setShowHistoryModal(false);
@@ -13861,6 +13887,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowSupportDrawer(false);
             setShowProjectsModal(false);
             setShowHistoryModal(false);
           }
@@ -13876,6 +13903,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowSupportDrawer(false);
             setShowVersionHistoryDrawer(false);
             setShowHistoryModal(false);
           }
@@ -13932,6 +13960,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (showSettingsDrawer) {
           setShowSettingsDrawer(false);
         }
+        if (showSupportDrawer) {
+          setShowSupportDrawer(false);
+        }
         if (showVersionHistoryDrawer) {
           setShowVersionHistoryDrawer(false);
         }
@@ -13952,7 +13983,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, cancelActiveConnectionInteraction, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showSupportDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, cancelActiveConnectionInteraction, zoomAtClientPoint, getZoomBounds]);
 
   useEffect(() => {
     const handleWindowBlur = () => cancelActiveConnectionInteraction();
@@ -13967,6 +13998,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       || showImageReportDrawer
       || showProfileDrawer
       || showSettingsDrawer
+      || showSupportDrawer
       || showVersionHistoryDrawer
       || showProjectsModal
       || showHistoryModal
@@ -14002,6 +14034,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     showReportDrawer,
     showSaveMapModal,
     showSettingsDrawer,
+    showSupportDrawer,
     showShareModal,
     showVersionHistoryDrawer,
     showViewDropdown,
@@ -16076,6 +16109,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowAuthModal(false);
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
+      setShowSupportDrawer(false);
       setShowVersionHistoryDrawer(false);
       setShowReportDrawer(false);
       setShowImageReportDrawer(false);
@@ -19674,6 +19708,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowSupportDrawer(false);
                       setShowVersionHistoryDrawer(false);
                       setShowProjectsModal(false);
                       setShowHistoryModal(false);
@@ -19693,6 +19728,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowSupportDrawer(false);
                       setShowVersionHistoryDrawer(false);
                       setShowProjectsModal(false);
                       setShowHistoryModal(false);
@@ -19859,6 +19895,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowReportDrawer(false);
                   setShowProfileDrawer(false);
                   setShowSettingsDrawer(false);
+                  setShowSupportDrawer(false);
                   setShowVersionHistoryDrawer(false);
                   setShowProjectsModal(false);
                   setShowHistoryModal(false);
@@ -19895,6 +19932,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowSupportDrawer(false);
                       setShowProjectsModal(false);
                       setShowHistoryModal(false);
                     }
@@ -20102,6 +20140,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           authModal: showAuthModal,
           profileDrawer: showProfileDrawer,
           settingsDrawer: showSettingsDrawer,
+          supportDrawer: showSupportDrawer,
           versionHistoryDrawer: showVersionHistoryDrawer,
           inviteInboxModal: showInviteInboxModal,
           accessRequestsInboxModal: showAccessRequestsInboxModal,
@@ -20931,6 +20970,13 @@ export default function App({ currentRoute, navigateToRoute }) {
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
         consent={consent}
         onOpenPrivacySettings={openPrivacySettings}
+      />
+
+      <SupportDrawer
+        isOpen={showSupportDrawer}
+        onClose={() => setShowSupportDrawer(false)}
+        user={currentUser}
+        showToast={showToast}
       />
 
       <VersionHistoryDrawer

@@ -6,6 +6,7 @@ import {
   LogIn,
   LogOut,
   Mail,
+  MessageCircle,
   Network,
   Settings2,
   ShieldCheck,
@@ -66,7 +67,7 @@ const Topbar = ({
   pendingInviteCount = 0,
   pendingAccessRequestCount = 0,
 }) => {
-  const { isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onLogout, onLogin, onSignup } = useAuth();
+  const { isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onShowSupport, onLogout, onLogin, onSignup } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
   const figmaAccountMenuAppliedRef = useRef('');
@@ -284,6 +285,16 @@ const Topbar = ({
                     onClick={() => {
                       closeMenu();
                       onShowSettings();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<MessageCircle size={16} />}
+                    label="Support"
+                    onClick={() => {
+                      closeMenu();
+                      onShowSupport?.();
                     }}
                   />
                   <MenuItem

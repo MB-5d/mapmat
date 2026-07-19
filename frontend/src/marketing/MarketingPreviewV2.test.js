@@ -95,7 +95,7 @@ describe('MarketingPreviewV2', () => {
   const fillContactForm = ({
     name = 'Avery Test',
     email = 'avery@example.com',
-    reason = 'Demo request',
+    reason = 'General inquiry',
     reasonDetail = 'Enterprise rollout',
     message = 'I would like to schedule a demo.',
   } = {}) => {
@@ -690,8 +690,20 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('Sends to hello@vellic.io.');
     expect(container.querySelector('#marketing-v2-contact-name')).not.toBeNull();
     expect(container.querySelector('#marketing-v2-contact-email')).not.toBeNull();
-    expect(container.querySelector('#marketing-v2-contact-reason')).not.toBeNull();
+    const reason = container.querySelector('#marketing-v2-contact-reason');
+    expect(reason).not.toBeNull();
+    expect(reason.value).toBe('General inquiry');
+    expect(Array.from(reason.options).map((option) => option.value)[0]).toBe('General inquiry');
     expect(container.querySelector('#marketing-v2-contact-message')).not.toBeNull();
+
+    act(() => {
+      container.querySelector('.marketing-v2-contact-modal .account-drawer-close, .marketing-v2-contact-modal .modal-close')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+      );
+    });
+
+    openContactModal('Get help');
+    expect(container.querySelector('#marketing-v2-contact-reason').value).toBe('General inquiry');
   });
 
   test('submits inquiry contact forms to the backend and shows success', async () => {
@@ -709,7 +721,7 @@ describe('MarketingPreviewV2', () => {
       targetKey: 'inquiries',
       name: 'Avery Test',
       email: 'avery@example.com',
-      reason: 'Demo request',
+      reason: 'General inquiry',
       reasonDetail: 'Enterprise rollout',
       message: 'I would like to schedule a demo.',
     }));
