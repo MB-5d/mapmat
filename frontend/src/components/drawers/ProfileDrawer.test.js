@@ -167,7 +167,7 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('[data-testid="avatar-cropper"]')).toBeNull();
   });
 
-  test('opens plan summary by default and shows plan actions', () => {
+  test('opens plan summary by default and shows owner plan actions', () => {
     const onOpenPlans = jest.fn();
     const onOpenBilling = jest.fn();
 
@@ -202,35 +202,35 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('.account-plan-status-badge')?.textContent).toContain('Active');
     expect(container.querySelector('.account-plan-actions')).not.toBeNull();
 
-    const planButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.trim() === 'Switch'
+    const upgradeButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.trim() === 'Upgrade'
     );
     const billingButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.trim() === 'Manage billing'
     );
-    const addPagesButton = Array.from(container.querySelectorAll('button')).find((button) =>
+    const switchButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.trim() === 'Switch'
+    );
+    const pagesButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.trim() === 'Pages'
     );
-    const addScreenshotsButton = Array.from(container.querySelectorAll('button')).find((button) =>
+    const screenshotsButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.trim() === 'Screenshots'
     );
 
-    expect(planButton).not.toBeNull();
+    expect(upgradeButton).not.toBeNull();
     expect(billingButton).not.toBeNull();
-    expect(addPagesButton).not.toBeNull();
-    expect(addScreenshotsButton).not.toBeNull();
-    expect(planButton.className).toContain('ui-btn--type-secondary');
-    expect(planButton.className).toContain('ui-btn--style-mono');
-    expect(planButton.className).not.toContain('ui-btn--style-brand');
-    expect(addPagesButton.querySelector('.ui-btn__icon--start')).not.toBeNull();
-    expect(addScreenshotsButton.querySelector('.ui-btn__icon--start')).not.toBeNull();
+    expect(switchButton).toBeUndefined();
+    expect(pagesButton).toBeUndefined();
+    expect(screenshotsButton).toBeUndefined();
+    expect(upgradeButton.className).toContain('ui-btn--type-primary');
     expect(billingButton.className).toContain('ui-btn--type-link');
     expect(billingButton.className).toContain('ui-btn--style-mono');
     expect(billingButton.className).not.toContain('ui-btn--style-brand');
     expect(billingButton.querySelector('.ui-btn__icon--end')).not.toBeNull();
 
     act(() => {
-      planButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      upgradeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       billingButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
@@ -405,7 +405,40 @@ describe('ProfileDrawer', () => {
     confirmSpy.mockRestore();
   });
 
-  test('hides plan details from commenters', () => {
+  test('hides plan details from editors and commenters', () => {
+    const renderWithRole = (membershipRole) => {
+      act(() => {
+        root.render(
+          <ProfileDrawer
+            isOpen
+            user={{
+              ...baseUser,
+              entitlements: {
+                account: { state: 'active', ownerUserId: 'owner-1', membershipRole },
+                plan: { name: 'Studio' },
+                meters: {},
+                limits: {},
+              },
+            }}
+            onClose={jest.fn()}
+            onUpdate={jest.fn()}
+            onLogout={jest.fn()}
+            onOpenPlans={jest.fn()}
+            onOpenBilling={jest.fn()}
+            showToast={jest.fn()}
+          />
+        );
+      });
+
+      expect(container.querySelector('button[aria-controls="account-plan-details"]')).toBeNull();
+      expect(container.querySelector('.account-plan-actions')).toBeNull();
+    };
+
+    renderWithRole('editor');
+    renderWithRole('commenter');
+  });
+
+  test('shows plan details for account owners', () => {
     act(() => {
       root.render(
         <ProfileDrawer
@@ -413,7 +446,7 @@ describe('ProfileDrawer', () => {
           user={{
             ...baseUser,
             entitlements: {
-              account: { state: 'active', ownerUserId: 'owner-1', membershipRole: 'commenter' },
+              account: { state: 'active', ownerUserId: 'owner-1', membershipRole: 'owner' },
               plan: { name: 'Studio' },
               meters: {},
               limits: {},
@@ -429,8 +462,8 @@ describe('ProfileDrawer', () => {
       );
     });
 
-    expect(container.querySelector('button[aria-controls="account-plan-details"]')).toBeNull();
-    expect(container.querySelector('.account-plan-actions')).toBeNull();
+    expect(container.querySelector('button[aria-controls="account-plan-details"]')).not.toBeNull();
+    expect(container.querySelector('.account-plan-actions')).not.toBeNull();
   });
 
   test('keeps only one profile accordion open at a time', () => {

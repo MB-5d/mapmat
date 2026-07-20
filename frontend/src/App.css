@@ -10572,7 +10572,7 @@ body {
   min-height: 324px;
   flex-direction: column;
   overflow: hidden;
-  padding: 13px;
+  padding: 13px 13px 29px;
   border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
   background: var(--modal-card-bg);
