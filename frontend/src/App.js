@@ -6913,7 +6913,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     if (authLoading) return undefined;
 
-    const shareRouteKey = `${currentRoute.shareId}:${currentRoute.search || ''}`;
+    const shareActorKey = currentUser?.id
+      ? `user:${currentUser.id}`
+      : (isLoggedIn ? 'auth' : 'anon');
+    const shareRouteKey = `${currentRoute.shareId}:${currentRoute.search || ''}:${shareActorKey}`;
     if (loadedShareRouteKeyRef.current === shareRouteKey) return undefined;
 
     let cancelled = false;
@@ -6933,6 +6936,8 @@ export default function App({ currentRoute, navigateToRoute }) {
             if (cancelled) return;
             if (hasRequiredPermissionForShareAccess(permissions, requestedAccess)) {
               loadedShareRouteKeyRef.current = shareRouteKey;
+              setRouteMapGateState(null);
+              setRouteAccessRequestMessage('');
               navigateToRoute(createMapRoute(share.mapId), { replace: true });
               return;
             }
@@ -6944,6 +6949,11 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
 
           loadedShareRouteKeyRef.current = shareRouteKey;
+          loadedShareVersionKeyRef.current = getShareRefreshVersionKey(share);
+          applySharedMapPayload({
+            ...share,
+            accessLevel: requestedAccess,
+          });
           setRouteMapGateState({
             mapId: share.mapId,
             mapName: share.name || share.mapName || share.root?.title || '',
@@ -6998,6 +7008,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.shareId,
     currentRoute?.search,
     currentRoute?.surface,
+    currentUser?.id,
     isLoggedIn,
     navigateToRoute,
     showToast,
@@ -7008,7 +7019,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (authLoading || isLoggedIn) return undefined;
 
     const shareId = currentRoute.shareId;
-    const shareRouteKey = `${shareId}:${currentRoute.search || ''}`;
+    const shareRouteKey = `${shareId}:${currentRoute.search || ''}:anon`;
     let cancelled = false;
 
     const refreshShareIfChanged = async () => {
@@ -8955,6 +8966,42 @@ export default function App({ currentRoute, navigateToRoute }) {
       setPendingAccessRequestsLoading(false);
     }
   }, [currentMap?.id, loadCollaborationData, loadPendingAccessRequests, showToast]);
+
+  const handleUndoApprovedAccessRequest = useCallback(async (request) => {
+    if (!request?.id || !request?.mapId) return;
+    setPendingAccessRequestsLoading(true);
+    setPendingAccessRequestsError('');
+    try {
+      await api.reviewMapAccessRequest(request.mapId, request.id, {
+        status: 'pending',
+      });
+      trackEvent('access_request_undone', {
+        map_id: String(request.mapId),
+      });
+      showToast(`Undid access for ${request.requesterName || request.requesterEmail || 'user'}`, 'info');
+      await Promise.all([
+        loadPendingAccessRequests({ silent: true }),
+        currentMap?.id && sameId(currentMap.id, request.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      setPendingAccessRequestsError(error.message || 'Failed to undo access approval.');
+      showToast(error.message || 'Failed to undo access approval.', 'error');
+    } finally {
+      setPendingAccessRequestsLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, loadPendingAccessRequests, showToast]);
+
+  const handleOpenApprovedAccessRequestMap = useCallback(async (request) => {
+    if (!request?.mapId) return;
+    setShowAccessRequestsInboxModal(false);
+    setPendingAccessRequestsError('');
+    navigateToRoute(createMapRoute(request.mapId));
+    try {
+      await loadSavedMapByIdRef.current?.(request.mapId, { skipNavigation: true, silent: true });
+    } catch (error) {
+      showToast(error.message || 'Failed to open approved map.', 'error');
+    }
+  }, [navigateToRoute, showToast]);
 
   const handleRequestRouteMapAccess = useCallback(async () => {
     const mapId = currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map'
@@ -18870,7 +18917,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       && !!routeMapGateState
   );
   const isWelcomeModalEligible = currentRoute?.surface === ROUTE_SURFACES.APP
-    && (currentRoute?.section === 'home' || currentRoute?.section === 'map')
+    && currentRoute?.section === 'home'
     && !showInviteAcceptGate
     && !showMapAccessGate
     && !isBillingReturnRoute
@@ -20688,6 +20735,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         }}
         onApprove={handleApprovePendingAccessRequest}
         onDeny={handleDenyPendingAccessRequest}
+        onUndo={handleUndoApprovedAccessRequest}
+        onOpenMap={handleOpenApprovedAccessRequestMap}
       />
 
       <SaveMapModal

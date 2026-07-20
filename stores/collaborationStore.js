@@ -567,6 +567,20 @@ async function decideAccessRequestAsync({
   return getAccessRequestByIdAsync(requestId);
 }
 
+async function resetAccessRequestToPendingAsync(requestId) {
+  await adapter.executeAsync(`
+    UPDATE map_access_requests
+    SET status = 'pending',
+      decision_user_id = NULL,
+      decision_role = NULL,
+      decided_at = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status = 'approved'
+  `, [requestId]);
+
+  return getAccessRequestByIdAsync(requestId);
+}
+
 module.exports = {
   DEFAULT_COLLABORATION_SETTINGS,
   ensureCollaborationSchemaAsync,
@@ -595,4 +609,5 @@ module.exports = {
   getPendingAccessRequestByMapAndUserAsync,
   createAccessRequestAsync,
   decideAccessRequestAsync,
+  resetAccessRequestToPendingAsync,
 };

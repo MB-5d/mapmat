@@ -15,6 +15,7 @@ const formatRoleLabel = (role) => {
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMPTY_LIST = [];
 
 const renderRoleIcon = (role) => {
   const normalizedRole = String(role || '').trim().toLowerCase();
@@ -25,17 +26,17 @@ const renderRoleIcon = (role) => {
 
 const InviteInboxModal = ({
   show,
-  invites = [],
-  sentInvites = [],
+  invites = EMPTY_LIST,
+  sentInvites = EMPTY_LIST,
   loading = false,
   error = '',
-  eligibleMaps = [],
+  eligibleMaps = EMPTY_LIST,
   selectedMapId = '',
   onSelectedMapIdChange,
   inviteEmail = '',
   onInviteEmailChange,
   inviteRole = 'viewer',
-  inviteRoleOptions = [],
+  inviteRoleOptions = EMPTY_LIST,
   onInviteRoleChange,
   onSendInvite,
   onClose,

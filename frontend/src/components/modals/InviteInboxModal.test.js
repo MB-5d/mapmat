@@ -1,7 +1,11 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 
 import InviteInboxModal from './InviteInboxModal';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 
 describe('InviteInboxModal', () => {
   let container;
@@ -109,5 +113,34 @@ describe('InviteInboxModal', () => {
 
     expect(onSelectedMapIdChange).not.toHaveBeenCalled();
     expect(onSendInvite).toHaveBeenCalledTimes(1);
+  });
+
+  test('renders sent invites with stacked layout hooks', () => {
+    act(() => {
+      root.render(
+        <InviteInboxModal
+          show
+          invites={[]}
+          sentInvites={[{
+            id: 'sent-1',
+            mapId: 'map-1',
+            mapName: 'Example: long page site scan with full-page screenshots',
+            inviteeEmail: 'person@example.com',
+            role: 'editor',
+          }]}
+          eligibleMaps={[{ id: 'map-1', name: 'Example: long page site scan with full-page screenshots' }]}
+          selectedMapId="map-1"
+          inviteRoleOptions={['viewer', 'commenter', 'editor']}
+          onClose={jest.fn()}
+          onCancelSentInvite={jest.fn()}
+          onResendSentInvite={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.sent-invite-inbox-item')).not.toBeNull();
+    expect(container.textContent).toContain('person@example.com');
+    expect(appCss).toContain('.sent-invite-inbox-item {');
+    expect(appCss).toContain('flex-direction: column;');
   });
 });

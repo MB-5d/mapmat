@@ -38,7 +38,7 @@ const COLLABORATION_BACKEND_ENABLED = parseEnvBool(
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ACCESS_POLICIES = new Set(['private', 'viewer_invites_open']);
 const PRESENCE_IDENTITY_MODES = new Set(['named', 'anonymous']);
-const ACCESS_REQUEST_STATUSES = new Set(['approved', 'denied']);
+const ACCESS_REQUEST_STATUSES = new Set(['approved', 'denied', 'pending']);
 
 const INVITE_ROLES = new Set([
   permissionPolicy.ROLES.EDITOR,
@@ -858,13 +858,36 @@ router.patch('/maps/:id/access-requests/:requestId', async (req, res) => {
     if (!request || request.map_id !== id) {
       return res.status(404).json({ error: 'Access request not found' });
     }
-    if (request.status !== 'pending') {
-      return res.status(409).json({ error: 'Access request is no longer pending' });
-    }
-
     const decisionStatus = normalizeAccessRequestStatus(status);
     if (!decisionStatus) {
-      return res.status(400).json({ error: 'Invalid status. Use approved or denied.' });
+      return res.status(400).json({ error: 'Invalid status. Use approved, denied, or pending.' });
+    }
+
+    if (decisionStatus === 'pending') {
+      if (request.status !== 'approved') {
+        return res.status(409).json({ error: 'Only approved access requests can be undone' });
+      }
+
+      const removedMemberships = await collaborationStore.deleteMembershipByMapAndUserAsync(
+        id,
+        request.requester_user_id
+      );
+      const resetRequest = await collaborationStore.resetAccessRequestToPendingAsync(requestId);
+
+      recordUsageEvent(req, 'access_request_undone', 1, {
+        mapId: id,
+        requestId,
+        removedMemberships,
+      });
+
+      return res.json({
+        accessRequest: serializeAccessRequest(resetRequest),
+        membership: null,
+      });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(409).json({ error: 'Access request is no longer pending' });
     }
 
     let membership = null;

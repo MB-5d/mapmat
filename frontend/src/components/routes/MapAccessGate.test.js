@@ -61,4 +61,24 @@ describe('MapAccessGate', () => {
     expect(onRequestMessageChange).toHaveBeenCalledWith('Need review access');
     expect(onRequestAccess).toHaveBeenCalledTimes(1);
   });
+
+  test('does not show request controls while a map is opening', () => {
+    act(() => {
+      root.render(
+        <MapAccessGate
+          isLoggedIn
+          loading
+          requestStatus="idle"
+          requestMessage=""
+          onGoHome={jest.fn()}
+          onRequestMessageChange={jest.fn()}
+          onRequestAccess={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Opening map');
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(container.textContent).not.toContain('Request access');
+  });
 });

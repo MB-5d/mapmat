@@ -53,6 +53,9 @@ describe('AccessRequestInboxModal', () => {
 
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Requests');
     expect(container.textContent).toContain('Review map access requests linked to your account.');
+    expect(container.textContent).toContain('Alpha Map');
+    expect(container.textContent).toContain('Sam · Viewer access requested');
+    expect(container.textContent).not.toContain('Sam wants access');
 
     const select = container.querySelector('select');
     const descriptor = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');
@@ -92,5 +95,82 @@ describe('AccessRequestInboxModal', () => {
     expect(container.textContent).not.toContain('Refresh');
     expect(appCss).toContain('font-size: var(--type-body-sm-size);');
     expect(appCss).toContain('color: var(--color-text-primary);');
+  });
+
+  test('opens approved requester cards and shows success status styling', () => {
+    const onOpenMap = jest.fn();
+    const request = {
+      id: 'req-approved',
+      mapId: 'map-1',
+      mapName: 'Approved Map',
+      requestedRole: 'viewer',
+      decisionRole: 'commenter',
+      status: 'approved',
+      canReview: false,
+    };
+
+    act(() => {
+      root.render(
+        <AccessRequestInboxModal
+          show
+          requests={[request]}
+          onClose={jest.fn()}
+          onApprove={jest.fn()}
+          onDeny={jest.fn()}
+          onOpenMap={onOpenMap}
+        />
+      );
+    });
+
+    const card = container.querySelector('.access-request-inbox-item--clickable');
+    expect(card).not.toBeNull();
+    expect(container.textContent).toContain('Approved Map');
+    expect(container.textContent).toContain('Approved as Commenter');
+    expect(container.querySelector('.invite-inbox-item-status--approved')).not.toBeNull();
+
+    act(() => {
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onOpenMap).toHaveBeenCalledWith(request);
+  });
+
+  test('lets reviewers undo approved requests', () => {
+    const onUndo = jest.fn();
+    const request = {
+      id: 'req-owner-approved',
+      mapId: 'map-1',
+      mapName: 'Owner Map',
+      requesterName: 'Riley',
+      requestedRole: 'viewer',
+      decisionRole: 'editor',
+      status: 'approved',
+      canReview: true,
+    };
+
+    act(() => {
+      root.render(
+        <AccessRequestInboxModal
+          show
+          requests={[request]}
+          onClose={jest.fn()}
+          onApprove={jest.fn()}
+          onDeny={jest.fn()}
+          onUndo={onUndo}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Owner Map');
+    expect(container.textContent).toContain('Riley · Viewer access requested');
+    const undoButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Undo')
+    );
+
+    act(() => {
+      undoButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onUndo).toHaveBeenCalledWith(request);
   });
 });

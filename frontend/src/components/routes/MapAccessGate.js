@@ -88,7 +88,7 @@ export default function MapAccessGate({
           </div>
         ) : null}
 
-        {isLoggedIn && !hasPendingInvite && !requestSubmitted ? (
+        {isLoggedIn && !hasPendingInvite && !requestSubmitted && !loading ? (
           <div className="route-gate-request">
             <label className="route-gate-label" htmlFor="access-request-message">
               Message to owners (optional)
@@ -131,6 +131,15 @@ export default function MapAccessGate({
             >
               {!authLoading ? <LogIn size={16} /> : null}
               <span>Sign in</span>
+            </Button>
+          ) : loading ? (
+            <Button
+              type="button"
+              variant="primary"
+              disabled
+              loading
+            >
+              <span>Opening map</span>
             </Button>
           ) : hasPendingInvite ? (
             <>

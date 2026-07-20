@@ -1675,6 +1675,7 @@ function MarketingPreviewV2({
   const handleClick = (event) => {
     const anchor = event.target.closest?.('a[href]');
     if (!anchor || !isPlainLeftClick(event)) return;
+    if (!navigateToRoute) return;
     const url = new URL(anchor.getAttribute('href'), window.location.origin);
     if (url.origin !== window.location.origin) return;
     if (!url.pathname.startsWith(MARKETING_PREVIEW_V2_BASE_PATH)) return;
