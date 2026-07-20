@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "node scripts/generate-static.mjs && node scripts/validate-locales.mjs",
-    "build": "next build",
-    "check": "node scripts/generate-static.mjs && node scripts/validate-locales.mjs && next build"
+    "build": "next build --webpack",
+    "check": "npm run build"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

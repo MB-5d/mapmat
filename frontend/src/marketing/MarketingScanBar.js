@@ -30,7 +30,9 @@ function MarketingScanBar({
   buildScanUrl = buildAppScanUrl,
   compact = false,
   placeholder = 'https://example.com',
+  translateText = (source) => source,
 }) {
+  const t = translateText;
   const [urlValue, setUrlValue] = useState(initialValue);
   const [scanOptions, setScanOptions] = useState({ ...DEFAULT_MARKETING_SCAN_OPTIONS });
   const [showOptions, setShowOptions] = useState(false);
@@ -52,7 +54,7 @@ function MarketingScanBar({
   const handleScan = () => {
     const sanitizedUrl = sanitizeUrl(urlValue);
     if (!sanitizedUrl) {
-      setError('Enter a public website URL, like example.com.');
+      setError(t('Enter a public website URL, like example.com.'));
       return;
     }
 
@@ -100,7 +102,10 @@ function MarketingScanBar({
           onOptionChange={(key) => setScanOptions((prev) => ({ ...prev, [key]: !prev[key] }))}
           onScan={handleScan}
           scanDisabled={!urlValue.trim()}
-          scanTitle="Scan"
+          scanTitle={t('Scan')}
+          scanLabel={t('Scan')}
+          optionsLabel={t('Options')}
+          scanOptionsTitle={t('Options')}
           placeholder={placeholder}
           optionsDisabled={false}
           showClearUrl={false}

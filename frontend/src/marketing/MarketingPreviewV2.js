@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -58,7 +58,6 @@ import {
   getMarketingPreviewV2SectionById,
   getMarketingPreviewV2SectionByPathname,
 } from './marketingPreviewV2Config';
-import './MarketingPreviewV2.css';
 
 const heroHighlights = [
   {
@@ -77,6 +76,20 @@ const heroHighlights = [
     text: 'Invite reviewers and export useful deliverables.',
   },
 ];
+
+const MarketingTranslationContext = createContext({
+  localeCode: 'en',
+  t: (source) => source,
+});
+
+function useMarketingTranslation() {
+  return useContext(MarketingTranslationContext);
+}
+
+function resolveMarketingAssetSource(asset) {
+  if (typeof asset === 'string') return asset;
+  return asset?.src || '';
+}
 
 const useCaseCards = [
   {
@@ -926,7 +939,8 @@ function getComparisonBadgeStyle(value) {
   }
 }
 
-function MarketingV2Header({ activeSectionId, onMobileScan, onOpenApp }) {
+function MarketingV2Header({ activeSectionId, onMobileScan, onOpenApp, buildSectionHref = buildMarketingPreviewV2Path }) {
+  const { t } = useMarketingTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const navSections = useMemo(() => (
     MARKETING_PREVIEW_V2_NAV_SECTION_IDS.map(getMarketingPreviewV2SectionById)
@@ -943,8 +957,8 @@ function MarketingV2Header({ activeSectionId, onMobileScan, onOpenApp }) {
 
   return (
     <header className="marketing-v2-header">
-      <a className="marketing-v2-header__brand" href={buildMarketingPreviewV2Path('home')} aria-label="Vellic home">
-        <img src={vellicLogo} alt="Vellic" />
+      <a className="marketing-v2-header__brand" href={buildSectionHref('home')} aria-label={t('Vellic home')}>
+        <img src={resolveMarketingAssetSource(vellicLogo)} alt="Vellic" />
       </a>
       <IconButton
         className="marketing-v2-header__menu"
@@ -953,20 +967,20 @@ function MarketingV2Header({ activeSectionId, onMobileScan, onOpenApp }) {
         buttonStyle="mono"
         size="xs"
         icon={menuOpen ? <X size={20} /> : <Menu size={20} />}
-        label={menuOpen ? 'Close navigation' : 'Open navigation'}
-        aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
+        label={menuOpen ? t('Close navigation') : t('Open navigation')}
+        aria-label={menuOpen ? t('Close navigation') : t('Open navigation')}
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen((open) => !open)}
       />
-      <nav className={classNames('marketing-v2-header__nav', menuOpen && 'is-open')} aria-label="Marketing navigation">
+      <nav className={classNames('marketing-v2-header__nav', menuOpen && 'is-open')} aria-label={t('Marketing navigation')}>
         {navSections.map((section) => (
           <a
             key={section.id}
-            href={buildMarketingPreviewV2Path(section.id)}
+            href={buildSectionHref(section.id)}
             aria-current={activeSectionId === section.id ? 'page' : undefined}
             onClick={() => setMenuOpen(false)}
           >
-            {section.navLabel}
+            {t(section.navLabel)}
           </a>
         ))}
         <Button
@@ -976,7 +990,7 @@ function MarketingV2Header({ activeSectionId, onMobileScan, onOpenApp }) {
           endIcon={<ArrowRight />}
           onClick={handleStart}
         >
-          Get started
+          {t('Get started')}
         </Button>
       </nav>
     </header>
@@ -984,12 +998,13 @@ function MarketingV2Header({ activeSectionId, onMobileScan, onOpenApp }) {
 }
 
 function HeroProductImage() {
+  const { t } = useMarketingTranslation();
   return (
     <div className="marketing-v2-hero-product-scroll marketing-v2-reveal">
-      <figure className="marketing-v2-hero-product" aria-label="Vellic canvas preview">
+      <figure className="marketing-v2-hero-product" aria-label={t('Vellic canvas preview')}>
         <img
-          src={vellicCanvasImage}
-          alt="Vellic canvas showing a visual sitemap generator workspace with page screenshot cards connected across a large website audit map"
+          src={resolveMarketingAssetSource(vellicCanvasImage)}
+          alt={t('Vellic canvas showing a visual sitemap generator workspace with page screenshot cards connected across a large website audit map')}
           loading="eager"
           decoding="async"
         />
@@ -1160,12 +1175,14 @@ function MarketingV2ScanCta({
   label = '',
   placeholder = 'Try it now. Enter a URL to start',
 }) {
+  const { t } = useMarketingTranslation();
   return (
     <div className={classNames('marketing-v2-scan-cta', compact && 'marketing-v2-scan-cta--compact')}>
       {label ? <div className="marketing-v2-scan-cta__label">{label}</div> : null}
       <MarketingScanBar
         compact={compact}
-        placeholder={placeholder}
+        placeholder={t(placeholder)}
+        translateText={t}
         onNavigate={onNavigatePath}
         onOpenApp={onOpenApp}
         onPhoneScan={onMobileScan}
@@ -1202,6 +1219,7 @@ function MailingListModal({
   onSubmit,
   show,
 }) {
+  const { t } = useMarketingTranslation();
   const isSubmitting = submitStatus === MAILING_LIST_SUBMIT_STATUS.SUBMITTING;
   const isSuccess = submitStatus === MAILING_LIST_SUBMIT_STATUS.SUCCESS;
 
@@ -1209,17 +1227,17 @@ function MailingListModal({
     <Modal
       show={show}
       onClose={onClose}
-      title="Join Vellic updates"
-      subtitle="A lightweight list for larger release notes and product updates."
+      title={t('Join Vellic updates')}
+      subtitle={t('A lightweight list for larger release notes and product updates.')}
       className="marketing-v2-mailing-modal"
       footer={(
         <div className="marketing-v2-modal-actions">
           <Button type="button" variant="secondary" buttonStyle="mono" onClick={onClose}>
-            Close
+            {t('Close')}
           </Button>
           {!isSuccess ? (
             <Button type="submit" form="marketing-v2-mailing-form" startIcon={<Mail />} loading={isSubmitting}>
-              {isSubmitting ? 'Joining' : 'Join list'}
+              {isSubmitting ? t('Joining') : t('Join list')}
             </Button>
           ) : null}
         </div>
@@ -1227,28 +1245,28 @@ function MailingListModal({
     >
       {isSuccess ? (
         <p className="marketing-v2-modal-note marketing-v2-modal-note--success" role="status">
-          {submitMessage || 'You are on the preview list.'}
+          {submitMessage || t('You are on the preview list.')}
         </p>
       ) : (
         <form id="marketing-v2-mailing-form" className="marketing-v2-mailing-form" onSubmit={onSubmit}>
           <TextInput
             id="marketing-v2-mailing-email"
             type="email"
-            label="Email"
+            label={t('Email')}
             value={email}
             onChange={(event) => onChangeEmail(event.target.value)}
-            placeholder="you@example.com"
+            placeholder={t('you@example.com')}
             autoComplete="email"
             error={emailError}
             disabled={isSubmitting}
           />
           {submitStatus === MAILING_LIST_SUBMIT_STATUS.ERROR ? (
             <p className="marketing-v2-modal-note marketing-v2-modal-note--error" role="alert">
-              {submitMessage || 'Could not join the mailing list. Please try again.'}
+              {submitMessage || t('Could not join the mailing list. Please try again.')}
             </p>
           ) : (
             <p className="marketing-v2-modal-note">
-              We will keep it quiet and only send bigger release or product updates.
+              {t('We will keep it quiet and only send bigger release or product updates.')}
             </p>
           )}
         </form>
@@ -1265,12 +1283,13 @@ function MobileScanModal({
   onJoinList,
   onShare,
 }) {
+  const { t } = useMarketingTranslation();
   return (
     <Modal
       show={show}
       onClose={onClose}
-      title="Use a larger screen"
-      subtitle="Vellic maps need room for the canvas, screenshots, flows, and review tools."
+      title={t('Use a larger screen')}
+      subtitle={t('Vellic maps need room for the canvas, screenshots, flows, and review tools.')}
       className="marketing-v2-mobile-scan-modal"
     >
       <div className="marketing-v2-mobile-scan">
@@ -1279,14 +1298,14 @@ function MobileScanModal({
         </div>
         <div>
           <p>
-            Small screens make visual sitemap work too cramped. Try scanning{url ? ` ${url}` : ''} on desktop or tablet landscape.
+            {t('Small screens make visual sitemap work too cramped. Try scanning on desktop or tablet landscape.')}{url ? ` ${url}` : ''}
           </p>
           <div className="marketing-v2-mobile-scan__actions">
             <Button type="button" startIcon={<Mail />} onClick={onJoinList}>
-              Join mailing list
+              {t('Join mailing list')}
             </Button>
             <Button type="button" variant="secondary" buttonStyle="mono" startIcon={<Share2 />} onClick={onShare}>
-              {shareLabel}
+              {t(shareLabel)}
             </Button>
           </div>
         </div>
@@ -1296,16 +1315,17 @@ function MobileScanModal({
 }
 
 function MarketingV2UpdateCta({ onJoinList }) {
+  const { t } = useMarketingTranslation();
   return (
     <div className="marketing-v2-update-cta marketing-v2-reveal">
       <div className="marketing-v2-update-cta__copy">
-        <h3>This is just the start!</h3>
-        <p>Vellic is moving rapidly, with improvements and implementations launching several times per week. Join our mailing list to stay updated.*</p>
-        <span>*Emails sent only occasionally for bigger updates and major rollouts.</span>
+        <h3>{t('This is just the start!')}</h3>
+        <p>{t('Vellic is moving rapidly, with improvements and implementations launching several times per week. Join our mailing list to stay updated.*')}</p>
+        <span>{t('*Emails sent only occasionally for bigger updates and major rollouts.')}</span>
       </div>
       <div className="marketing-v2-update-cta__actions">
         <Button type="button" size="lg" startIcon={<Mail />} onClick={onJoinList}>
-          Join mailing list
+          {t('Join mailing list')}
         </Button>
       </div>
     </div>
@@ -1313,18 +1333,19 @@ function MarketingV2UpdateCta({ onJoinList }) {
 }
 
 function MarketingV2ExampleCard({ example, index, onShowExample }) {
+  const { t } = useMarketingTranslation();
   return (
     <article className="marketing-v2-example marketing-v2-reveal" style={getRevealDelayStyle(index)}>
       <figure>
-        <img src={example.image} alt={example.alt} loading="eager" decoding="async" />
+        <img src={resolveMarketingAssetSource(example.image)} alt={t(example.alt)} loading="eager" decoding="async" />
       </figure>
       <div className="marketing-v2-example__copy">
-        <h3>{example.title}</h3>
-        <p>{example.text}</p>
-        {example.mobileNote ? <span className="marketing-v2-example__mobile-note">{example.mobileNote}</span> : null}
+        <h3>{t(example.title)}</h3>
+        <p>{t(example.text)}</p>
+        {example.mobileNote ? <span className="marketing-v2-example__mobile-note">{t(example.mobileNote)}</span> : null}
         <div className="marketing-v2-example__actions">
           <Button type="link" endIcon={<ExternalLink />} onClick={() => onShowExample(example)}>
-            Show me
+            {t('Show me')}
           </Button>
         </div>
       </div>
@@ -1338,6 +1359,7 @@ function formatPricingDetail(detail) {
 }
 
 function MarketingV2PricingCard({ plan, index, onGetStarted }) {
+  const { t } = useMarketingTranslation();
   return (
     <MarketingV2Card
       accent={plan.accent}
@@ -1345,11 +1367,11 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
       style={getRevealDelayStyle(index)}
     >
       <div className="marketing-v2-pricing-card__top">
-        <h3>{plan.title}</h3>
+        <h3>{t(plan.title)}</h3>
         <div className="marketing-v2-pricing-card__price">
           <div className="marketing-v2-pricing-card__price-main">
             <strong>{plan.price}</strong>
-            <span>{plan.priceSuffix}</span>
+            <span>{t(plan.priceSuffix)}</span>
           </div>
           {plan.priceComparison ? (
             <span className="marketing-v2-pricing-card__price-compare">
@@ -1358,12 +1380,12 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
           ) : null}
         </div>
       </div>
-      <p>{plan.description}</p>
+      <p>{t(plan.description)}</p>
       <ul>
         {plan.details.map((detail) => (
           <li key={detail}>
             <Check size={15} aria-hidden="true" />
-            <span>{formatPricingDetail(detail)}</span>
+            <span>{t(formatPricingDetail(detail))}</span>
           </li>
         ))}
       </ul>
@@ -1375,10 +1397,10 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
           buttonStyle="brand"
           onClick={() => onGetStarted(plan)}
         >
-          {plan.cta}
+          {t(plan.cta)}
         </Button>
         <p className="marketing-v2-pricing-card__screenshot-note">
-          *additional screenshot credits can be purchased anytime
+          {t('*additional screenshot credits can be purchased anytime')}
         </p>
       </div>
     </MarketingV2Card>
@@ -1386,10 +1408,11 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
 }
 
 function MarketingV2ContactCard({ card, index, onOpenContact }) {
+  const { t } = useMarketingTranslation();
   return (
     <MarketingV2Card accent="brand" style={getRevealDelayStyle(index)}>
-      <h3>{card.title}</h3>
-      <p>{card.text}</p>
+      <h3>{t(card.title)}</h3>
+      <p>{t(card.text)}</p>
       <div className="marketing-v2-contact-card__action">
         <Button
           className="marketing-v2-contact-card__button"
@@ -1398,7 +1421,7 @@ function MarketingV2ContactCard({ card, index, onOpenContact }) {
           buttonStyle="brand"
           onClick={() => onOpenContact(card)}
         >
-          {card.cta}
+          {t(card.cta)}
         </Button>
       </div>
     </MarketingV2Card>
@@ -1417,7 +1440,8 @@ function ContactFormModal({
   onClose,
   onSubmit,
 }) {
-  const title = target ? `${target.cta}: ${target.title}` : 'Contact Vellic';
+  const { t } = useMarketingTranslation();
+  const title = target ? `${t(target.cta)}: ${t(target.title)}` : t('Contact Vellic');
   const reasonOptions = target?.reasonOptions?.length ? target.reasonOptions : ['General inquiry', 'Other'];
   const isSubmitting = submitStatus === CONTACT_SUBMIT_STATUS.SUBMITTING;
   const isSubmitted = submitted || submitStatus === CONTACT_SUBMIT_STATUS.SUCCESS;
@@ -1427,12 +1451,12 @@ function ContactFormModal({
       show={show}
       onClose={onClose}
       title={title}
-      subtitle={target ? `Sends to ${target.email}.` : ''}
+      subtitle={target ? `${t('Sends to')} ${target.email}.` : ''}
       className="marketing-v2-contact-modal"
       footer={(
         <div className="marketing-v2-modal-actions">
           <Button type="button" variant="secondary" buttonStyle="mono" onClick={onClose} disabled={isSubmitting}>
-            Close
+            {t('Close')}
           </Button>
           {isSubmitted ? null : (
             <Button
@@ -1441,7 +1465,7 @@ function ContactFormModal({
               startIcon={<Mail />}
               loading={isSubmitting}
             >
-              {isSubmitting ? 'Sending' : 'Send message'}
+              {isSubmitting ? t('Sending') : t('Send message')}
             </Button>
           )}
         </div>
@@ -1453,8 +1477,8 @@ function ContactFormModal({
             <Check size={22} strokeWidth={2.4} />
           </span>
           <div>
-            <h3>Message sent</h3>
-            <p>We will follow up soon.</p>
+            <h3>{t('Message sent')}</h3>
+            <p>{t('We will follow up soon.')}</p>
           </div>
         </div>
       ) : (
@@ -1467,6 +1491,7 @@ function ContactFormModal({
           submitError={submitError}
           isSubmitting={isSubmitting}
           reasonOptions={reasonOptions}
+          translateText={t}
           onChange={onChange}
           onSubmit={onSubmit}
         />
@@ -1475,7 +1500,17 @@ function ContactFormModal({
   );
 }
 
-function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp }) {
+function MarketingPreviewV2({
+  route,
+  navigateToRoute,
+  onOpenApp = defaultOpenApp,
+  localeCode = 'en',
+  translateText = (source) => source,
+  localizedFaqAnswers = null,
+  buildSectionHref = buildMarketingPreviewV2Path,
+  manageMetadata = true,
+}) {
+  const t = translateText;
   const activeSection = getMarketingPreviewV2SectionById(route.marketingPageId || route.section || 'home');
   const isFigmaCaptureMode = useMemo(() => (
     FIGMA_CAPTURE_TOOLS_ENABLED && typeof window !== 'undefined' && window.location.hash.includes('figmacapture=')
@@ -1490,7 +1525,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
   const [showMailingModal, setShowMailingModal] = useState(false);
   const [showMobileScanModal, setShowMobileScanModal] = useState(false);
   const [mobileScanUrl, setMobileScanUrl] = useState('');
-  const [shareLabel, setShareLabel] = useState('Spread the word');
+  const [shareLabel, setShareLabel] = useState(() => t('Spread the word'));
   const [contactTarget, setContactTarget] = useState(null);
   const [contactForm, setContactForm] = useState(emptyContactForm);
   const [contactErrors, setContactErrors] = useState({});
@@ -1532,7 +1567,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
   }, []);
 
   useEffect(() => {
-    applyMarketingPreviewV2Metadata(activeSection);
+    if (manageMetadata) applyMarketingPreviewV2Metadata(activeSection);
     setActiveNavSectionId(activeSection.id);
     const element = document.getElementById(`marketing-v2-${activeSection.id}`);
     if (element && typeof window.scrollTo === 'function') {
@@ -1554,7 +1589,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
     }
     element?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
     return undefined;
-  }, [activeSection]);
+  }, [activeSection, manageMetadata]);
 
   useEffect(() => {
     let frame = null;
@@ -1680,7 +1715,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
     if (mailingSubmitStatus === MAILING_LIST_SUBMIT_STATUS.SUBMITTING) return;
     const email = mailingEmail.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setMailingEmailError('Enter a valid email address.');
+      setMailingEmailError(t('Enter a valid email address.'));
       setMailingSubmitStatus(MAILING_LIST_SUBMIT_STATUS.IDLE);
       setMailingSubmitMessage('');
       return;
@@ -1697,17 +1732,17 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
       setMailingEmail('');
       setMailingSubmitStatus(MAILING_LIST_SUBMIT_STATUS.SUCCESS);
       setMailingSubmitMessage(result?.alreadySubscribed
-        ? 'You are already on the mailing list.'
-        : 'You are on the mailing list. We will only send bigger release or product updates.');
+        ? t('You are already on the mailing list.')
+        : t('You are on the mailing list. We will only send bigger release or product updates.'));
     } catch (error) {
       setMailingSubmitStatus(MAILING_LIST_SUBMIT_STATUS.ERROR);
-      setMailingSubmitMessage(error?.message || 'Could not join the mailing list. Please try again.');
+      setMailingSubmitMessage(error?.message || t('Could not join the mailing list. Please try again.'));
     }
   };
 
   const handleMobileScan = ({ url = '' } = {}) => {
     setMobileScanUrl(url);
-    setShareLabel('Spread the word');
+    setShareLabel(t('Spread the word'));
     setShowMobileScanModal(true);
   };
 
@@ -1791,7 +1826,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
       setContactSubmitted(true);
     } catch (error) {
       setContactSubmitStatus(CONTACT_SUBMIT_STATUS.ERROR);
-      setContactSubmitError(error?.message || 'Could not send your message. Try again or email us directly.');
+      setContactSubmitError(error?.message || t('Could not send your message. Try again or email us directly.'));
     }
   };
 
@@ -1799,7 +1834,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
     const shareUrl = `${window.location.origin}${buildMarketingPreviewV2Path('home')}`;
     const shareData = {
       title: 'Vellic',
-      text: 'Vellic maps websites into a shared audit and planning workspace.',
+      text: t('Vellic maps websites into a shared audit and planning workspace.'),
       url: shareUrl,
     };
 
@@ -1816,13 +1851,14 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
         document.execCommand('copy');
         textArea.remove();
       }
-      setShareLabel('Link copied');
+      setShareLabel(t('Link copied'));
     } catch {
-      setShareLabel('Spread the word');
+      setShareLabel(t('Spread the word'));
     }
   };
 
   return (
+    <MarketingTranslationContext.Provider value={{ localeCode, t }}>
     <div
       className={classNames('marketing-preview-v2', isFigmaCaptureMode && 'marketing-preview-v2--figma-capture')}
       onClick={handleClick}
@@ -1832,6 +1868,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
         activeSectionId={activeNavSectionId}
         onMobileScan={handleMobileScan}
         onOpenApp={onOpenApp}
+        buildSectionHref={buildSectionHref}
       />
       <main className="marketing-v2-main">
         <section
@@ -1841,9 +1878,9 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
           aria-labelledby="marketing-v2-home-title"
         >
           <div className="marketing-v2-hero__copy marketing-v2-reveal">
-            <div className="marketing-v2-eyebrow">Better Information Architecture</div>
-            <h1 id="marketing-v2-home-title">Be the architect of your next build.</h1>
-            <p>Vellic brings audits, planning, screenshots, flows, comments, and exports into one workspace.</p>
+            <div className="marketing-v2-eyebrow">{t('Better Information Architecture')}</div>
+            <h1 id="marketing-v2-home-title">{t('Be the architect of your next build.')}</h1>
+            <p>{t('Vellic brings audits, planning, screenshots, flows, comments, and exports into one workspace.')}</p>
             <MarketingV2ScanCta onNavigatePath={navigateToPath} onMobileScan={handleMobileScan} onOpenApp={onOpenApp} />
             <div className="marketing-v2-hero-brief" aria-label="Vellic workflow summary">
               {heroHighlights.map(({ icon: Icon, label, text }) => (
@@ -1852,8 +1889,8 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
                     <Icon size={24} />
                   </span>
                   <div>
-                    <strong>{label}</strong>
-                    <span>{text}</span>
+                    <strong>{t(label)}</strong>
+                    <span>{t(text)}</span>
                   </div>
                 </div>
               ))}
@@ -1864,16 +1901,16 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
         <SectionShell
           id="use-cases"
-          eyebrow="Use cases"
-          title="Designed for cross-functional teams."
-          summary="UX, content, product, dev, and SEO can review the same structure instead of trading screenshots and spreadsheets."
+          eyebrow={t('Use cases')}
+          title={t('Designed for cross-functional teams.')}
+          summary={t('UX, content, product, dev, and SEO can review the same structure instead of trading screenshots and spreadsheets.')}
           className="marketing-v2-section--use-cases"
         >
           <div className="marketing-v2-card-grid marketing-v2-card-grid--five">
             {useCaseCards.map((card, index) => (
               <MarketingV2Card key={card.title} accent={card.accent} style={getRevealDelayStyle(index)}>
-                <h3>{card.title}</h3>
-                <p>{card.text}</p>
+                <h3>{t(card.title)}</h3>
+                <p>{t(card.text)}</p>
               </MarketingV2Card>
             ))}
           </div>
@@ -1881,9 +1918,9 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
         <SectionShell
           id="features"
-          eyebrow="Features"
-          title="The map is the workspace."
-          summary="Capture evidence, trace flows, strategise, collaborate, and hand off in one place."
+          eyebrow={t('Features')}
+          title={t('The map is the workspace.')}
+          summary={t('Capture evidence, trace flows, strategise, collaborate, and hand off in one place.')}
           className="marketing-v2-section--features"
         >
           <div className="marketing-v2-card-grid marketing-v2-card-grid--three">
@@ -1892,8 +1929,8 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
               return (
                 <MarketingV2Card key={card.title} accent={card.accent} style={getRevealDelayStyle(index)}>
                   <Icon size={22} aria-hidden="true" />
-                  <h3>{card.title}</h3>
-                  <p>{card.text}</p>
+                  <h3>{t(card.title)}</h3>
+                  <p>{t(card.text)}</p>
                 </MarketingV2Card>
               );
             })}
@@ -1909,9 +1946,9 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
         <SectionShell
           id="examples"
-          eyebrow="Examples"
-          title="See how decisions stay connected."
-          summary="Example views show structure, screenshots, review context, flows, and handoff in one product-led surface."
+          eyebrow={t('Examples')}
+          title={t('See how decisions stay connected.')}
+          summary={t('Example views show structure, screenshots, review context, flows, and handoff in one product-led surface.')}
           className="marketing-v2-section--examples"
         >
           <div className="marketing-v2-examples">
@@ -1928,18 +1965,18 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
         <SectionShell
           id="pricing"
-          eyebrow="Pricing"
-          title="Start with the map. Upgrade when the workflow grows."
-          summary="Plans are shaped around saved maps, screenshots, exports, reports, and team review."
+          eyebrow={t('Pricing')}
+          title={t('Start with the map. Upgrade when the workflow grows.')}
+          summary={t('Plans are shaped around saved maps, screenshots, exports, reports, and team review.')}
           className="marketing-v2-section--pricing"
         >
           {hasYearlyPricing ? (
             <div className="marketing-v2-pricing-cycle-control">
-              <span className="marketing-v2-pricing-cycle-label">Billing cycle</span>
+              <span className="marketing-v2-pricing-cycle-label">{t('Billing cycle')}</span>
               <div
                 className="marketing-v2-comparison-tabs marketing-v2-pricing-cycle"
                 role="tablist"
-                aria-label="Billing cycle"
+                aria-label={t('Billing cycle')}
               >
                 {BILLING_CYCLE_OPTIONS.map((option) => (
                   <Button
@@ -1953,7 +1990,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
                     aria-selected={pricingBillingCycle === option.key}
                     onClick={() => setPricingBillingCycle(option.key)}
                   >
-                    {option.label}
+                    {t(option.label)}
                   </Button>
                 ))}
               </div>
@@ -1968,15 +2005,19 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
         <SectionShell
           id="faq"
-          eyebrow="FAQ"
-          title="Short answers before the first map."
+          eyebrow={t('FAQ')}
+          title={t('Short answers before the first map.')}
           className="marketing-v2-section--faq"
         >
           <div className="marketing-v2-faq">
             {faqItems.map((item, index) => (
               <MarketingV2FaqItem
                 key={item.question}
-                item={item}
+                item={{
+                  ...item,
+                  question: t(item.question),
+                  answer: localizedFaqAnswers?.[index] || t(item.answer),
+                }}
                 index={index}
                 isOpen={openFaqIndex === index}
                 onToggle={() => setOpenFaqIndex((current) => (current === index ? null : index))}
@@ -1987,16 +2028,16 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
         <SectionShell
           id="mission"
-          eyebrow="Mission"
-          title="Because foundations matter"
-          summary="Information architecture shapes how people find, understand, and act. Vellic helps to surface the foundations for the whole team."
+          eyebrow={t('Mission')}
+          title={t('Because foundations matter')}
+          summary={t('Information architecture shapes how people find, understand, and act. Vellic helps to surface the foundations for the whole team.')}
           className="marketing-v2-section--mission"
         >
           <div className="marketing-v2-mission-list">
             {missionStatements.map((statement, index) => (
               <div key={statement} className="marketing-v2-mission-item marketing-v2-reveal" style={getRevealDelayStyle(index)}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
-                <p>{statement}</p>
+                <p>{t(statement)}</p>
               </div>
             ))}
           </div>
@@ -2004,9 +2045,9 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
         <SectionShell
           id="contact"
-          eyebrow="Contact"
-          title="Need help? Want a demo? Have some feedback? Or just want to say Hello👋?"
-          summary="Send a note to the right inbox and we will follow up ASAP."
+          eyebrow={t('Contact')}
+          title={t('Need help? Want a demo? Have some feedback? Or just want to say Hello👋?')}
+          summary={t('Send a note to the right inbox and we will follow up ASAP.')}
           className="marketing-v2-section--contact"
         >
           <div className="marketing-v2-contact">
@@ -2023,7 +2064,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
         <section className="marketing-v2-final-cta marketing-v2-reveal" aria-labelledby="marketing-v2-final-title">
           <div>
-            <h2 id="marketing-v2-final-title">Start planning your next site</h2>
+            <h2 id="marketing-v2-final-title">{t('Start planning your next site')}</h2>
           </div>
           <MarketingV2ScanCta
             onNavigatePath={navigateToPath}
@@ -2036,11 +2077,11 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
         </section>
       </main>
       <footer className="marketing-v2-footer">
-        <img src={vellicLogo} alt="Vellic" />
+        <img src={resolveMarketingAssetSource(vellicLogo)} alt="Vellic" />
         <p>
-          Better UX starts with solid foundations.
-          <br />
-          Make those foundations with Vellic.
+          {t('Better UX starts with solid foundations.\nMake those foundations with Vellic.')
+            .split('\n')
+            .map((line, index) => <React.Fragment key={line}>{index ? <br /> : null}{line}</React.Fragment>)}
         </p>
       </footer>
       <MobileScanModal
@@ -2077,6 +2118,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
         onSubmit={handleContactSubmit}
       />
     </div>
+    </MarketingTranslationContext.Provider>
   );
 }
 

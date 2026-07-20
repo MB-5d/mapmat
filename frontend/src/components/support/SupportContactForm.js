@@ -18,9 +18,11 @@ const SupportContactForm = ({
   stacked = false,
   submitError = '',
   textareaRows = 5,
+  translateText = (source) => source,
   onChange,
   onSubmit,
 }) => {
+  const t = translateText;
   const resolvedReasonOptions = reasonOptions?.length ? reasonOptions : [GENERAL_INQUIRY_REASON, 'Other'];
 
   return (
@@ -32,10 +34,10 @@ const SupportContactForm = ({
       <div className="support-contact-form__row">
         <TextInput
           id={`${idPrefix}-name`}
-          label="Name"
+          label={t('Name')}
           value={form.name}
           onChange={(event) => onChange('name', event.target.value)}
-          placeholder="Your name"
+          placeholder={t('Your name')}
           autoComplete="name"
           required
           error={errors.name}
@@ -44,10 +46,10 @@ const SupportContactForm = ({
         <TextInput
           id={`${idPrefix}-email`}
           type="email"
-          label="Email"
+          label={t('Email')}
           value={form.email}
           onChange={(event) => onChange('email', event.target.value)}
-          placeholder="you@example.com"
+          placeholder={t('you@example.com')}
           autoComplete="email"
           required
           error={errors.email}
@@ -57,30 +59,30 @@ const SupportContactForm = ({
       <div className="support-contact-form__row">
         <SelectInput
           id={`${idPrefix}-reason`}
-          label="Reason"
+          label={t('Reason')}
           value={form.reason || resolvedReasonOptions[0]}
           onChange={(event) => onChange('reason', event.target.value)}
           disabled={isSubmitting}
         >
           {resolvedReasonOptions.map((option) => (
-            <option key={option} value={option}>{option}</option>
+            <option key={option} value={option}>{t(option)}</option>
           ))}
         </SelectInput>
         <TextInput
           id={`${idPrefix}-reason-detail`}
-          label="Reason details"
+          label={t('Reason details')}
           value={form.reasonDetail}
           onChange={(event) => onChange('reasonDetail', event.target.value)}
-          placeholder="Optional detail"
+          placeholder={t('Optional detail')}
           disabled={isSubmitting}
         />
       </div>
-      <Field label="Message" htmlFor={`${idPrefix}-message`} required error={errors.message}>
+      <Field label={t('Message')} htmlFor={`${idPrefix}-message`} required error={errors.message}>
         <TextareaInput
           id={`${idPrefix}-message`}
           value={form.message}
           onChange={(event) => onChange('message', event.target.value)}
-          placeholder="What should we know?"
+          placeholder={t('What should we know?')}
           rows={textareaRows}
           invalid={Boolean(errors.message)}
           required
