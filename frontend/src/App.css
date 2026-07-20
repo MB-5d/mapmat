@@ -1192,8 +1192,8 @@ body {
   width: 38px;
   height: 22px;
   border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-border);
+  border: 1px solid var(--ui-color-border-strong);
+  background: var(--ui-color-border-strong);
   position: relative;
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease;
@@ -1208,14 +1208,14 @@ body {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--color-bg-primary);
+  background: var(--ui-color-surface);
   box-shadow: var(--shadow-card);
   transition: transform 0.2s ease;
 }
 
 .ui-toggle__input:checked {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+  background: var(--ui-button-brand-fill);
+  border-color: var(--ui-button-brand-fill);
 }
 
 .ui-toggle__input:checked::after {
@@ -1225,6 +1225,17 @@ body {
 .ui-toggle__input:focus-visible {
   outline: none;
   box-shadow: var(--ui-focus-ring);
+}
+
+.ui-toggle__input:disabled {
+  background: var(--ui-input-disabled-bg);
+  border-color: var(--ui-input-disabled-border);
+  cursor: not-allowed;
+}
+
+.ui-toggle__input:disabled:checked {
+  background: var(--ui-button-brand-fill-disabled);
+  border-color: var(--ui-button-brand-fill-disabled);
 }
 
 .ui-checkbox-field__input:focus-visible,
@@ -8281,7 +8292,6 @@ body {
 }
 
 .consent-toggle-row.is-disabled .ui-toggle__input {
-  opacity: 0.6;
   cursor: not-allowed;
 }
 
