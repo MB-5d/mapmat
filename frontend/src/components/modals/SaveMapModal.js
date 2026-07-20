@@ -14,9 +14,7 @@ const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0))
 const isVirtualProject = (project) => (
   !!project?.isVirtual
   || project?.id === 'uncategorized'
-  || project?.name === 'Uncategorized'
   || project?.id === 'shared-with-me'
-  || project?.name === 'Shared With Me'
 );
 
 const SaveMapForm = ({
@@ -105,15 +103,19 @@ const SaveMapForm = ({
           invalid={Boolean(nameError)}
         />
       </Field>
-      <Field label="Save to project (optional)">
+      <Field label="Save in">
         <SelectInput
           value={selectedProject}
           onChange={(e) => setSelectedProject(e.target.value)}
         >
-          <option value="">No project (Uncategorized)</option>
-          {selectableProjects.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
+          <option value="">One-offs</option>
+          {selectableProjects.length > 0 ? (
+            <optgroup label="Projects">
+              {selectableProjects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </optgroup>
+          ) : null}
         </SelectInput>
       </Field>
       {!showNewProject ? (

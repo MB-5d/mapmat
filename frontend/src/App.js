@@ -1639,14 +1639,16 @@ const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
   5,
   60
 );
-const UNCATEGORIZED_PROJECT_ID = 'uncategorized';
+const ONE_OFFS_GROUP_ID = 'uncategorized';
 const SHARED_PROJECT_ID = 'shared-with-me';
 const PRESENCE_PREVIEW_LIMIT = 4;
+
+const isOneOffsGroup = (project) => project?.id === ONE_OFFS_GROUP_ID;
 
 const normalizeProjectSelection = (projectId) => {
   const normalized = String(projectId || '').trim().toLowerCase();
   if (!normalized) return null;
-  if (normalized === UNCATEGORIZED_PROJECT_ID || normalized === SHARED_PROJECT_ID) {
+  if (normalized === ONE_OFFS_GROUP_ID || normalized === SHARED_PROJECT_ID) {
     return null;
   }
   return String(projectId).trim();
@@ -1960,7 +1962,7 @@ function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
   });
 
   const sharedMaps = [];
-  const uncategorizedMaps = [];
+  const oneOffMaps = [];
 
   (mapRows || []).forEach((map) => {
     if (map?.project_id && projectsById.has(map.project_id)) {
@@ -1971,22 +1973,22 @@ function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
       sharedMaps.push(map);
       return;
     }
-    uncategorizedMaps.push(map);
+    oneOffMaps.push(map);
   });
 
   if (sharedMaps.length > 0) {
     orderedProjects.push({
       id: SHARED_PROJECT_ID,
-      name: 'Shared With Me',
+      name: 'Shared with me',
       maps: sharedMaps,
       isVirtual: true,
     });
   }
 
   orderedProjects.push({
-    id: UNCATEGORIZED_PROJECT_ID,
-    name: 'Uncategorized',
-    maps: uncategorizedMaps,
+    id: ONE_OFFS_GROUP_ID,
+    name: 'One-offs',
+    maps: oneOffMaps,
     isVirtual: true,
   });
 
@@ -11171,7 +11173,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [guardAccountCanCreateWork, handleEntitlementError, loadAuthenticatedWorkspace, projectLimitReachedValue, root, showEntitlementLock, showToast]);
 
   const renameProject = async (projectId, newName) => {
-    if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
+    if (projectId === ONE_OFFS_GROUP_ID || projectId === SHARED_PROJECT_ID) {
       setEditingProjectId(null);
       return;
     }
@@ -11273,21 +11275,44 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const deleteProject = async (projectId) => {
-    if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
-      showToast('Cannot delete a virtual folder', 'warning');
+    if (projectId === ONE_OFFS_GROUP_ID || projectId === SHARED_PROJECT_ID) {
+      showToast('Cannot delete this map group', 'warning');
       return;
     }
+    const projectToDelete = projects.find((project) => project.id === projectId);
     const confirmed = await showConfirm({
       title: 'Delete Project',
-      message: 'Delete this project and all its maps?',
+      message: `Delete "${projectToDelete?.name || 'this project'}"? Its maps will move to One-offs.`,
       confirmText: 'Delete',
       danger: true
     });
     if (!confirmed) return;
     try {
       await api.deleteProject(projectId);
-      const deletedProject = projects.find((project) => project.id === projectId);
-      setProjects(prev => prev.filter(p => p.id !== projectId));
+      const deletedProject = projectToDelete;
+      setProjects((prev) => {
+        const removedProject = prev.find((project) => project.id === projectId);
+        const movedMaps = (removedProject?.maps || []).map((map) => ({
+          ...map,
+          project_id: null,
+        }));
+        const updated = prev.filter((project) => project.id !== projectId);
+        const oneOffs = updated.find(isOneOffsGroup);
+        if (oneOffs) {
+          return updated.map((project) => (
+            project.id === oneOffs.id
+              ? { ...project, maps: [...movedMaps, ...(project.maps || [])] }
+              : project
+          ));
+        }
+        return [
+          ...updated,
+          { id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: movedMaps, isVirtual: true },
+        ];
+      });
+      if (currentMap?.project_id === projectId) {
+        setCurrentMap((previous) => previous ? { ...previous, project_id: null } : previous);
+      }
       if (editingProjectId === projectId) {
         setEditingProjectId(null);
       }
@@ -11345,11 +11370,11 @@ export default function App({ currentRoute, navigateToRoute }) {
               : p
           );
         } else {
-          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          const uncategorized = updated.find(isOneOffsGroup);
           if (uncategorized) {
             uncategorized.maps = [map, ...(uncategorized.maps || [])];
           } else {
-            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+            updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
           }
         }
         return updated;
@@ -11459,11 +11484,11 @@ export default function App({ currentRoute, navigateToRoute }) {
               : p
           );
         } else {
-          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          const uncategorized = updated.find(isOneOffsGroup);
           if (uncategorized) {
             uncategorized.maps = [map, ...(uncategorized.maps || [])];
           } else {
-            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+            updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
           }
         }
         return updated;
@@ -11628,11 +11653,11 @@ export default function App({ currentRoute, navigateToRoute }) {
               : p
           );
         } else {
-          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          const uncategorized = updated.find(isOneOffsGroup);
           if (uncategorized) {
             uncategorized.maps = [map, ...(uncategorized.maps || [])];
           } else {
-            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+            updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
           }
         }
         return updated;
@@ -11730,11 +11755,11 @@ export default function App({ currentRoute, navigateToRoute }) {
               : p
           );
         } else {
-          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          const uncategorized = updated.find(isOneOffsGroup);
           if (uncategorized) {
             uncategorized.maps = [savedMap, ...(uncategorized.maps || [])];
           } else {
-            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [savedMap] });
+            updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [savedMap], isVirtual: true });
           }
         }
         return updated;
@@ -17903,19 +17928,19 @@ export default function App({ currentRoute, navigateToRoute }) {
                       : p
                   );
                 } else {
-                  const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+                  const uncategorized = updated.find(isOneOffsGroup);
                   if (uncategorized) {
                     uncategorized.maps = [map, ...(uncategorized.maps || [])];
                   } else {
-                    updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+                    updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
                   }
                 }
               } else {
-                const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+                const uncategorized = updated.find(isOneOffsGroup);
                 if (uncategorized) {
                   uncategorized.maps = [map, ...(uncategorized.maps || [])];
                 } else {
-                  updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+                  updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
                 }
               }
               return updated;

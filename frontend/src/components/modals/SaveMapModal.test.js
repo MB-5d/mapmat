@@ -56,6 +56,14 @@ describe('SaveMapModal', () => {
     const inputs = container.querySelectorAll('input, textarea');
     const mapNameInput = inputs[0];
     const notesInput = inputs[1];
+    const saveInSelect = container.querySelector('select');
+
+    expect(Array.from(container.querySelectorAll('label')).map((label) => label.textContent)).toContain('Save in');
+    expect(saveInSelect.value).toBe('');
+    expect(saveInSelect.options[0].textContent).toBe('One-offs');
+    expect(saveInSelect.querySelector('optgroup')?.label).toBe('Projects');
+    expect(container.textContent).not.toContain('Uncategorized');
+    expect(container.textContent).not.toContain('No project');
 
     act(() => {
       setInputValue(mapNameInput, 'Homepage map');
@@ -291,6 +299,6 @@ describe('SaveMapModal', () => {
     });
 
     expect(onSave).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('already exists in this folder');
+    expect(container.textContent).toContain('already exists in this location');
   });
 });
