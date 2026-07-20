@@ -109,7 +109,7 @@ const ProfileDrawer = ({
   const [avatarCropPixels, setAvatarCropPixels] = useState(null);
   const [pendingAvatarDataUrl, setPendingAvatarDataUrl] = useState('');
   const [pendingAvatarRemoved, setPendingAvatarRemoved] = useState(false);
-  const [openProfileAccordion, setOpenProfileAccordion] = useState('plan');
+  const [openProfileAccordion, setOpenProfileAccordion] = useState(null);
   const [activeProfileField, setActiveProfileField] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -144,7 +144,7 @@ const ProfileDrawer = ({
       setAvatarCropPixels(null);
       setPendingAvatarDataUrl('');
       setPendingAvatarRemoved(false);
-      setOpenProfileAccordion('plan');
+      setOpenProfileAccordion(null);
       setActiveProfileField(null);
       setAccountEditors([]);
       setAccountEditorsError('');

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Mail, MessageCircle } from 'lucide-react';
+import { Check, Mail } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
@@ -95,7 +95,6 @@ const SupportDrawer = ({
       onClose={onClose}
       title="Support"
       subtitle={`Sends to ${target.email}.`}
-      icon={<MessageCircle size={18} />}
       className="support-drawer"
     >
       {isSubmitted ? (

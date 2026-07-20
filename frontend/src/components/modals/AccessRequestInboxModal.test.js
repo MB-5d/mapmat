@@ -34,6 +34,8 @@ describe('AccessRequestInboxModal', () => {
       mapName: 'Alpha Map',
       requesterName: 'Sam',
       requestedRole: 'viewer',
+      status: 'pending',
+      canReview: true,
     };
 
     act(() => {
@@ -50,7 +52,7 @@ describe('AccessRequestInboxModal', () => {
     });
 
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Requests');
-    expect(container.textContent).toContain('Review pending map access requests that require an owner decision.');
+    expect(container.textContent).toContain('Review map access requests linked to your account.');
 
     const select = container.querySelector('select');
     const descriptor = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');
@@ -88,6 +90,7 @@ describe('AccessRequestInboxModal', () => {
     expect(container.textContent).toContain('No pending access requests right now.');
     expect(container.textContent).not.toContain('Not found');
     expect(container.textContent).not.toContain('Refresh');
-    expect(appCss).toContain('.share-collab-empty {\n  font-size: 13px;\n  color: var(--color-text-secondary);');
+    expect(appCss).toContain('font-size: var(--type-body-sm-size);');
+    expect(appCss).toContain('color: var(--color-text-primary);');
   });
 });

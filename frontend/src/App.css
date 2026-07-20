@@ -1234,8 +1234,8 @@ body {
 }
 
 .ui-toggle__input:disabled:checked {
-  background: var(--ui-button-brand-fill-disabled);
-  border-color: var(--ui-button-brand-fill-disabled);
+  background: var(--ui-button-brand-fill);
+  border-color: var(--ui-button-brand-fill);
 }
 
 .ui-checkbox-field__input:focus-visible,
@@ -3059,6 +3059,7 @@ body {
 .canvas-map-name-button {
   display: inline-flex;
   align-items: center;
+  height: 32px;
   min-width: 0;
   max-width: 100%;
   padding: 0;
@@ -3092,6 +3093,7 @@ body {
 
 .canvas-map-name-input {
   width: min(320px, calc(100vw - 250px));
+  height: 32px;
   min-width: 0;
   border: none;
   outline: none;
@@ -3101,7 +3103,7 @@ body {
   font-weight: 700;
   box-shadow: var(--ui-focus-ring);
   border-radius: var(--ui-radius-md);
-  padding: 4px 8px;
+  padding: 0 8px;
   user-select: text;
   -webkit-user-select: text;
 }
@@ -3193,8 +3195,8 @@ body {
   justify-content: center;
   padding: 120px 48px 72px;
   pointer-events: none;
-  filter: blur(16px);
-  opacity: 0.7;
+  filter: blur(12px);
+  opacity: 0.88;
   transform: scale(1.04);
 }
 
@@ -3204,13 +3206,34 @@ body {
   height: min(560px, 56vh);
 }
 
+.route-gate-preview-content::before,
+.route-gate-preview-content::after {
+  content: '';
+  position: absolute;
+  left: 18%;
+  right: 14%;
+  height: 2px;
+  background: rgba(99, 102, 241, 0.32);
+  transform-origin: center;
+}
+
+.route-gate-preview-content::before {
+  top: 32%;
+  transform: rotate(-8deg);
+}
+
+.route-gate-preview-content::after {
+  top: 50%;
+  transform: rotate(7deg);
+}
+
 .route-gate-preview-node {
   width: 176px;
   height: 88px;
-  border: 1px solid var(--ui-color-border);
+  border: 1px solid var(--ui-color-border-strong);
   border-radius: var(--ui-radius-sm);
-  background: linear-gradient(135deg, var(--ui-color-surface), var(--ui-color-surface-muted));
-  box-shadow: var(--shadow-card);
+  background: linear-gradient(135deg, var(--color-neutral-white), var(--ui-color-surface-muted));
+  box-shadow: var(--shadow-raised);
 }
 
 .route-gate-preview-node-root {
@@ -13360,8 +13383,9 @@ body {
 }
 
 .share-collab-empty {
-  font-size: 13px;
-  color: var(--color-text-secondary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+  color: var(--color-text-primary);
 }
 
 .share-collab-error {
@@ -13386,7 +13410,7 @@ body {
 .invite-inbox-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--unit-12);
 }
 
 .invite-inbox-composer {
@@ -13424,8 +13448,8 @@ body {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--unit-16);
+  padding: var(--unit-16);
   border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
   background: var(--ui-color-surface);
@@ -13446,6 +13470,21 @@ body {
   font-size: 14px;
   font-weight: 700;
   color: var(--ui-color-text);
+}
+
+.access-request-inbox-item {
+  flex-direction: column;
+}
+
+.access-request-inbox-main {
+  gap: var(--unit-8);
+}
+
+.access-request-inbox-title {
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .invite-inbox-item-title svg {
@@ -13492,10 +13531,30 @@ body {
   min-width: 180px;
 }
 
+.access-request-inbox-actions,
+.sent-invite-inbox-actions {
+  width: 100%;
+  min-width: 0;
+}
+
 .invite-inbox-item-action-row {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.invite-inbox-item-action-row .ui-btn {
+  flex: 1 1 0;
+}
+
+.invite-inbox-item-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--unit-6);
+  color: var(--ui-color-muted);
+  font-size: var(--type-label-sm-size);
+  line-height: var(--type-label-sm-line-height);
+  font-weight: var(--type-label-sm-weight);
 }
 
 @media (max-width: 720px) {
@@ -14823,9 +14882,12 @@ body {
   color: var(--ui-color-text);
 }
 
-[data-theme="dark"] .share-collab-meta,
-[data-theme="dark"] .share-collab-empty {
+[data-theme="dark"] .share-collab-meta {
   color: var(--color-text-secondary);
+}
+
+[data-theme="dark"] .share-collab-empty {
+  color: var(--color-text-primary);
 }
 
 [data-theme="dark"] .invite-inbox-subtitle,

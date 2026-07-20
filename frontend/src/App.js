@@ -17,7 +17,6 @@ import {
   WifiOff,
 } from 'lucide-react';
 
-import './App.css';
 import * as api from './api';
 import createIllustrationDark from './assets/home/create-illustration-dark.png';
 import createIllustration from './assets/home/create-illustration.png';
@@ -3221,6 +3220,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showInviteInboxModal, setShowInviteInboxModal] = useState(false);
   const [showAccessRequestsInboxModal, setShowAccessRequestsInboxModal] = useState(false);
   const [pendingMapInvites, setPendingMapInvites] = useState([]);
+  const [inviteInboxSentInvites, setInviteInboxSentInvites] = useState([]);
   const [pendingMapInvitesLoading, setPendingMapInvitesLoading] = useState(false);
   const [pendingMapInvitesError, setPendingMapInvitesError] = useState('');
   const [pendingAccessRequests, setPendingAccessRequests] = useState([]);
@@ -6774,6 +6774,39 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, []);
 
+  const loadInviteInboxSentInvites = useCallback(async (mapId, { silent = false } = {}) => {
+    if (!mapId || !isLoggedIn) {
+      setInviteInboxSentInvites([]);
+      return;
+    }
+    if (!silent) {
+      setPendingMapInvitesLoading(true);
+    }
+    setPendingMapInvitesError('');
+
+    try {
+      const { collaboration } = await api.getMapCollaboration(mapId);
+      setInviteInboxSentInvites(collaboration?.invites || []);
+    } catch (error) {
+      setInviteInboxSentInvites([]);
+      if (error?.status !== 404) {
+        setPendingMapInvitesError(error.message || 'Failed to load sent invites.');
+      }
+    } finally {
+      if (!silent) {
+        setPendingMapInvitesLoading(false);
+      }
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!showInviteInboxModal || !inviteInboxSelectedMapId) {
+      setInviteInboxSentInvites([]);
+      return;
+    }
+    loadInviteInboxSentInvites(inviteInboxSelectedMapId, { silent: true });
+  }, [inviteInboxSelectedMapId, loadInviteInboxSentInvites, showInviteInboxModal]);
+
   const loadPendingAccessRequests = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
       setPendingAccessRequestsLoading(true);
@@ -7101,6 +7134,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         return 'Reconnecting';
       case COEDITING_LIVE_STATUS.OUT_OF_SYNC:
         return 'Out of Sync';
+      case COEDITING_LIVE_STATUS.READ_ONLY:
+        return 'Read-Only';
       case COEDITING_LIVE_STATUS.CONNECTING:
         return 'Connecting';
       default:
@@ -7109,7 +7144,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [liveStatus]);
   const liveBannerTitle = isCoeditingReadOnlyMode && !canEditValue ? 'Live View' : 'Live Editing';
 
-  const liveBannerTone = liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+  const liveBannerTone = (
+    liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+    || liveStatus === COEDITING_LIVE_STATUS.READ_ONLY
+  )
     ? 'warning'
     : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
   const liveCollaborators = useMemo(
@@ -7133,8 +7171,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     isLiveActive
     && hasMap
     && currentMap?.id
-    && liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+    && (
+      liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+      || liveStatus === COEDITING_LIVE_STATUS.READ_ONLY
+    )
   );
+  const pendingReviewableAccessRequestCount = useMemo(() => (
+    pendingAccessRequests.filter((request) => (
+      request?.canReview && String(request.status || '').trim().toLowerCase() === 'pending'
+    )).length
+  ), [pendingAccessRequests]);
   const commentPopoverReadOnlyMessage = useMemo(() => {
     if (effectiveFeatureGates.mapComment) return '';
     if (showCoeditingReadOnlyBanner || canViewCommentsValue) {
@@ -7363,6 +7409,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setPendingMapInvites([]);
     setPendingMapInvitesError('');
     setPendingMapInvitesLoading(false);
+    setInviteInboxSentInvites([]);
     setPendingAccessRequests([]);
     setPendingAccessRequestsError('');
     setPendingAccessRequestsLoading(false);
@@ -7510,6 +7557,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('Invite sent', 'success');
       await Promise.all([
         loadPendingMapInvites({ silent: true }),
+        loadInviteInboxSentInvites(selectedMap.id, { silent: true }),
         currentMap?.id && sameId(currentMap.id, selectedMap.id) ? loadCollaborationData() : Promise.resolve(),
       ]);
     } catch (error) {
@@ -7532,7 +7580,60 @@ export default function App({ currentRoute, navigateToRoute }) {
     inviteInboxRoleOptionsValue,
     inviteInboxSelectedMapId,
     loadCollaborationData,
+    loadInviteInboxSentInvites,
     loadPendingMapInvites,
+    showToast,
+  ]);
+
+  const cancelInviteFromInbox = useCallback(async (invite) => {
+    if (!invite?.id || !invite?.mapId) return;
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.revokeMapInvite(invite.mapId, invite.id);
+      showToast('Invite canceled', 'success');
+      await Promise.all([
+        loadInviteInboxSentInvites(invite.mapId, { silent: true }),
+        currentMap?.id && sameId(currentMap.id, invite.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      setPendingMapInvitesError(error.message || 'Failed to cancel invite.');
+      showToast(error.message || 'Failed to cancel invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, loadInviteInboxSentInvites, showToast]);
+
+  const resendInviteFromInbox = useCallback(async (invite, role) => {
+    if (!invite?.mapId || !invite?.inviteeEmail) return;
+    const inviteRole = String(role || invite.role || 'viewer').trim().toLowerCase();
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.createMapInvite(invite.mapId, {
+        email: invite.inviteeEmail,
+        role: inviteRole,
+      });
+      showToast('Invite email ready', 'success');
+      await Promise.all([
+        loadInviteInboxSentInvites(invite.mapId, { silent: true }),
+        currentMap?.id && sameId(currentMap.id, invite.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      if (handleEntitlementError(error, 'This account has reached its editor limit.')) {
+        setPendingMapInvitesError(error.message || 'Plan limit reached.');
+        return;
+      }
+      setPendingMapInvitesError(error.message || 'Failed to resend invite.');
+      showToast(error.message || 'Failed to resend invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [
+    currentMap?.id,
+    handleEntitlementError,
+    loadCollaborationData,
+    loadInviteInboxSentInvites,
     showToast,
   ]);
 
@@ -8285,7 +8386,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       const anonymousIntentKey = `${intentKey}:anonymous`;
       if (handledSignupIntentKeyRef.current === anonymousIntentKey) return;
       handledSignupIntentKeyRef.current = anonymousIntentKey;
-      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+      nextSearchParams.delete('intent');
+      const nextSearch = nextSearchParams.toString();
+      const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+      window.history.replaceState({}, '', nextUrl);
       return;
     }
 
@@ -8304,7 +8409,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.search,
     currentRoute?.searchParams,
     isLoggedIn,
-    openAuthModal,
   ]);
 
   useEffect(() => {
@@ -8681,8 +8785,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowShareModal(false);
     setShowCollaborationModal(false);
     setShowInviteInboxModal(true);
-    await loadPendingMapInvites();
-  }, [loadPendingMapInvites]);
+    await Promise.all([
+      loadPendingMapInvites(),
+      inviteInboxSelectedMapId ? loadInviteInboxSentInvites(inviteInboxSelectedMapId) : Promise.resolve(),
+    ]);
+  }, [inviteInboxSelectedMapId, loadInviteInboxSentInvites, loadPendingMapInvites]);
 
   const handleShowAccessRequestsInbox = useCallback(async () => {
     setShowProfileDrawer(false);
@@ -12181,17 +12288,44 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         return undefined;
       }
+      let cancelled = false;
       setRouteMapGateState({
         mapId: currentRoute.mapId,
         mapName: '',
-        loading: false,
+        loading: true,
         errorStatus: null,
         errorMessage: '',
         requestStatus: 'idle',
         requestError: '',
       });
-      openAuthModal();
-      return undefined;
+      api.getMapAccessPreview(currentRoute.mapId)
+        .then((preview) => {
+          if (cancelled) return;
+          setRouteMapGateState((previous) => ({
+            mapId: currentRoute.mapId,
+            mapName: preview?.map?.name || previous?.mapName || 'Shared sitemap',
+            loading: false,
+            errorStatus: previous?.errorStatus || null,
+            errorMessage: previous?.errorMessage || '',
+            requestStatus: previous?.requestStatus || 'idle',
+            requestError: previous?.requestError || '',
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setRouteMapGateState((previous) => ({
+            mapId: currentRoute.mapId,
+            mapName: previous?.mapName || 'Shared sitemap',
+            loading: false,
+            errorStatus: previous?.errorStatus || null,
+            errorMessage: previous?.errorMessage || '',
+            requestStatus: previous?.requestStatus || 'idle',
+            requestError: previous?.requestError || '',
+          }));
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     let cancelled = false;
@@ -12248,7 +12382,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     hasMap,
     loadPendingMapInvites,
     loadSavedMapById,
-    openAuthModal,
     root?.id,
     navigateToRoute,
     showConfirm,
@@ -12262,13 +12395,35 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (authLoading) return undefined;
 
     if (!isLoggedIn) {
+      let cancelled = false;
       setInviteAcceptState({
         token: currentRoute.inviteToken,
         status: 'auth_required',
         error: '',
+        invite: null,
       });
-      openAuthModal();
-      return undefined;
+      api.getMapInvitePreview(currentRoute.inviteToken)
+        .then((preview) => {
+          if (cancelled) return;
+          setInviteAcceptState((previous) => ({
+            token: currentRoute.inviteToken,
+            status: previous?.status || 'auth_required',
+            error: previous?.error || '',
+            invite: preview?.invite || null,
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setInviteAcceptState((previous) => ({
+            token: currentRoute.inviteToken,
+            status: previous?.status || 'auth_required',
+            error: previous?.error || '',
+            invite: previous?.invite || null,
+          }));
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     let cancelled = false;
@@ -12320,7 +12475,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     loadPendingMapInvites,
     loadSavedMapById,
     navigateToRoute,
-    openAuthModal,
     showToast,
   ]);
 
@@ -18821,7 +18975,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       || (isUnsavedScannedMap && !!root?.url)
     );
   const routeGateActive = (
-    showInviteAcceptGate && inviteAcceptState?.status !== 'auth_required'
+    showInviteAcceptGate
   ) || (
     showMapAccessGate && !showInviteAcceptGate
   );
@@ -19050,7 +19204,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onShowProjects={handleShowProjects}
         onShowHistory={handleShowHistory}
         pendingInviteCount={pendingMapInvites.length}
-        pendingAccessRequestCount={pendingAccessRequests.length}
+        pendingAccessRequestCount={pendingReviewableAccessRequestCount}
       />
 
       <div
@@ -19091,7 +19245,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           </div>
         )}
 
-        {showInviteAcceptGate && inviteAcceptState?.status !== 'auth_required' && (
+        {showInviteAcceptGate && (
           <InviteAcceptGate
             status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
             error={inviteAcceptState?.error || ''}
@@ -19166,9 +19320,12 @@ export default function App({ currentRoute, navigateToRoute }) {
             className={`permission-banner live-edit-banner live-edit-banner-${liveBannerTone}`}
             icon={liveStatus === COEDITING_LIVE_STATUS.CONNECTED
               ? <Wifi size={16} />
-              : (liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+              : (
+                liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+                || liveStatus === COEDITING_LIVE_STATUS.READ_ONLY
+              )
                 ? <WifiOff size={16} />
-                : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />)}
+                : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />}
             contentClassName="permission-banner-main"
             actions={liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC ? (
               <div className="map-conflict-actions">
@@ -20492,6 +20649,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       <InviteInboxModal
         show={showInviteInboxModal}
         invites={pendingMapInvites}
+        sentInvites={inviteInboxSentInvites}
         loading={pendingMapInvitesLoading}
         error={pendingMapInvitesError}
         eligibleMaps={inviteInboxEligibleMapsValue}
@@ -20512,6 +20670,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         }}
         onAccept={handleAcceptPendingInvite}
         onDecline={handleDeclinePendingInvite}
+        onCancelSentInvite={cancelInviteFromInbox}
+        onResendSentInvite={resendInviteFromInbox}
       />
 
       <AccessRequestInboxModal

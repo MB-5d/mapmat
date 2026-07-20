@@ -2427,7 +2427,7 @@ router.get('/maps/:id/summary', requireAuth, async (req, res) => {
 });
 
 // GET /api/maps/:id/access-preview - safe title-only preview for access gates
-router.get('/maps/:id/access-preview', requireAuth, async (req, res) => {
+router.get('/maps/:id/access-preview', async (req, res) => {
   try {
     const { id } = req.params;
     const map = await mapStore.getMapByIdAsync(id);

@@ -133,8 +133,10 @@ function listMembershipsByMapAsync(mapId) {
     SELECT m.*,
       u.email as user_email,
       u.name as user_name,
+      COALESCE(u.avatar_path, u.google_picture_url) as user_avatar_url,
       inviter.email as invited_by_email,
-      inviter.name as invited_by_name
+      inviter.name as invited_by_name,
+      COALESCE(inviter.avatar_path, inviter.google_picture_url) as invited_by_avatar_url
     FROM map_memberships m
     LEFT JOIN users u ON m.user_id = u.id
     LEFT JOIN users inviter ON m.invited_by_user_id = inviter.id
@@ -186,11 +188,14 @@ function listInvitesByMapAsync(mapId, { status = null, limit = 100, offset = 0 }
   const params = [mapId];
   let query = `
     SELECT i.*,
+      maps.name as map_name,
+      maps.url as map_url,
       inviter.email as inviter_email,
       inviter.name as inviter_name,
       accepted.email as accepted_by_email,
       accepted.name as accepted_by_name
     FROM map_invites i
+    INNER JOIN maps ON maps.id = i.map_id
     LEFT JOIN users inviter ON i.inviter_user_id = inviter.id
     LEFT JOIN users accepted ON i.accepted_by_user_id = accepted.id
     WHERE i.map_id = ?
@@ -344,6 +349,17 @@ async function clearInviteExpirationAsync(inviteId) {
   return getInviteByIdAsync(inviteId);
 }
 
+async function updateInviteRoleAsync(inviteId, role) {
+  if (!inviteId) return null;
+  await adapter.executeAsync(`
+    UPDATE map_invites
+    SET role = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status = 'pending'
+  `, [normalizeRole(role), inviteId]);
+  return getInviteByIdAsync(inviteId);
+}
+
 async function getCollaborationSettingsByMapAsync(mapId) {
   const row = await adapter.queryOneAsync(
     'SELECT * FROM map_collaboration_settings WHERE map_id = ?',
@@ -432,12 +448,14 @@ function listAccessRequestsByMapAsync(mapId, { status = null, limit = 100, offse
 }
 
 function listReviewableAccessRequestsForUserAsync(userId, { status = 'pending', limit = 100, offset = 0 } = {}) {
-  return adapter.queryAllAsync(`
+  const params = [userId];
+  let query = `
     SELECT ar.*,
       maps.name as map_name,
       maps.url as map_url,
       requester.email as requester_email,
       requester.name as requester_name,
+      1 as can_review,
       decision.email as decision_user_email,
       decision.name as decision_user_name
     FROM map_access_requests ar
@@ -448,14 +466,45 @@ function listReviewableAccessRequestsForUserAsync(userId, { status = 'pending', 
       ON owner_membership.map_id = ar.map_id
       AND owner_membership.user_id = ?
       AND owner_membership.role = 'owner'
-    WHERE ar.status = ?
-      AND (
+    WHERE (
         maps.user_id = ?
         OR owner_membership.user_id IS NOT NULL
       )
-    ORDER BY ar.created_at DESC
-    LIMIT ? OFFSET ?
-  `, [userId, normalizeStatus(status || 'pending'), userId, limit, offset]);
+  `;
+  params.push(userId);
+  if (status) {
+    query += ' AND ar.status = ?';
+    params.push(normalizeStatus(status));
+  }
+  query += ' ORDER BY ar.created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+  return adapter.queryAllAsync(query, params);
+}
+
+function listAccessRequestsForRequesterAsync(userId, { status = null, limit = 100, offset = 0 } = {}) {
+  const params = [userId];
+  let query = `
+    SELECT ar.*,
+      maps.name as map_name,
+      maps.url as map_url,
+      requester.email as requester_email,
+      requester.name as requester_name,
+      0 as can_review,
+      decision.email as decision_user_email,
+      decision.name as decision_user_name
+    FROM map_access_requests ar
+    INNER JOIN maps ON maps.id = ar.map_id
+    LEFT JOIN users requester ON ar.requester_user_id = requester.id
+    LEFT JOIN users decision ON ar.decision_user_id = decision.id
+    WHERE ar.requester_user_id = ?
+  `;
+  if (status) {
+    query += ' AND ar.status = ?';
+    params.push(normalizeStatus(status));
+  }
+  query += ' ORDER BY ar.created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+  return adapter.queryAllAsync(query, params);
 }
 
 function getAccessRequestByIdAsync(requestId) {
@@ -536,10 +585,12 @@ module.exports = {
   revokeInviteAsync,
   markInviteExpiredAsync,
   clearInviteExpirationAsync,
+  updateInviteRoleAsync,
   getCollaborationSettingsByMapAsync,
   upsertCollaborationSettingsAsync,
   listAccessRequestsByMapAsync,
   listReviewableAccessRequestsForUserAsync,
+  listAccessRequestsForRequesterAsync,
   getAccessRequestByIdAsync,
   getPendingAccessRequestByMapAndUserAsync,
   createAccessRequestAsync,

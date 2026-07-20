@@ -427,7 +427,7 @@ describe('ui primitives', () => {
     expect(getCssRule('.ui-toggle__input')).toContain('background: var(--ui-color-border-strong)');
     expect(getCssRule('.ui-toggle__input:checked')).toContain('background: var(--ui-button-brand-fill)');
     expect(getCssRule('.ui-toggle__input:checked')).toContain('border-color: var(--ui-button-brand-fill)');
-    expect(getCssRule('.ui-toggle__input:disabled:checked')).toContain('background: var(--ui-button-brand-fill-disabled)');
+    expect(getCssRule('.ui-toggle__input:disabled:checked')).toContain('background: var(--ui-button-brand-fill)');
   });
 
   test('TextInput supports shell props, field wrapper props, and icon slots', () => {

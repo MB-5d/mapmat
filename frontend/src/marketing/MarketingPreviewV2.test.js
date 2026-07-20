@@ -624,7 +624,8 @@ describe('MarketingPreviewV2', () => {
 
     const urls = openApp.mock.calls.map(([url]) => new URL(url));
     expect(urls).toHaveLength(4);
-    expect(urls[0].searchParams.get('intent')).toBe('signup');
+    expect(urls[0].pathname).toBe('/app');
+    expect(urls[0].searchParams.get('intent')).toBeNull();
     expect(urls[1].searchParams.get('intent')).toBe('checkout');
     expect(urls[1].searchParams.get('billingPlan')).toBe('pro');
     expect(urls[1].searchParams.get('billingCycle')).toBe('yearly');

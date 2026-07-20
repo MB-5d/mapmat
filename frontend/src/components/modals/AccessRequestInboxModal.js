@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Check, ShieldCheck } from 'lucide-react';
+import { Check, Clock, ShieldCheck } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
 import Button from '../ui/Button';
@@ -17,11 +17,13 @@ const formatRoleLabel = (role) => {
   return value.charAt(0).toUpperCase() + value.slice(1);
 };
 
-const formatTimestamp = (value) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toLocaleString();
+const formatRequestStatus = (request) => {
+  const status = String(request?.status || '').trim().toLowerCase();
+  if (status === 'approved') {
+    return `Approved${request?.decisionRole ? ` as ${formatRoleLabel(request.decisionRole)}` : ''}`;
+  }
+  if (status === 'denied') return 'Denied';
+  return 'Pending review';
 };
 
 const AccessRequestInboxModal = ({
@@ -48,7 +50,7 @@ const AccessRequestInboxModal = ({
       isOpen={show}
       onClose={onClose}
       title="Requests"
-      subtitle="Review pending map access requests that require an owner decision."
+      subtitle="Review map access requests linked to your account."
       className="invite-inbox-drawer"
     >
           {error && requests.length > 0 ? (
@@ -60,60 +62,64 @@ const AccessRequestInboxModal = ({
               <div className="share-collab-empty">No pending access requests right now.</div>
             ) : (
               requests.map((request) => (
-                <div className="invite-inbox-item" key={request.id}>
-                  <div className="invite-inbox-item-main">
-                    <div className="invite-inbox-item-title">
+                <div className="invite-inbox-item access-request-inbox-item" key={request.id}>
+                  <div className="invite-inbox-item-main access-request-inbox-main">
+                    <div className="invite-inbox-item-title access-request-inbox-title">
                       <ShieldCheck size={16} />
-                      <span>{request.mapName || 'Shared map'}</span>
+                      <span>{request.requesterName || request.requesterEmail || 'User'} wants access</span>
                     </div>
                     <div className="invite-inbox-item-meta">
-                      {request.requesterName || request.requesterEmail || 'User'} requested {formatRoleLabel(request.requestedRole)} access
+                      {request.mapName || 'Shared map'} · {formatRoleLabel(request.requestedRole)} access requested
                     </div>
                     {request.message ? (
                       <div className="invite-inbox-item-meta invite-inbox-item-message">
                         {request.message}
                       </div>
                     ) : null}
-                    <div className="invite-inbox-item-meta">
-                      {formatTimestamp(request.createdAt) ? `Sent ${formatTimestamp(request.createdAt)}` : 'Sent recently'}
-                    </div>
                   </div>
-                  <div className="invite-inbox-item-actions invite-inbox-item-actions-stacked">
-                    <SelectInput
-                      className="share-collab-role-select"
-                      value={roleSelections[request.id] || request.requestedRole || 'viewer'}
-                      disabled={loading}
-                      onChange={(event) => setRoleSelections((prev) => ({
-                        ...prev,
-                        [request.id]: event.target.value,
-                      }))}
-                    >
-                      {ROLE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </SelectInput>
-                    <div className="invite-inbox-item-action-row">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => onDeny?.(request)}
+                  {request.canReview && request.status === 'pending' ? (
+                    <div className="invite-inbox-item-actions invite-inbox-item-actions-stacked access-request-inbox-actions">
+                      <SelectInput
+                        className="share-collab-role-select"
+                        value={roleSelections[request.id] || request.requestedRole || 'viewer'}
                         disabled={loading}
+                        onChange={(event) => setRoleSelections((prev) => ({
+                          ...prev,
+                          [request.id]: event.target.value,
+                        }))}
                       >
-                        Deny
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        onClick={() => onApprove?.(request, roleSelections[request.id] || request.requestedRole || 'viewer')}
-                        disabled={loading}
-                      >
-                        <Check size={16} />
-                        <span>Approve</span>
-                      </Button>
+                        {ROLE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </SelectInput>
+                      <div className="invite-inbox-item-action-row">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => onDeny?.(request)}
+                          disabled={loading}
+                        >
+                          Deny
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          onClick={() => onApprove?.(request, roleSelections[request.id] || request.requestedRole || 'viewer')}
+                          disabled={loading}
+                        >
+                          <Check size={16} />
+                          <span>Approve</span>
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="invite-inbox-item-status">
+                      <Clock size={14} />
+                      <span>{formatRequestStatus(request)}</span>
+                    </div>
+                  )}
                 </div>
               ))
             )}

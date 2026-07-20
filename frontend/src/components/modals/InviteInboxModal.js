@@ -5,6 +5,7 @@ import AccountDrawer from '../drawers/AccountDrawer';
 import Button from '../ui/Button';
 import { EditIcon } from '../ui/icons';
 import { MenuItem, MenuPanel } from '../ui/Menu';
+import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 
 const formatRoleLabel = (role) => {
@@ -25,6 +26,7 @@ const renderRoleIcon = (role) => {
 const InviteInboxModal = ({
   show,
   invites = [],
+  sentInvites = [],
   loading = false,
   error = '',
   eligibleMaps = [],
@@ -39,10 +41,13 @@ const InviteInboxModal = ({
   onClose,
   onAccept,
   onDecline,
+  onCancelSentInvite,
+  onResendSentInvite,
 }) => {
   const [mapQuery, setMapQuery] = useState('');
   const [showMapMenu, setShowMapMenu] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [sentInviteRoleSelections, setSentInviteRoleSelections] = useState({});
   const mapMenuRef = useRef(null);
   const roleMenuRef = useRef(null);
 
@@ -71,6 +76,14 @@ const InviteInboxModal = ({
     || !hasInviteComposer
     || !selectedMapId
     || !hasValidInviteEmail;
+
+  useEffect(() => {
+    const next = {};
+    (sentInvites || []).forEach((invite) => {
+      next[invite.id] = invite.role || 'viewer';
+    });
+    setSentInviteRoleSelections(next);
+  }, [sentInvites]);
 
   useEffect(() => {
     if (!showMapMenu) return undefined;
@@ -223,12 +236,66 @@ const InviteInboxModal = ({
             </form>
           ) : null}
 
-          {error && invites.length > 0 ? (
+          {error && (invites.length > 0 || sentInvites.length > 0) ? (
             <div className="share-collab-error">{error}</div>
           ) : null}
 
           <div className="invite-inbox-list">
-            {invites.length === 0 ? (
+            {sentInvites.map((invite) => (
+              <div className="invite-inbox-item sent-invite-inbox-item" key={`sent-${invite.id}`}>
+                <div className="invite-inbox-item-main">
+                  <div className="invite-inbox-item-title">
+                    <Network size={16} />
+                    <span>{invite.mapName || selectedMap?.name || 'Shared map'}</span>
+                  </div>
+                  <div className="invite-inbox-item-meta">
+                    {invite.inviteeEmail || 'Invitee'}
+                  </div>
+                </div>
+                <div className="invite-inbox-item-actions invite-inbox-item-actions-stacked sent-invite-inbox-actions">
+                  <SelectInput
+                    className="share-collab-role-select"
+                    value={sentInviteRoleSelections[invite.id] || invite.role || 'viewer'}
+                    disabled={loading}
+                    onChange={(event) => setSentInviteRoleSelections((prev) => ({
+                      ...prev,
+                      [invite.id]: event.target.value,
+                    }))}
+                  >
+                    {visibleRoleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </SelectInput>
+                  <div className="invite-inbox-item-action-row">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onCancelSentInvite?.(invite)}
+                      disabled={loading}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => onResendSentInvite?.(
+                        invite,
+                        sentInviteRoleSelections[invite.id] || invite.role || 'viewer'
+                      )}
+                      disabled={loading}
+                    >
+                      Resend
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {invites.length === 0 && sentInvites.length === 0 ? (
               <div className="share-collab-empty">No pending invites right now.</div>
             ) : (
               invites.map((invite) => (

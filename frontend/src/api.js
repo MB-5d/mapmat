@@ -1037,6 +1037,10 @@ export async function acceptMapInvite(token) {
   });
 }
 
+export async function getMapInvitePreview(token) {
+  return fetchApi(`/api/collaboration/invites/${token}/preview`);
+}
+
 export async function getPendingMapInvites() {
   return fetchApi('/api/collaboration/invites');
 }
