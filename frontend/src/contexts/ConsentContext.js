@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 export const CONSENT_STORAGE_KEY = 'vellic_consent_v1';
 const LEGACY_CONSENT_STORAGE_KEY = 'mapmat_consent_v1';
@@ -113,6 +113,29 @@ export function ConsentProvider({ children }) {
     experienceResearch: choices?.experienceResearch === true,
     marketing: false,
   }), [persistConsent]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const handleNativeConsentAction = (event) => {
+      const target = event.target instanceof Element
+        ? event.target.closest('[data-consent-action]')
+        : null;
+      if (!target) return;
+
+      const action = target.getAttribute('data-consent-action');
+      if (action === 'accept-research') {
+        acceptResearch();
+      } else if (action === 'open-settings') {
+        setIsSettingsOpen(true);
+      } else if (action === 'reject-optional') {
+        rejectOptional();
+        setIsSettingsOpen(false);
+      }
+    };
+
+    document.addEventListener('click', handleNativeConsentAction, true);
+    return () => document.removeEventListener('click', handleNativeConsentAction, true);
+  }, [acceptResearch, rejectOptional]);
 
   const value = useMemo(() => ({
     consent,

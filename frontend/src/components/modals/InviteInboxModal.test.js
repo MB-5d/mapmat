@@ -108,7 +108,8 @@ describe('InviteInboxModal', () => {
     act(() => {
       roleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(container.querySelector('.share-collab-role-menu-panel')).not.toBeNull();
+    expect(document.querySelector('.share-collab-role-menu-panel')).not.toBeNull();
+    expect(document.querySelector('.share-collab-role-menu-panel--portal')).not.toBeNull();
     expect(container.querySelector('.invite-inbox-composer')?.className).not.toContain('invite-inbox-composer--role-menu-open');
 
     const inviteButton = Array.from(container.querySelectorAll('button')).find((button) =>

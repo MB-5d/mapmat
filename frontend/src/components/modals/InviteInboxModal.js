@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Eye, Mail, MessageSquare, Network, Send } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
@@ -48,9 +49,12 @@ const InviteInboxModal = ({
   const [mapQuery, setMapQuery] = useState('');
   const [showMapMenu, setShowMapMenu] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [roleMenuPosition, setRoleMenuPosition] = useState(null);
   const [sentInviteRoleSelections, setSentInviteRoleSelections] = useState({});
   const mapMenuRef = useRef(null);
   const roleMenuRef = useRef(null);
+  const roleMenuPanelRef = useRef(null);
+  const roleTriggerRef = useRef(null);
 
   const visibleRoleOptions = useMemo(() => {
     const allowed = new Set((Array.isArray(inviteRoleOptions) ? inviteRoleOptions : [])
@@ -100,10 +104,33 @@ const InviteInboxModal = ({
     if (!showRoleMenu) return undefined;
     const handlePointerDown = (event) => {
       if (roleMenuRef.current?.contains(event.target)) return;
+      if (roleMenuPanelRef.current?.contains(event.target)) return;
       setShowRoleMenu(false);
     };
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [showRoleMenu]);
+
+  useEffect(() => {
+    if (!showRoleMenu) return undefined;
+
+    const updateRoleMenuPosition = () => {
+      const rect = roleTriggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setRoleMenuPosition({
+        top: `${rect.bottom + 8}px`,
+        right: `${Math.max(16, window.innerWidth - rect.right)}px`,
+        minWidth: '164px',
+      });
+    };
+
+    updateRoleMenuPosition();
+    window.addEventListener('resize', updateRoleMenuPosition);
+    document.addEventListener('scroll', updateRoleMenuPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateRoleMenuPosition);
+      document.removeEventListener('scroll', updateRoleMenuPosition, true);
+    };
   }, [showRoleMenu]);
 
   useEffect(() => {
@@ -121,6 +148,35 @@ const InviteInboxModal = ({
     if (inviteDisabled) return;
     onSendInvite?.();
   };
+
+  const roleMenuPanel = showRoleMenu ? (
+    <MenuPanel
+      ref={roleMenuPanelRef}
+      className="share-collab-role-menu-panel share-collab-role-menu-panel--portal"
+      role="menu"
+      aria-label="Invite role"
+      style={{
+        ...(roleMenuPosition || {}),
+        visibility: roleMenuPosition ? 'visible' : 'hidden',
+      }}
+    >
+      {visibleRoleOptions.map((option) => (
+        <MenuItem
+          key={option.value}
+          className="share-collab-role-menu-item"
+          icon={renderRoleIcon(option.value)}
+          label={option.label}
+          selected={option.value === inviteRole}
+          role="menuitemradio"
+          aria-checked={option.value === inviteRole}
+          onClick={() => {
+            onInviteRoleChange?.(option.value);
+            setShowRoleMenu(false);
+          }}
+        />
+      ))}
+    </MenuPanel>
+  ) : null;
 
   return (
     <AccountDrawer
@@ -195,6 +251,7 @@ const InviteInboxModal = ({
                 />
                 <div className="share-collab-role-menu" ref={roleMenuRef}>
                   <button
+                    ref={roleTriggerRef}
                     type="button"
                     className="share-collab-role-trigger"
                     aria-label={`Invite role: ${selectedRoleOption.label}`}
@@ -206,25 +263,6 @@ const InviteInboxModal = ({
                     {renderRoleIcon(selectedRoleOption.value)}
                     <ChevronDown size={16} aria-hidden="true" />
                   </button>
-                  {showRoleMenu ? (
-                    <MenuPanel className="share-collab-role-menu-panel" role="menu" aria-label="Invite role">
-                      {visibleRoleOptions.map((option) => (
-                        <MenuItem
-                          key={option.value}
-                          className="share-collab-role-menu-item"
-                          icon={renderRoleIcon(option.value)}
-                          label={option.label}
-                          selected={option.value === inviteRole}
-                          role="menuitemradio"
-                          aria-checked={option.value === inviteRole}
-                          onClick={() => {
-                            onInviteRoleChange?.(option.value);
-                            setShowRoleMenu(false);
-                          }}
-                        />
-                      ))}
-                    </MenuPanel>
-                  ) : null}
                 </div>
                 <Button
                   className="share-collab-send"
@@ -239,6 +277,9 @@ const InviteInboxModal = ({
               </div>
             </form>
           ) : null}
+          {roleMenuPanel && typeof document !== 'undefined'
+            ? createPortal(roleMenuPanel, document.body)
+            : null}
 
           {error && (invites.length > 0 || sentInvites.length > 0) ? (
             <div className="share-collab-error">{error}</div>

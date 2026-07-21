@@ -87,7 +87,7 @@ const ConsentSettingsModal = ({ translateText = (source) => source }) => {
           <Button onClick={handleSave}>
             {t('Save choices')}
           </Button>
-          <Button variant="secondary" type="secondary" buttonStyle="brand" onClick={handleReject}>
+          <Button variant="secondary" type="secondary" buttonStyle="brand" data-consent-action="reject-optional" onClick={handleReject}>
             {t('Reject all optional')}
           </Button>
         </div>

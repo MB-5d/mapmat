@@ -13119,6 +13119,11 @@ body {
   min-width: 164px;
 }
 
+.share-collab-role-menu-panel--portal {
+  position: fixed;
+  z-index: 2200;
+}
+
 .share-collab-role-menu-item .ui-menu-item__icon {
   color: currentColor;
 }
