@@ -618,16 +618,18 @@ function summarizeMapRow(row, options = {}) {
   return summary;
 }
 
-function redactMapAccessPreviewNode(node, fallbackId = 'preview-node') {
+function redactMapAccessPreviewNode(node, createPreviewNodeId, nodeIdMap) {
   if (!node || typeof node !== 'object') return null;
-  const nodeId = String(node.id || fallbackId).trim() || fallbackId;
+  const originalNodeId = normalizeIdKey(node.id);
+  const nodeId = createPreviewNodeId();
+  if (originalNodeId) nodeIdMap.set(originalNodeId, nodeId);
   return {
     id: nodeId,
     title: 'Page',
     url: '',
     children: Array.isArray(node.children)
       ? node.children
-        .map((child, index) => redactMapAccessPreviewNode(child, `${nodeId}-child-${index}`))
+        .map((child) => redactMapAccessPreviewNode(child, createPreviewNodeId, nodeIdMap))
         .filter(Boolean)
       : [],
   };
@@ -635,34 +637,41 @@ function redactMapAccessPreviewNode(node, fallbackId = 'preview-node') {
 
 function buildMapAccessPreview(row) {
   const parsed = parseMapFields(row);
-  const root = redactMapAccessPreviewNode(parsed.root, `preview-${row.id}-root`);
+  const nodeIdMap = new Map();
+  let nodeIndex = 0;
+  const createPreviewNodeId = () => {
+    nodeIndex += 1;
+    return `preview-node-${nodeIndex}`;
+  };
+  const root = redactMapAccessPreviewNode(parsed.root, createPreviewNodeId, nodeIdMap);
   const orphans = Array.isArray(parsed.orphans)
     ? parsed.orphans
-      .map((orphan, index) => redactMapAccessPreviewNode(orphan, `preview-${row.id}-orphan-${index}`))
+      .map((orphan) => redactMapAccessPreviewNode(orphan, createPreviewNodeId, nodeIdMap))
       .filter(Boolean)
     : [];
-  const previewNodeIds = new Set();
-  const collectNodeIds = (node) => {
-    if (!node || typeof node !== 'object') return;
-    if (node.id) previewNodeIds.add(String(node.id));
-    if (Array.isArray(node.children)) node.children.forEach(collectNodeIds);
-  };
-  collectNodeIds(root);
-  orphans.forEach(collectNodeIds);
 
   const connections = Array.isArray(parsed.connections)
     ? parsed.connections
-      .filter((connection) => (
-        previewNodeIds.has(String(connection?.sourceNodeId || ''))
-        && previewNodeIds.has(String(connection?.targetNodeId || ''))
-      ))
+      .map((connection) => {
+        const sourceNodeId = nodeIdMap.get(normalizeIdKey(connection?.sourceNodeId));
+        const targetNodeId = nodeIdMap.get(normalizeIdKey(connection?.targetNodeId));
+        if (!sourceNodeId || !targetNodeId) return null;
+        return {
+          sourceNodeId,
+          targetNodeId,
+          sourceAnchor: connection.sourceAnchor || null,
+          targetAnchor: connection.targetAnchor || null,
+          type: connection.type === 'userflow' ? 'userflow' : 'crosslink',
+        };
+      })
+      .filter(Boolean)
       .map((connection, index) => ({
-        id: String(connection.id || `preview-connection-${index}`),
-        sourceNodeId: String(connection.sourceNodeId || ''),
-        targetNodeId: String(connection.targetNodeId || ''),
+        id: `preview-connection-${index + 1}`,
+        sourceNodeId: connection.sourceNodeId,
+        targetNodeId: connection.targetNodeId,
         sourceAnchor: connection.sourceAnchor || null,
         targetAnchor: connection.targetAnchor || null,
-        type: connection.type === 'userflow' ? 'userflow' : 'crosslink',
+        type: connection.type,
       }))
     : [];
 
