@@ -1672,17 +1672,40 @@ function MarketingPreviewV2({
     });
   };
 
+  const scrollToSection = (section, { behavior = 'auto' } = {}) => {
+    const element = document.getElementById(`marketing-v2-${section.id}`);
+    setActiveNavSectionId(section.id);
+    if (element && typeof window.scrollTo === 'function') {
+      window.scrollTo({
+        top: Math.round(getMarketingV2ScrollTop(element, section.id)),
+        left: 0,
+        behavior,
+      });
+      return;
+    }
+    element?.scrollIntoView?.({ block: 'start', behavior });
+  };
+
   const handleClick = (event) => {
     const anchor = event.target.closest?.('a[href]');
     if (!anchor || !isPlainLeftClick(event)) return;
-    if (!navigateToRoute) return;
     const url = new URL(anchor.getAttribute('href'), window.location.origin);
     if (url.origin !== window.location.origin) return;
     if (!url.pathname.startsWith(MARKETING_PREVIEW_V2_BASE_PATH)) return;
     const section = getMarketingPreviewV2SectionByPathname(url.pathname);
     if (!section) return;
     event.preventDefault();
-    navigateToPath(`${url.pathname}${url.search}`, { behavior: 'smooth' });
+    if (navigateToRoute) {
+      navigateToPath(`${url.pathname}${url.search}`, { behavior: 'smooth' });
+      return;
+    }
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.pushState({}, '', nextUrl);
+    }
+    if (manageMetadata) applyMarketingPreviewV2Metadata(section);
+    scrollToSection(section, { behavior: 'smooth' });
   };
 
   const resetMailingModal = () => {

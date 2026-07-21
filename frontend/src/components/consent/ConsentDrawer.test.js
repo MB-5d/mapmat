@@ -54,6 +54,10 @@ describe('ConsentDrawer', () => {
     expect(container.textContent).toContain('Accept cookies');
     expect(container.textContent).toContain('Cookie settings');
     expect(container.querySelector('.consent-drawer').textContent).not.toContain('Reject all optional');
+    expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.type)).toEqual([
+      'button',
+      'button',
+    ]);
 
     clickButton('Accept cookies');
 

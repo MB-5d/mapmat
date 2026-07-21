@@ -3231,7 +3231,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [inviteAcceptState, setInviteAcceptState] = useState(null);
   const [presenceSessions, setPresenceSessions] = useState([]);
   const [mapPermissions, setMapPermissions] = useState(null);
-  const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
+  const [, setHasCreatedShareLink] = useState(() => {
     return currentRoute?.surface === ROUTE_SURFACES.SHARE;
   });
   const [currentShareAccess, setCurrentShareAccess] = useState(() => {
@@ -8762,20 +8762,19 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
-    const shouldPreserveAsViewOnly = Boolean(currentMap?.id)
-      && (
-        accessLevel === ACCESS_LEVELS.VIEW
-        || (hasCreatedShareLink && currentShareAccess === ACCESS_LEVELS.VIEW)
-      );
+    const shouldPreserveAsViewOnly = Boolean(root)
+      && currentRoute?.surface === ROUTE_SURFACES.SHARE
+      && (currentShareAccess === ACCESS_LEVELS.VIEW || accessLevel === ACCESS_LEVELS.VIEW);
 
     await performLogout({ preserveViewOnlyMap: shouldPreserveAsViewOnly });
   }, [
     accessLevel,
+    currentRoute?.surface,
     currentMap?.id,
-    hasCreatedShareLink,
     hasMap,
     currentShareAccess,
     performLogout,
+    root,
     showConfirm,
   ]);
 
@@ -11947,11 +11946,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(`Map "${trimmedName}" saved`, 'success');
 
       if (pendingLogoutAfterSave) {
-        const shouldPreserveAsViewOnly = Boolean(savedMap?.id)
-          && (
-            accessLevel === ACCESS_LEVELS.VIEW
-            || (hasCreatedShareLink && currentShareAccess === ACCESS_LEVELS.VIEW)
-          );
+        const shouldPreserveAsViewOnly = Boolean(latestRoot)
+          && currentRoute?.surface === ROUTE_SURFACES.SHARE
+          && (currentShareAccess === ACCESS_LEVELS.VIEW || accessLevel === ACCESS_LEVELS.VIEW);
         await performLogout({ preserveViewOnlyMap: shouldPreserveAsViewOnly });
         return;
       }

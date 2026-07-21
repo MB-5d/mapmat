@@ -122,6 +122,31 @@ describe('SaveMapModal', () => {
     });
   });
 
+  test('normalizes uncategorized defaults to the One-offs option', () => {
+    act(() => {
+      root.render(
+        <SaveMapModal
+          show
+          onClose={jest.fn()}
+          isLoggedIn
+          onRequireLogin={jest.fn()}
+          projects={[{ id: 'p1', name: 'Project One' }]}
+          currentMap={{ name: 'Current map' }}
+          rootUrl="https://example.com"
+          defaultProjectId="uncategorized"
+          onSave={jest.fn()}
+          onCreateProject={jest.fn()}
+        />
+      );
+    });
+
+    const saveInSelect = container.querySelector('select');
+    expect(saveInSelect.value).toBe('');
+    expect(saveInSelect.options[saveInSelect.selectedIndex].textContent).toBe('One-offs');
+    expect(container.textContent).not.toContain('uncategorized');
+    expect(container.textContent).not.toContain('No Project');
+  });
+
   test('disables inline project creation when the project limit is reached', () => {
     act(() => {
       root.render(

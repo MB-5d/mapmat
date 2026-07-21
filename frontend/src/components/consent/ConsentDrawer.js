@@ -22,10 +22,10 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
         </p>
       </div>
       <div className="consent-drawer__actions">
-        <Button size="sm" onClick={acceptResearch}>
+        <Button size="sm" htmlType="button" onClick={acceptResearch}>
           {t('Accept cookies')}
         </Button>
-        <Button size="sm" variant="secondary" type="secondary" buttonStyle="brand" onClick={openSettings}>
+        <Button size="sm" variant="secondary" type="secondary" buttonStyle="brand" htmlType="button" onClick={openSettings}>
           {t('Cookie settings')}
         </Button>
       </div>

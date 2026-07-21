@@ -17,6 +17,13 @@ const isVirtualProject = (project) => (
   || project?.id === 'shared-with-me'
 );
 
+const normalizeDefaultProjectId = (projectId) => {
+  const value = String(projectId || '').trim();
+  if (!value) return '';
+  if (['uncategorized', 'no-project', 'no_project', 'none', 'null'].includes(value.toLowerCase())) return '';
+  return value;
+};
+
 const SaveMapForm = ({
   projects,
   currentMap,
@@ -50,7 +57,10 @@ const SaveMapForm = ({
   };
 
   const [mapName, setMapName] = useState(getDefaultName());
-  const [selectedProject, setSelectedProject] = useState(isVirtualProject({ id: defaultProjectId }) ? '' : (defaultProjectId || ''));
+  const [selectedProject, setSelectedProject] = useState(() => {
+    const normalizedDefaultProjectId = normalizeDefaultProjectId(defaultProjectId);
+    return isVirtualProject({ id: normalizedDefaultProjectId }) ? '' : normalizedDefaultProjectId;
+  });
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [notes, setNotes] = useState(defaultNotes || currentMap?.notes || '');
@@ -105,7 +115,7 @@ const SaveMapForm = ({
       </Field>
       <Field label="Save in">
         <SelectInput
-          value={selectedProject}
+          value={selectedProject || ''}
           onChange={(e) => setSelectedProject(e.target.value)}
         >
           <option value="">One-offs</option>

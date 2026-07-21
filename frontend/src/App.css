@@ -8238,6 +8238,7 @@ body {
   right: 0;
   bottom: 0;
   z-index: 2100;
+  pointer-events: auto;
   width: 100%;
   display: flex;
   align-items: center;
@@ -8291,6 +8292,8 @@ body {
   justify-content: flex-end;
   gap: var(--unit-16);
   flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 .consent-settings-modal__actions {
@@ -12706,7 +12709,7 @@ body {
   padding: var(--modal-padding);
   display: flex;
   flex-direction: column;
-  gap: var(--unit-24);
+  gap: var(--unit-16);
 }
 
 .save-map-modal .modal-body {
@@ -12720,7 +12723,7 @@ body {
 }
 
 .save-map-form .modal-footer {
-  margin: var(--space-md) calc(var(--modal-padding) * -1) calc(var(--modal-padding) * -1);
+  margin: var(--unit-8) calc(var(--modal-padding) * -1) calc(var(--modal-padding) * -1);
   padding: var(--modal-footer-padding);
   border-top: 1px solid var(--color-border);
 }
@@ -12731,7 +12734,7 @@ body {
 
 .new-project-inline {
   display: flex;
-  gap: 8px;
+  gap: var(--unit-8);
 }
 
 .new-project-inline .ui-input-shell {
