@@ -317,6 +317,27 @@ describe('MarketingPreviewV2', () => {
     expect(document.title).toContain('Features');
   });
 
+  test('smooth scrolls hash section links used by the static marketing site', () => {
+    renderAt('/', null, {
+      buildSectionHref: (sectionId) => (sectionId === 'home' ? '/' : `/#marketing-v2-${sectionId}`),
+    });
+    scrollTo.mockClear();
+    const featuresLink = Array.from(container.querySelectorAll('a')).find((link) => (
+      link.getAttribute('href') === '/#marketing-v2-features'
+    ));
+
+    act(() => {
+      featuresLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+
+    expect(window.location.hash).toBe('#marketing-v2-features');
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({
+      behavior: 'smooth',
+      top: expect.any(Number),
+    }));
+    expect(document.title).toContain('Features');
+  });
+
   test('opens the app scan URL on desktop', () => {
     const openApp = jest.fn();
     renderAt('/', jest.fn(), { onOpenApp: openApp });

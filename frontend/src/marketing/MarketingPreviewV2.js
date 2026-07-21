@@ -777,6 +777,13 @@ function getMarketingV2ScrollTop(element, sectionId = '') {
   return Math.max(0, getMarketingV2SectionAnchorTop(element) - getMarketingV2HeaderBottom() - MARKETING_V2_SECTION_GAP);
 }
 
+function getMarketingPreviewV2SectionByHash(hash = '') {
+  const sectionId = String(hash || '').replace(/^#marketing-v2-/, '');
+  if (!sectionId || sectionId === hash) return null;
+  const section = getMarketingPreviewV2SectionById(sectionId);
+  return section.id === sectionId ? section : null;
+}
+
 function setMetaTag(selector, createAttrs, content) {
   let element = document.head.querySelector(selector);
   if (!content) {
@@ -1692,10 +1699,11 @@ function MarketingPreviewV2({
     const url = new URL(anchor.getAttribute('href'), window.location.origin);
     if (url.origin !== window.location.origin) return;
     if (!url.pathname.startsWith(MARKETING_PREVIEW_V2_BASE_PATH)) return;
-    const section = getMarketingPreviewV2SectionByPathname(url.pathname);
+    const hashSection = getMarketingPreviewV2SectionByHash(url.hash);
+    const section = hashSection || getMarketingPreviewV2SectionByPathname(url.pathname);
     if (!section) return;
     event.preventDefault();
-    if (navigateToRoute) {
+    if (navigateToRoute && !hashSection) {
       navigateToPath(`${url.pathname}${url.search}`, { behavior: 'smooth' });
       return;
     }
