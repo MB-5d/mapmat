@@ -56,6 +56,7 @@ describe('AccessRequestInboxModal', () => {
     expect(container.textContent).toContain('Alpha Map');
     expect(container.textContent).toContain('Sam · Viewer access requested');
     expect(container.textContent).not.toContain('Sam wants access');
+    expect(appCss).toContain('.access-request-inbox-actions {\n  gap: var(--unit-24);');
 
     const select = container.querySelector('select');
     const descriptor = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');

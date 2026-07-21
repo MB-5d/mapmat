@@ -79,6 +79,7 @@ describe('ConsentDrawer', () => {
     expect(container.textContent).toContain('Privacy settings');
     expect(container.textContent).toContain('Reject all optional');
     expect(container.textContent).not.toContain('Accept research cookies');
+    expect(container.querySelector('.consent-drawer')).toBeNull();
 
     const toggles = container.querySelectorAll('.consent-toggle-row input');
     expect(toggles[1].checked).toBe(true);

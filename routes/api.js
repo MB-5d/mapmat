@@ -618,6 +618,65 @@ function summarizeMapRow(row, options = {}) {
   return summary;
 }
 
+function redactMapAccessPreviewNode(node, fallbackId = 'preview-node') {
+  if (!node || typeof node !== 'object') return null;
+  const nodeId = String(node.id || fallbackId).trim() || fallbackId;
+  return {
+    id: nodeId,
+    title: 'Page',
+    url: '',
+    children: Array.isArray(node.children)
+      ? node.children
+        .map((child, index) => redactMapAccessPreviewNode(child, `${nodeId}-child-${index}`))
+        .filter(Boolean)
+      : [],
+  };
+}
+
+function buildMapAccessPreview(row) {
+  const parsed = parseMapFields(row);
+  const root = redactMapAccessPreviewNode(parsed.root, `preview-${row.id}-root`);
+  const orphans = Array.isArray(parsed.orphans)
+    ? parsed.orphans
+      .map((orphan, index) => redactMapAccessPreviewNode(orphan, `preview-${row.id}-orphan-${index}`))
+      .filter(Boolean)
+    : [];
+  const previewNodeIds = new Set();
+  const collectNodeIds = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.id) previewNodeIds.add(String(node.id));
+    if (Array.isArray(node.children)) node.children.forEach(collectNodeIds);
+  };
+  collectNodeIds(root);
+  orphans.forEach(collectNodeIds);
+
+  const connections = Array.isArray(parsed.connections)
+    ? parsed.connections
+      .filter((connection) => (
+        previewNodeIds.has(String(connection?.sourceNodeId || ''))
+        && previewNodeIds.has(String(connection?.targetNodeId || ''))
+      ))
+      .map((connection, index) => ({
+        id: String(connection.id || `preview-connection-${index}`),
+        sourceNodeId: String(connection.sourceNodeId || ''),
+        targetNodeId: String(connection.targetNodeId || ''),
+        sourceAnchor: connection.sourceAnchor || null,
+        targetAnchor: connection.targetAnchor || null,
+        type: connection.type === 'userflow' ? 'userflow' : 'crosslink',
+      }))
+    : [];
+
+  return {
+    id: row.id,
+    name: row.name || 'Untitled map',
+    root,
+    orphans,
+    connections,
+    colors: parsed.colors,
+    connectionColors: parsed.connectionColors,
+  };
+}
+
 function stripStaleImageAssetFields(node) {
   if (!node || typeof node !== 'object') return node;
   let nextNode = node;
@@ -2426,7 +2485,7 @@ router.get('/maps/:id/summary', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/maps/:id/access-preview - safe title-only preview for access gates
+// GET /api/maps/:id/access-preview - safe redacted preview for access gates
 router.get('/maps/:id/access-preview', async (req, res) => {
   try {
     const { id } = req.params;
@@ -2434,10 +2493,7 @@ router.get('/maps/:id/access-preview', async (req, res) => {
     if (!map) return res.status(404).json({ error: 'Map not found' });
 
     res.json({
-      map: {
-        id: map.id,
-        name: map.name || 'Untitled map',
-      },
+      map: buildMapAccessPreview(map),
     });
   } catch (error) {
     console.error('Get map access preview error:', error);

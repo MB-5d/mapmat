@@ -7,11 +7,12 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
   const t = translateText;
   const {
     needsConsent,
+    isSettingsOpen,
     acceptResearch,
     openSettings,
   } = useConsent();
 
-  if (!show || !needsConsent) return null;
+  if (!show || !needsConsent || isSettingsOpen) return null;
 
   return (
     <aside className="consent-drawer" aria-labelledby="consent-drawer-title">

@@ -3276,6 +3276,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const lastVersionSnapshotRef = useRef('');
   const clearLoadedMapViewRef = useRef(null);
   const loadSavedMapByIdRef = useRef(null);
+  const routeGatePreviewMapLoadedRef = useRef(false);
+  const routeGatePreviewMapIdRef = useRef('');
   const versionInfoToastRef = useRef(false);
   const seenActivityIdsRef = useRef(new Set());
   const primedActivityMapIdRef = useRef(null);
@@ -3404,6 +3406,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [addOnQuantities, setAddOnQuantities] = useState({});
   const billingRouteResult = String(currentRoute?.searchParams?.get('billing') || '');
   const billingRouteSessionId = String(currentRoute?.searchParams?.get('billingSessionId') || '');
+  const billingIntent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
+  const billingIntentPlanKey = String(currentRoute?.searchParams?.get('billingPlan') || '').trim().toLowerCase();
+  const isBillingCheckoutIntentRoute = billingIntent === 'checkout' && BILLING_PLAN_KEYS.has(billingIntentPlanKey);
   const isBillingReturnRoute = billingRouteResult === 'success'
     || billingRouteResult === 'portal_return'
     || billingRouteResult === 'cancelled';
@@ -3830,7 +3835,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [theme]);
 
   const hasMap = !!root;
-  const isUnsavedScannedMap = hasMap && !currentMap?.id && !isImportedMap;
+  const isRouteGatePreviewMap = hasMap && !currentMap?.id && routeGatePreviewMapLoadedRef.current;
+  const isUnsavedScannedMap = hasMap && !currentMap?.id && !isImportedMap && !isRouteGatePreviewMap;
   const currentScanConfig = useMemo(() => normalizeScanConfig({
     url: urlInput,
     options: scanOptions,
@@ -8465,10 +8471,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     if (authLoading) return;
 
-    const intent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
-    const planKey = String(currentRoute?.searchParams?.get('billingPlan') || '').trim().toLowerCase();
     const requestedBillingCycle = normalizeBillingCycle(currentRoute?.searchParams?.get('billingCycle'));
-    if (intent !== 'checkout' || !BILLING_PLAN_KEYS.has(planKey)) {
+    if (!isBillingCheckoutIntentRoute) {
       handledBillingIntentKeyRef.current = '';
       return;
     }
@@ -8493,13 +8497,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     const nextSearch = nextSearchParams.toString();
     const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
     window.history.replaceState({}, '', nextUrl);
-    handlePlanCheckout(planKey, requestedBillingCycle);
+    handlePlanCheckout(billingIntentPlanKey, requestedBillingCycle);
   }, [
     authLoading,
+    billingIntentPlanKey,
     currentRoute?.pathname,
     currentRoute?.search,
     currentRoute?.searchParams,
     handlePlanCheckout,
+    isBillingCheckoutIntentRoute,
     isLoggedIn,
     openAuthModal,
   ]);
@@ -12048,6 +12054,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const clearLoadedMapView = useCallback(() => {
+    routeGatePreviewMapLoadedRef.current = false;
+    routeGatePreviewMapIdRef.current = '';
     resetAutosaveTracking();
     cancelScheduledResetView();
     setMapPermissions(null);
@@ -12108,6 +12116,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [clearLoadedMapView, navigateToRoute, showConfirm]);
 
   const loadMap = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    routeGatePreviewMapLoadedRef.current = false;
+    routeGatePreviewMapIdRef.current = '';
     const normalizedOrphans = normalizeOrphans(map?.orphans);
     const hydratedMap = hydratePersistedScanLimitMap(map?.root, normalizedOrphans);
     const hydratedScanMeta = hydratedMap.scanMeta || { brokenLinks: [] };
@@ -12180,7 +12190,22 @@ export default function App({ currentRoute, navigateToRoute }) {
     scheduleResetViewRef.current?.();
   }, [applyTransform, clearCaptureIssues, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
 
+  const loadAccessPreviewMap = useCallback((previewMap) => {
+    if (!previewMap?.root) return false;
+    loadMap({
+      ...previewMap,
+      id: null,
+      project_id: null,
+      accessPreviewOnly: true,
+    }, { skipNavigation: true, silent: true });
+    routeGatePreviewMapLoadedRef.current = true;
+    routeGatePreviewMapIdRef.current = String(previewMap.id || '');
+    return true;
+  }, [loadMap]);
+
   const loadLargeMapShell = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    routeGatePreviewMapLoadedRef.current = false;
+    routeGatePreviewMapIdRef.current = '';
     const rootSummary = map?.rootSummary || {};
     const shellRoot = {
       id: rootSummary.id || `map-${map.id}-root`,
@@ -12290,9 +12315,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map') return;
     if (currentRoute?.surface === ROUTE_SURFACES.SHARE) return;
+    if (routeGatePreviewMapLoadedRef.current) {
+      clearLoadedMapView();
+    }
     setRouteMapGateState(null);
     setRouteAccessRequestMessage('');
-  }, [currentRoute?.section, currentRoute?.surface]);
+  }, [clearLoadedMapView, currentRoute?.section, currentRoute?.surface]);
 
   useEffect(() => {
     if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'invite_accept') return;
@@ -12304,9 +12332,21 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (currentMap?.id && sameId(currentMap.id, currentRoute.mapId)) return undefined;
     if (isBillingReturnRoute) return undefined;
     if (authLoading) return undefined;
+    if (
+      routeGatePreviewMapLoadedRef.current
+      && !sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
+    ) {
+      clearLoadedMapView();
+    }
+    if (
+      routeGatePreviewMapLoadedRef.current
+      && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
+    ) {
+      return undefined;
+    }
 
     if (!isLoggedIn) {
-      if (hasMap && !currentMap?.id) {
+      if (isUnsavedScannedMap) {
         const promptKey = `${currentRoute.mapId}:${root?.id || 'draft'}`;
         navigateToRoute(createAppHomeRoute(), { replace: true });
         if (!pendingUnsavedRoutePromptRef.current) {
@@ -12345,6 +12385,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       api.getMapAccessPreview(currentRoute.mapId)
         .then((preview) => {
           if (cancelled) return;
+          const previewLoaded = loadAccessPreviewMap(preview?.map);
           setRouteMapGateState((previous) => ({
             mapId: currentRoute.mapId,
             mapName: preview?.map?.name || previous?.mapName || 'Shared sitemap',
@@ -12353,6 +12394,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             errorMessage: previous?.errorMessage || '',
             requestStatus: previous?.requestStatus || 'idle',
             requestError: previous?.requestError || '',
+            previewLoaded,
           }));
         })
         .catch(() => {
@@ -12396,6 +12438,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           ? await api.getMapAccessPreview(currentRoute.mapId).catch(() => null)
           : null;
         if (cancelled) return;
+        const previewLoaded = loadAccessPreviewMap(preview?.map);
         setRouteMapGateState({
           mapId: currentRoute.mapId,
           mapName: preview?.map?.name || '',
@@ -12404,6 +12447,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           errorMessage: error?.message || 'Failed to load map',
           requestStatus: 'idle',
           requestError: '',
+          previewLoaded,
         });
         if (error?.status === 404 || error?.status === 403) {
           loadPendingMapInvites({ silent: true });
@@ -12424,6 +12468,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     isBillingReturnRoute,
     isLoggedIn,
     hasMap,
+    isUnsavedScannedMap,
+    loadAccessPreviewMap,
     loadPendingMapInvites,
     loadSavedMapById,
     root?.id,
@@ -18918,6 +18964,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     && !showInviteAcceptGate
     && !showMapAccessGate
     && !isBillingReturnRoute
+    && !isBillingCheckoutIntentRoute
     && !shouldStartScanFromPrefill(currentRoute);
   const showWelcomeModal = isWelcomeModalEligible
     && !welcomeModalDismissedForSession
@@ -19009,7 +19056,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const showShareLoadingCanvas = !hasMap
     && currentRoute?.surface === ROUTE_SURFACES.SHARE
     && !showMapAccessGate;
-  const showBlankHome = !hasMap && currentRoute?.surface !== ROUTE_SURFACES.SHARE && !showInviteAcceptGate;
+  const showBlankHome = showAppHomeGrid && !showInviteAcceptGate && !showMapAccessGate;
   const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);
   const showTopbarScanBar = !showInviteAcceptGate
     && !showMapAccessGate
