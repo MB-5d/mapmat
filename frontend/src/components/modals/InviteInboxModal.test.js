@@ -102,13 +102,14 @@ describe('InviteInboxModal', () => {
     expect(container.textContent).not.toContain('Not found');
     expect(container.textContent).not.toContain('Refresh');
     expect(container.querySelector('[role="combobox"]')?.value).toBe('Current Map');
-    expect(appCss).toContain('.invite-inbox-composer--role-menu-open');
+    expect(appCss).not.toContain('.invite-inbox-composer--role-menu-open');
 
     const roleButton = container.querySelector('.share-collab-role-trigger');
     act(() => {
       roleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(container.querySelector('.invite-inbox-composer')?.className).toContain('invite-inbox-composer--role-menu-open');
+    expect(container.querySelector('.share-collab-role-menu-panel')).not.toBeNull();
+    expect(container.querySelector('.invite-inbox-composer')?.className).not.toContain('invite-inbox-composer--role-menu-open');
 
     const inviteButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.trim() === 'Invite'

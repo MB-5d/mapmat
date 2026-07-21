@@ -3176,7 +3176,7 @@ body {
 }
 
 .route-gate-backdrop .route-gate {
-  background: rgba(248, 250, 252, 0.42);
+  background: rgba(248, 250, 252, 0.24);
   backdrop-filter: none;
 }
 
@@ -3185,8 +3185,8 @@ body {
 }
 
 .route-gate-backdrop .content-shell--route-gate-blurred {
-  filter: blur(18px);
-  opacity: 0.56;
+  filter: blur(8px);
+  opacity: 0.78;
   pointer-events: none;
   user-select: none;
 }
@@ -13434,10 +13434,6 @@ body {
   margin-bottom: var(--unit-16);
   padding-bottom: var(--unit-16);
   border-bottom: 1px solid var(--ui-color-border);
-}
-
-.invite-inbox-composer--role-menu-open {
-  margin-bottom: calc(var(--unit-16) + 132px);
 }
 
 .invite-inbox-map-combobox {

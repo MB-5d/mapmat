@@ -132,7 +132,7 @@ const InviteInboxModal = ({
     >
           {hasInviteComposer ? (
             <form
-              className={`invite-inbox-composer${showRoleMenu ? ' invite-inbox-composer--role-menu-open' : ''}`}
+              className="invite-inbox-composer"
               onSubmit={handleSubmitInvite}
             >
               <div className="invite-inbox-map-combobox" ref={mapMenuRef}>
