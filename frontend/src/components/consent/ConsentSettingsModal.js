@@ -19,6 +19,7 @@ const ConsentSettingsModal = ({ translateText = (source) => source }) => {
   const {
     consent,
     hasStoredConsent,
+    isConsentReady,
     isSettingsOpen,
     closeSettings,
     rejectOptional,
@@ -28,13 +29,13 @@ const ConsentSettingsModal = ({ translateText = (source) => source }) => {
   const [experienceResearch, setExperienceResearch] = useState(consent.experienceResearch);
 
   useEffect(() => {
-    if (!isSettingsOpen) return;
+    if (!isConsentReady || !isSettingsOpen) return;
     setAnalytics(hasStoredConsent ? consent.analytics : true);
     setExperienceResearch(hasStoredConsent ? consent.experienceResearch : true);
-  }, [consent.analytics, consent.experienceResearch, hasStoredConsent, isSettingsOpen]);
+  }, [consent.analytics, consent.experienceResearch, hasStoredConsent, isConsentReady, isSettingsOpen]);
 
   useEffect(() => {
-    if (!isSettingsOpen) return undefined;
+    if (!isConsentReady || !isSettingsOpen) return undefined;
 
     const modal = document.querySelector('.consent-settings-modal');
     const focusable = Array.from(modal?.querySelectorAll(FOCUSABLE_SELECTOR) || []);
@@ -60,7 +61,7 @@ const ConsentSettingsModal = ({ translateText = (source) => source }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSettingsOpen]);
+  }, [isConsentReady, isSettingsOpen]);
 
   const handleReject = () => {
     rejectOptional();
@@ -74,7 +75,7 @@ const ConsentSettingsModal = ({ translateText = (source) => source }) => {
 
   return (
     <Modal
-      show={isSettingsOpen}
+      show={isConsentReady && isSettingsOpen}
       onClose={closeSettings}
       title={t('Privacy settings')}
       subtitle={t('Choose optional product research tools for Vellic.')}

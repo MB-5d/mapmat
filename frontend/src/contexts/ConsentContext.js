@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 export const CONSENT_STORAGE_KEY = 'vellic_consent_v1';
 export const CONSENT_PROMPT_SEEN_KEY = 'vellic_consent_prompt_seen_v1';
@@ -107,6 +107,7 @@ const ConsentContext = createContext(null);
 const fallbackConsent = createDefaultConsent();
 const fallbackContext = {
   consent: fallbackConsent,
+  isConsentReady: false,
   hasStoredConsent: false,
   hasSeenConsentPrompt: false,
   hadSeenConsentPromptOnLoad: false,
@@ -121,15 +122,22 @@ const fallbackContext = {
 };
 
 export function ConsentProvider({ children }) {
-  const initial = useMemo(() => ({
-    ...readStoredConsent(),
-    hasSeenConsentPrompt: readConsentPromptSeen(),
-  }), []);
-  const [consent, setConsent] = useState(initial.consent);
-  const [hasStoredConsent, setHasStoredConsent] = useState(initial.hasStoredConsent);
-  const [hasSeenConsentPrompt, setHasSeenConsentPrompt] = useState(initial.hasSeenConsentPrompt);
+  const [consent, setConsent] = useState(fallbackConsent);
+  const [isConsentReady, setIsConsentReady] = useState(false);
+  const [hasStoredConsent, setHasStoredConsent] = useState(false);
+  const [hasSeenConsentPrompt, setHasSeenConsentPrompt] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [hadSeenConsentPromptOnLoad] = useState(initial.hasSeenConsentPrompt);
+  const [hadSeenConsentPromptOnLoad, setHadSeenConsentPromptOnLoad] = useState(false);
+
+  useEffect(() => {
+    const stored = readStoredConsent();
+    const promptSeen = readConsentPromptSeen();
+    setConsent(stored.consent);
+    setHasStoredConsent(stored.hasStoredConsent);
+    setHasSeenConsentPrompt(promptSeen);
+    setHadSeenConsentPromptOnLoad(promptSeen);
+    setIsConsentReady(true);
+  }, []);
 
   const persistConsent = useCallback((nextConsent) => {
     const normalized = normalizeConsent({
@@ -189,6 +197,7 @@ export function ConsentProvider({ children }) {
 
   const value = useMemo(() => ({
     consent,
+    isConsentReady,
     hasStoredConsent,
     hasSeenConsentPrompt,
     hadSeenConsentPromptOnLoad,
@@ -203,6 +212,7 @@ export function ConsentProvider({ children }) {
   }), [
     acceptResearch,
     consent,
+    isConsentReady,
     hasStoredConsent,
     hasSeenConsentPrompt,
     hadSeenConsentPromptOnLoad,

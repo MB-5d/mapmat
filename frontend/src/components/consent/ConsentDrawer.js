@@ -6,6 +6,7 @@ import Button from '../ui/Button';
 const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
   const t = translateText;
   const {
+    isConsentReady,
     needsConsent,
     acceptResearch,
     markConsentPromptSeen,
@@ -13,12 +14,12 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
   } = useConsent();
 
   useEffect(() => {
-    if (show && needsConsent) {
+    if (isConsentReady && show && needsConsent) {
       markConsentPromptSeen();
     }
-  }, [markConsentPromptSeen, needsConsent, show]);
+  }, [isConsentReady, markConsentPromptSeen, needsConsent, show]);
 
-  if (!show || !needsConsent) return null;
+  if (!isConsentReady || !show || !needsConsent) return null;
 
   return (
     <aside className="consent-drawer" aria-labelledby="consent-drawer-title">
