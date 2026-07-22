@@ -67,11 +67,8 @@ describe('ConsentDrawer', () => {
       'button',
     ]);
 
-    const acceptButton = findButton('Accept cookies');
-    expect(acceptButton.getAttribute('data-consent-action')).toBe('accept-research');
-    act(() => {
-      acceptButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    });
+    expect(findButton('Accept cookies').getAttribute('data-consent-action')).toBe('accept-research');
+    clickButton('Accept cookies');
 
     const saved = JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY));
     expect(saved).toMatchObject({

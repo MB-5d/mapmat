@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 export const CONSENT_STORAGE_KEY = 'vellic_consent_v1';
 const LEGACY_CONSENT_STORAGE_KEY = 'mapmat_consent_v1';
@@ -127,58 +127,6 @@ export function ConsentProvider({ children }) {
     experienceResearch: choices?.experienceResearch === true,
     marketing: false,
   }), [persistConsent]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
-    const getConsentActionTarget = (event) => (
-      event.target instanceof Element
-        ? event.target.closest('[data-consent-action]')
-        : null
-    );
-
-    const acceptAndHideDrawers = () => {
-      const acceptedConsent = acceptResearch();
-      document
-        .querySelectorAll('.consent-drawer')
-        .forEach((drawer) => drawer.setAttribute('hidden', ''));
-      window.dispatchEvent(new CustomEvent('vellic:consent-updated', {
-        detail: acceptedConsent,
-      }));
-    };
-
-    const handleNativeConsentAction = (event) => {
-      const target = getConsentActionTarget(event);
-      if (!target) return;
-
-      const action = target.getAttribute('data-consent-action');
-      if (action === 'accept-research') {
-        acceptAndHideDrawers();
-      } else if (action === 'open-settings') {
-        setIsSettingsOpen(true);
-      } else if (action === 'reject-optional') {
-        rejectOptional();
-        setIsSettingsOpen(false);
-      }
-    };
-
-    const handleNativeAcceptPointerDown = (event) => {
-      const target = getConsentActionTarget(event);
-      if (target?.getAttribute('data-consent-action') === 'accept-research') {
-        acceptAndHideDrawers();
-      }
-    };
-
-    document.addEventListener('pointerdown', handleNativeAcceptPointerDown, true);
-    document.addEventListener('mousedown', handleNativeAcceptPointerDown, true);
-    document.addEventListener('touchstart', handleNativeAcceptPointerDown, true);
-    document.addEventListener('click', handleNativeConsentAction, true);
-    return () => {
-      document.removeEventListener('pointerdown', handleNativeAcceptPointerDown, true);
-      document.removeEventListener('mousedown', handleNativeAcceptPointerDown, true);
-      document.removeEventListener('touchstart', handleNativeAcceptPointerDown, true);
-      document.removeEventListener('click', handleNativeConsentAction, true);
-    };
-  }, [acceptResearch, rejectOptional]);
 
   const value = useMemo(() => ({
     consent,
