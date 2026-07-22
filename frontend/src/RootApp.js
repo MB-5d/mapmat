@@ -47,7 +47,7 @@ function getInitialRoute() {
 function RootApp() {
   const [route, setRoute] = useState(getInitialRoute);
   const [deviceSupport, setDeviceSupport] = useState(() => getAppDeviceSupport());
-  const { consent, hasStoredConsent } = useConsent();
+  const { consent, hadSeenConsentPromptOnLoad, hasStoredConsent } = useConsent();
 
   const navigateToRoute = useCallback((nextRoute, { replace = false } = {}) => {
     const resolvedRoute = typeof nextRoute === 'function' ? nextRoute(parseCurrentRoute(window.location)) : nextRoute;
@@ -117,9 +117,10 @@ function RootApp() {
     });
   }, [consent.analytics, hasStoredConsent, route]);
 
+  const showConsentDrawer = route.surface !== ROUTE_SURFACES.APP || !hadSeenConsentPromptOnLoad;
   const consentUi = (
     <>
-      <ConsentDrawer />
+      <ConsentDrawer show={showConsentDrawer} />
       <ConsentSettingsModal />
     </>
   );

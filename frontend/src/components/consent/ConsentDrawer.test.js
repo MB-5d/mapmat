@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 
 import ConsentDrawer from './ConsentDrawer';
 import ConsentSettingsModal from './ConsentSettingsModal';
-import { CONSENT_STORAGE_KEY, ConsentProvider } from '../../contexts/ConsentContext';
+import {
+  CONSENT_PROMPT_SEEN_KEY,
+  CONSENT_STORAGE_KEY,
+  ConsentProvider,
+} from '../../contexts/ConsentContext';
 
 describe('ConsentDrawer', () => {
   let container;
@@ -11,6 +15,7 @@ describe('ConsentDrawer', () => {
 
   beforeEach(() => {
     window.localStorage.clear();
+    clearConsentCookies();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -24,14 +29,20 @@ describe('ConsentDrawer', () => {
     container = null;
     root = null;
     window.localStorage.clear();
+    clearConsentCookies();
   });
 
-  const renderConsentUi = () => {
+  const clearConsentCookies = () => {
+    document.cookie = `${CONSENT_STORAGE_KEY}=; Max-Age=0; Path=/`;
+    document.cookie = `${CONSENT_PROMPT_SEEN_KEY}=; Max-Age=0; Path=/`;
+  };
+
+  const renderConsentUi = ({ translateText } = {}) => {
     act(() => {
       root.render(
         <ConsentProvider>
-          <ConsentDrawer />
-          <ConsentSettingsModal />
+          <ConsentDrawer translateText={translateText} />
+          <ConsentSettingsModal translateText={translateText} />
         </ConsentProvider>
       );
     });
@@ -77,7 +88,30 @@ describe('ConsentDrawer', () => {
       marketing: false,
       version: '2026-04-27',
     });
+    expect(document.cookie).toContain(CONSENT_STORAGE_KEY);
+    expect(document.cookie).toContain(CONSENT_PROMPT_SEEN_KEY);
     expect(container.textContent).not.toContain('Help us improve Vellic');
+  });
+
+  test('localizes drawer button labels without changing click behavior', () => {
+    const translations = {
+      'Help us improve Vellic': 'Ayúdanos a mejorar Vellic',
+      'We use necessary storage to keep Vellic working. With your permission, we also use analytics and session feedback tools to understand what is useful, confusing, or broken to improve the site and app for you. We do not use these cookies for marketing, advertising, retargeting, or selling personal data.': 'Usamos almacenamiento necesario para mantener Vellic funcionando.',
+      'Accept cookies': 'Aceptar cookies',
+      'Cookie settings': 'Configuración de cookies',
+    };
+    renderConsentUi({ translateText: (source) => translations[source] || source });
+
+    expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.textContent.trim())).toEqual([
+      'Aceptar cookies',
+      'Configuración de cookies',
+    ]);
+
+    clickButton('Aceptar cookies');
+
+    const saved = JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY));
+    expect(saved.analytics).toBe(true);
+    expect(container.textContent).not.toContain('Ayúdanos a mejorar Vellic');
   });
 
   test('opens settings and saves granular choices', () => {
