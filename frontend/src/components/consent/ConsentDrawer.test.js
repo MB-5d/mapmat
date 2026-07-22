@@ -70,8 +70,8 @@ describe('ConsentDrawer', () => {
     expect(container.textContent).toContain('Cookie settings');
     expect(container.querySelector('.consent-drawer').textContent).not.toContain('Reject all optional');
     expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.textContent.trim())).toEqual([
-      'Accept cookies',
       'Cookie settings',
+      'Accept cookies',
     ]);
     expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.type)).toEqual([
       'button',
@@ -103,8 +103,8 @@ describe('ConsentDrawer', () => {
     renderConsentUi({ translateText: (source) => translations[source] || source });
 
     expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.textContent.trim())).toEqual([
-      'Aceptar cookies',
       'Configuración de cookies',
+      'Aceptar cookies',
     ]);
 
     clickButton('Aceptar cookies');
