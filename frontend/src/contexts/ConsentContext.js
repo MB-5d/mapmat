@@ -116,10 +116,14 @@ export function ConsentProvider({ children }) {
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
-    const handleNativeConsentAction = (event) => {
-      const target = event.target instanceof Element
+    const getConsentActionTarget = (event) => (
+      event.target instanceof Element
         ? event.target.closest('[data-consent-action]')
-        : null;
+        : null
+    );
+
+    const handleNativeConsentAction = (event) => {
+      const target = getConsentActionTarget(event);
       if (!target) return;
 
       const action = target.getAttribute('data-consent-action');
@@ -133,8 +137,19 @@ export function ConsentProvider({ children }) {
       }
     };
 
+    const handleNativeAcceptPointerDown = (event) => {
+      const target = getConsentActionTarget(event);
+      if (target?.getAttribute('data-consent-action') === 'accept-research') {
+        acceptResearch();
+      }
+    };
+
+    document.addEventListener('pointerdown', handleNativeAcceptPointerDown, true);
     document.addEventListener('click', handleNativeConsentAction, true);
-    return () => document.removeEventListener('click', handleNativeConsentAction, true);
+    return () => {
+      document.removeEventListener('pointerdown', handleNativeAcceptPointerDown, true);
+      document.removeEventListener('click', handleNativeConsentAction, true);
+    };
   }, [acceptResearch, rejectOptional]);
 
   const value = useMemo(() => ({

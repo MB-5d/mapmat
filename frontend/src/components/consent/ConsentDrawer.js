@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
 import { useConsent } from '../../contexts/ConsentContext';
 import Button from '../ui/Button';
@@ -11,6 +11,10 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
     openSettings,
   } = useConsent();
 
+  const handleAccept = useCallback(() => {
+    acceptResearch();
+  }, [acceptResearch]);
+
   if (!show || !needsConsent) return null;
 
   return (
@@ -22,12 +26,18 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
         </p>
       </div>
       <div className="consent-drawer__actions">
-        <Button size="sm" htmlType="button" data-consent-action="accept-research" onClick={acceptResearch}>
-          {t('Accept cookies')}
-        </Button>
         <Button size="sm" variant="secondary" type="secondary" buttonStyle="brand" htmlType="button" data-consent-action="open-settings" onClick={openSettings}>
           {t('Cookie settings')}
         </Button>
+        <button
+          type="button"
+          className="ui-btn ui-btn--type-primary ui-btn--style-brand ui-btn--sm"
+          data-consent-action="accept-research"
+          onPointerDownCapture={handleAccept}
+          onClick={handleAccept}
+        >
+          <span className="ui-btn__content">{t('Accept cookies')}</span>
+        </button>
       </div>
     </aside>
   );

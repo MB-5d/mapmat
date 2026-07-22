@@ -38,14 +38,18 @@ describe('ConsentDrawer', () => {
   };
 
   const clickButton = (label) => {
-    const button = Array.from(container.querySelectorAll('button')).find(
-      (candidate) => candidate.textContent.trim() === label
-    );
+    const button = findButton(label);
     expect(button).toBeTruthy();
     act(() => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
   };
+
+  const findButton = (label) => (
+    Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent.trim() === label
+    )
+  );
 
   test('shows the slim notice until cookies are accepted', () => {
     renderConsentUi();
@@ -54,12 +58,19 @@ describe('ConsentDrawer', () => {
     expect(container.textContent).toContain('Accept cookies');
     expect(container.textContent).toContain('Cookie settings');
     expect(container.querySelector('.consent-drawer').textContent).not.toContain('Reject all optional');
+    expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.textContent.trim())).toEqual([
+      'Cookie settings',
+      'Accept cookies',
+    ]);
     expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.type)).toEqual([
       'button',
       'button',
     ]);
 
-    clickButton('Accept cookies');
+    const acceptButton = findButton('Accept cookies');
+    act(() => {
+      acceptButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    });
 
     const saved = JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY));
     expect(saved).toMatchObject({
@@ -82,8 +93,12 @@ describe('ConsentDrawer', () => {
     expect(container.querySelector('.consent-drawer')).not.toBeNull();
 
     const toggles = container.querySelectorAll('.consent-toggle-row input');
+    expect(toggles[0].checked).toBe(true);
+    expect(toggles[0].disabled).toBe(true);
     expect(toggles[1].checked).toBe(true);
     expect(toggles[2].checked).toBe(true);
+    expect(toggles[3].checked).toBe(false);
+    expect(toggles[3].disabled).toBe(true);
 
     act(() => {
       toggles[2].dispatchEvent(new MouseEvent('click', { bubbles: true }));

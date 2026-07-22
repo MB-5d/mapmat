@@ -8328,6 +8328,21 @@ body {
   cursor: not-allowed;
 }
 
+.consent-toggle-row.is-disabled .ui-toggle__input:disabled:not(:checked) {
+  background: var(--ui-color-border);
+  border-color: var(--ui-color-border-strong);
+}
+
+.consent-toggle-row.is-disabled .ui-toggle__input:disabled:not(:checked)::after {
+  background: var(--ui-color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.consent-toggle-row.is-disabled .ui-toggle__input:disabled:checked {
+  background: var(--ui-button-brand-fill);
+  border-color: var(--ui-button-brand-fill);
+}
+
 .consent-toggle-row:first-child {
   border-top: none;
   padding-top: 0;
