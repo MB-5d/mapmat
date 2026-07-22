@@ -14,10 +14,15 @@ const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0))
 const isVirtualProject = (project) => (
   !!project?.isVirtual
   || project?.id === 'uncategorized'
-  || project?.name === 'Uncategorized'
   || project?.id === 'shared-with-me'
-  || project?.name === 'Shared With Me'
 );
+
+const normalizeDefaultProjectId = (projectId) => {
+  const value = String(projectId || '').trim();
+  if (!value) return '';
+  if (['uncategorized', 'no-project', 'no_project', 'none', 'null'].includes(value.toLowerCase())) return '';
+  return value;
+};
 
 const SaveMapForm = ({
   projects,
@@ -52,7 +57,10 @@ const SaveMapForm = ({
   };
 
   const [mapName, setMapName] = useState(getDefaultName());
-  const [selectedProject, setSelectedProject] = useState(isVirtualProject({ id: defaultProjectId }) ? '' : (defaultProjectId || ''));
+  const [selectedProject, setSelectedProject] = useState(() => {
+    const normalizedDefaultProjectId = normalizeDefaultProjectId(defaultProjectId);
+    return isVirtualProject({ id: normalizedDefaultProjectId }) ? '' : normalizedDefaultProjectId;
+  });
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [notes, setNotes] = useState(defaultNotes || currentMap?.notes || '');
@@ -105,15 +113,19 @@ const SaveMapForm = ({
           invalid={Boolean(nameError)}
         />
       </Field>
-      <Field label="Save to project (optional)">
+      <Field label="Save in">
         <SelectInput
-          value={selectedProject}
+          value={selectedProject || ''}
           onChange={(e) => setSelectedProject(e.target.value)}
         >
-          <option value="">No project (Uncategorized)</option>
-          {selectableProjects.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
+          <option value="">One-offs</option>
+          {selectableProjects.length > 0 ? (
+            <optgroup label="Projects">
+              {selectableProjects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </optgroup>
+          ) : null}
         </SelectInput>
       </Field>
       {!showNewProject ? (

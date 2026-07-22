@@ -24,6 +24,8 @@ const ScanBar = ({
   onToggleScanLayer,
   onScan,
   scanLabel = 'Scan',
+  optionsLabel = 'Options',
+  scanOptionsTitle = 'Scan options',
   scanDisabled,
   scanTitle,
   controlsDisabled = false,
@@ -79,11 +81,11 @@ const ScanBar = ({
           variant="secondary"
           startIcon={<SlidersHorizontal size={16} />}
           onClick={onToggleOptions}
-          title="Scan options"
+          title={scanOptionsTitle}
           type="button"
           disabled={controlsDisabled}
         >
-          Options
+          {optionsLabel}
         </Button>
         {showOptions && (
           <MenuPanel className="layers-panel">

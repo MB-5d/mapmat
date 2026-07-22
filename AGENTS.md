@@ -29,6 +29,13 @@
 - Backend syntax and boundary checks: `npm run check:backend`
 - Backend checks against the Postgres runtime path: `npm run check:backend:postgres`
 - Frontend production build: `npm run check:frontend-build`
+- Direct staging/production Postgres runtime health checks: `npm run check:db-health:staging` and `npm run check:db-health:production`
+- Staging env/readiness matrix check before applying example values: `npm run check:staging:readiness`
+- Focused staging env checks when backend and frontend variables need separate verification: `npm run check:staging:backend` and `npm run check:staging:frontend`
+- Auth flow regression check for signup, verification, reset, and Google config wiring: `npm run check:auth-flows`
+- Billing and entitlement checks for promo-code, checkout, and access-rule work: `npm run check:entitlements` and `npm run check:stripe-billing`
+- Screenshot pipeline validation for asset persistence and full-capture jobs: `npm run check:screenshot-storage` and `npm run check:image-capture:smoke`
+- Targeted coediting validation harnesses for load, transport chaos, and recovery: `npm run check:coediting:load`, `npm run check:coediting:transport-chaos`, and `npm run check:coediting:recovery`
 - Coediting soak harness: `npm run check:coediting:soak`
 - Staging runtime verification: `npm run verify:runtime:staging`
 - Production runtime verification: `npm run verify:runtime:production`

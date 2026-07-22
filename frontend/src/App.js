@@ -17,7 +17,6 @@ import {
   WifiOff,
 } from 'lucide-react';
 
-import './App.css';
 import * as api from './api';
 import createIllustrationDark from './assets/home/create-illustration-dark.png';
 import createIllustration from './assets/home/create-illustration.png';
@@ -46,6 +45,7 @@ import InviteInboxModal from './components/modals/InviteInboxModal';
 import WelcomeModal from './components/modals/WelcomeModal';
 import ProfileDrawer from './components/drawers/ProfileDrawer';
 import SettingsDrawer from './components/drawers/SettingsDrawer';
+import SupportDrawer from './components/drawers/SupportDrawer';
 import VersionHistoryDrawer from './components/drawers/VersionHistoryDrawer';
 import ProjectsModal from './components/modals/ProjectsModal';
 import PromptModal from './components/modals/PromptModal';
@@ -90,6 +90,7 @@ import {
   getMapNameConflictMessage,
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
+import { canManageCollaborationForRole, normalizeCollaborationRole } from './utils/collaborationPermissions';
 import classNames from './utils/classNames';
 import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './utils/scanPrefill';
 import {
@@ -150,6 +151,7 @@ import {
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
 import { useConsent } from './contexts/ConsentContext';
+import { useLocale } from './contexts/LocaleContext';
 import { useCoeditingLive, COEDITING_LIVE_STATUS } from './hooks/useCoeditingLive';
 import {
   ROUTE_SURFACES,
@@ -1607,6 +1609,22 @@ const mergeCollaborationSettingsPatch = (currentSettings, patch = {}) => {
   return nextSettings;
 };
 
+const getPendingAccessRequestsErrorMessage = (error) => {
+  const rawMessage = String(error?.message || '').trim();
+  if (error?.status === 404 || rawMessage.toLowerCase() === 'not found') {
+    return '';
+  }
+  return rawMessage || 'Failed to load pending access requests.';
+};
+
+const getPendingMapInvitesErrorMessage = (error) => {
+  const rawMessage = String(error?.message || '').trim();
+  if (error?.status === 404 || rawMessage.toLowerCase() === 'not found') {
+    return '';
+  }
+  return rawMessage || 'Failed to load pending invites.';
+};
+
 const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COEDITING_EXPERIMENT_ENABLED,
   false
@@ -1620,14 +1638,16 @@ const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
   5,
   60
 );
-const UNCATEGORIZED_PROJECT_ID = 'uncategorized';
+const ONE_OFFS_GROUP_ID = 'uncategorized';
 const SHARED_PROJECT_ID = 'shared-with-me';
 const PRESENCE_PREVIEW_LIMIT = 4;
+
+const isOneOffsGroup = (project) => project?.id === ONE_OFFS_GROUP_ID;
 
 const normalizeProjectSelection = (projectId) => {
   const normalized = String(projectId || '').trim().toLowerCase();
   if (!normalized) return null;
-  if (normalized === UNCATEGORIZED_PROJECT_ID || normalized === SHARED_PROJECT_ID) {
+  if (normalized === ONE_OFFS_GROUP_ID || normalized === SHARED_PROJECT_ID) {
     return null;
   }
   return String(projectId).trim();
@@ -1941,7 +1961,7 @@ function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
   });
 
   const sharedMaps = [];
-  const uncategorizedMaps = [];
+  const oneOffMaps = [];
 
   (mapRows || []).forEach((map) => {
     if (map?.project_id && projectsById.has(map.project_id)) {
@@ -1952,22 +1972,22 @@ function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
       sharedMaps.push(map);
       return;
     }
-    uncategorizedMaps.push(map);
+    oneOffMaps.push(map);
   });
 
   if (sharedMaps.length > 0) {
     orderedProjects.push({
       id: SHARED_PROJECT_ID,
-      name: 'Shared With Me',
+      name: 'Shared with me',
       maps: sharedMaps,
       isVirtual: true,
     });
   }
 
   orderedProjects.push({
-    id: UNCATEGORIZED_PROJECT_ID,
-    name: 'Uncategorized',
-    maps: uncategorizedMaps,
+    id: ONE_OFFS_GROUP_ID,
+    name: 'One-offs',
+    maps: oneOffMaps,
     isVirtual: true,
   });
 
@@ -3091,6 +3111,7 @@ export const __testing = {
 
 export default function App({ currentRoute, navigateToRoute }) {
   const { consent, openSettings: openPrivacySettings } = useConsent();
+  const { locale, setLocale, t } = useLocale();
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [thumbnailScopeIds, setThumbnailScopeIds] = useState(null);
@@ -3193,9 +3214,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [collaborationAccessRequests, setCollaborationAccessRequests] = useState([]);
   const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
   const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
+  const [inviteInboxSelectedMapId, setInviteInboxSelectedMapId] = useState('');
+  const [inviteInboxEmail, setInviteInboxEmail] = useState('');
+  const [inviteInboxRole, setInviteInboxRole] = useState('viewer');
   const [showInviteInboxModal, setShowInviteInboxModal] = useState(false);
   const [showAccessRequestsInboxModal, setShowAccessRequestsInboxModal] = useState(false);
   const [pendingMapInvites, setPendingMapInvites] = useState([]);
+  const [inviteInboxSentInvites, setInviteInboxSentInvites] = useState([]);
   const [pendingMapInvitesLoading, setPendingMapInvitesLoading] = useState(false);
   const [pendingMapInvitesError, setPendingMapInvitesError] = useState('');
   const [pendingAccessRequests, setPendingAccessRequests] = useState([]);
@@ -3206,7 +3231,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [inviteAcceptState, setInviteAcceptState] = useState(null);
   const [presenceSessions, setPresenceSessions] = useState([]);
   const [mapPermissions, setMapPermissions] = useState(null);
-  const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
+  const [, setHasCreatedShareLink] = useState(() => {
     return currentRoute?.surface === ROUTE_SURFACES.SHARE;
   });
   const [currentShareAccess, setCurrentShareAccess] = useState(() => {
@@ -3251,6 +3276,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const lastVersionSnapshotRef = useRef('');
   const clearLoadedMapViewRef = useRef(null);
   const loadSavedMapByIdRef = useRef(null);
+  const routeGatePreviewMapLoadedRef = useRef(false);
+  const routeGatePreviewMapIdRef = useRef('');
   const versionInfoToastRef = useRef(false);
   const seenActivityIdsRef = useRef(new Set());
   const primedActivityMapIdRef = useRef(null);
@@ -3379,6 +3406,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [addOnQuantities, setAddOnQuantities] = useState({});
   const billingRouteResult = String(currentRoute?.searchParams?.get('billing') || '');
   const billingRouteSessionId = String(currentRoute?.searchParams?.get('billingSessionId') || '');
+  const billingIntent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
+  const billingIntentPlanKey = String(currentRoute?.searchParams?.get('billingPlan') || '').trim().toLowerCase();
+  const isBillingCheckoutIntentRoute = billingIntent === 'checkout' && BILLING_PLAN_KEYS.has(billingIntentPlanKey);
   const isBillingReturnRoute = billingRouteResult === 'success'
     || billingRouteResult === 'portal_return'
     || billingRouteResult === 'cancelled';
@@ -3394,6 +3424,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
+  const [showSupportDrawer, setShowSupportDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
@@ -3804,7 +3835,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [theme]);
 
   const hasMap = !!root;
-  const isUnsavedScannedMap = hasMap && !currentMap?.id && !isImportedMap;
+  const isRouteGatePreviewMap = hasMap && !currentMap?.id && routeGatePreviewMapLoadedRef.current;
+  const isUnsavedScannedMap = hasMap && !currentMap?.id && !isImportedMap && !isRouteGatePreviewMap;
   const currentScanConfig = useMemo(() => normalizeScanConfig({
     url: urlInput,
     options: scanOptions,
@@ -4505,6 +4537,25 @@ export default function App({ currentRoute, navigateToRoute }) {
       toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
     }
   }, []);
+
+  const handleLocaleChange = useCallback(async (nextLocale) => {
+    const previousLocale = locale;
+    const normalizedLocale = setLocale(nextLocale);
+    if (!currentUser) return;
+
+    try {
+      const response = await api.updateProfile({ preferredLocale: normalizedLocale });
+      if (response?.user) setCurrentUser(response.user);
+    } catch (error) {
+      setLocale(previousLocale);
+      showToast(t('Language preference could not be saved.'), 'error');
+    }
+  }, [currentUser, locale, setLocale, showToast, t]);
+
+  useEffect(() => {
+    if (!currentUser?.preferredLocale || currentUser.preferredLocale === locale) return;
+    setLocale(currentUser.preferredLocale);
+  }, [currentUser?.preferredLocale, locale, setLocale]);
 
   const dismissToast = () => {
     if (toastTimeoutRef.current) {
@@ -5625,15 +5676,64 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canManageCollaborationSettingsValue = !!effectiveFeatureGates.collabSettingsManage;
   const canViewAccessRequestsValue = !!effectiveFeatureGates.accessRequestsView;
   const canViewPresenceValue = !!effectiveFeatureGates.presenceView;
+  const inviteInboxEligibleMapsValue = useMemo(() => {
+    const byId = new Map();
+    const addMap = (map) => {
+      if (!map?.id) return;
+      const role = sameId(map.user_id, currentUser?.id)
+        ? 'owner'
+        : normalizeCollaborationRole(map.membership_role || map.membershipRole);
+      if (!canManageCollaborationForRole(role)) return;
+      byId.set(String(map.id), {
+        id: map.id,
+        name: map.name || map.rootSummary?.title || 'Untitled Map',
+        role,
+      });
+    };
+
+    (projects || []).forEach((project) => {
+      (project?.maps || []).forEach(addMap);
+    });
+    addMap(currentMap);
+
+    const maps = Array.from(byId.values());
+    if (!currentMap?.id) return maps;
+    return maps.sort((left, right) => {
+      if (sameId(left.id, currentMap.id)) return -1;
+      if (sameId(right.id, currentMap.id)) return 1;
+      return 0;
+    });
+  }, [currentMap, currentUser?.id, projects]);
+  const inviteInboxRoleOptionsValue = useMemo(() => {
+    const selectedMapIsCurrent = currentMap?.id && sameId(inviteInboxSelectedMapId, currentMap.id);
+    if (selectedMapIsCurrent && collaborationInviteRoleOptionsValue.length > 0) {
+      return collaborationInviteRoleOptionsValue;
+    }
+    const planKey = String(currentUser?.entitlements?.plan?.key || '').trim().toLowerCase();
+    const editorGrantExtra = Number(currentUser?.entitlements?.limits?.editors?.grantExtra || 0);
+    const isTeamTrial = currentUser?.entitlements?.trial?.active
+      && String(currentUser?.entitlements?.trial?.kind || '').trim().toLowerCase() === 'team';
+    const canInviteEditor = isTeamTrial || editorGrantExtra > 0 || !['free', 'pro'].includes(planKey);
+    return canInviteEditor ? ['viewer', 'commenter', 'editor'] : ['viewer', 'commenter'];
+  }, [
+    collaborationInviteRoleOptionsValue,
+    currentMap?.id,
+    currentUser?.entitlements?.limits?.editors?.grantExtra,
+    currentUser?.entitlements?.plan?.key,
+    currentUser?.entitlements?.trial?.active,
+    currentUser?.entitlements?.trial?.kind,
+    inviteInboxSelectedMapId,
+  ]);
   const inferredCollaborationRole = useMemo(() => {
     if (!currentUser?.id) return 'viewer';
     if (currentMap?.user_id && sameId(currentMap.user_id, currentUser.id)) return 'owner';
     return collaborationMemberships.find((member) => sameId(member.userId, currentUser.id))?.role || 'viewer';
   }, [collaborationMemberships, currentMap?.user_id, currentUser?.id]);
   const currentCollaborationRole = useMemo(
-    () => String(mapPermissions?.role || inferredCollaborationRole || 'viewer').trim().toLowerCase() || 'viewer',
+    () => normalizeCollaborationRole(mapPermissions?.role || inferredCollaborationRole),
     [inferredCollaborationRole, mapPermissions?.role],
   );
+  const canManageCollaborationForCurrentRoleValue = canManageCollaborationForRole(currentCollaborationRole);
   const pendingInviteForCurrentRoute = useMemo(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'map' || !currentRoute?.mapId) {
       return null;
@@ -5641,7 +5741,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return (pendingMapInvites || []).find((invite) => sameId(invite.mapId, currentRoute.mapId)) || null;
   }, [currentRoute?.mapId, currentRoute?.section, currentRoute?.surface, pendingMapInvites]);
   const canManageCollaborationMembersValue = (
-    ['owner', 'editor'].includes(currentCollaborationRole)
+    canManageCollaborationForCurrentRoleValue
     || (canManageSharesValue && canViewCollaborationPanelValue)
   );
   const canSendCollaborationInvitesResolvedValue = (
@@ -5661,7 +5761,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     ? ''
     : 'Your account does not have permission to create share links for this map.';
   const canOpenCollaborationModalValue = COLLABORATION_UI_ENABLED && isLoggedIn && (
-    canViewCollaborationPanelValue
+    canManageCollaborationForCurrentRoleValue
+    || canViewCollaborationPanelValue
     || canSelfServeCollaborationValue
     || canSendCollaborationInvitesResolvedValue
   );
@@ -5732,6 +5833,26 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (collaborationInviteRoleOptionsValue.includes(collaborationInviteRole)) return;
     setCollaborationInviteRole(collaborationInviteRoleOptionsValue[0]);
   }, [collaborationInviteRole, collaborationInviteRoleOptionsValue]);
+
+  useEffect(() => {
+    if (!showInviteInboxModal || inviteInboxEligibleMapsValue.length === 0) return;
+    const currentEligibleMap = currentMap?.id
+      ? inviteInboxEligibleMapsValue.find((map) => sameId(map.id, currentMap.id))
+      : null;
+    const selectedMapStillEligible = inviteInboxEligibleMapsValue.some((map) => sameId(map.id, inviteInboxSelectedMapId));
+    if (selectedMapStillEligible) return;
+    if (currentEligibleMap) {
+      setInviteInboxSelectedMapId(currentEligibleMap.id);
+      return;
+    }
+    setInviteInboxSelectedMapId(inviteInboxEligibleMapsValue[0].id);
+  }, [currentMap?.id, inviteInboxEligibleMapsValue, inviteInboxSelectedMapId, showInviteInboxModal]);
+
+  useEffect(() => {
+    if (!inviteInboxRoleOptionsValue.length) return;
+    if (inviteInboxRoleOptionsValue.includes(inviteInboxRole)) return;
+    setInviteInboxRole(inviteInboxRoleOptionsValue[0]);
+  }, [inviteInboxRole, inviteInboxRoleOptionsValue]);
 
   useEffect(() => {
     seenActivityIdsRef.current = new Set();
@@ -6653,11 +6774,44 @@ export default function App({ currentRoute, navigateToRoute }) {
       setPendingMapInvites(invites || []);
     } catch (error) {
       setPendingMapInvites([]);
-      setPendingMapInvitesError(error.message || 'Failed to load pending invites.');
+      setPendingMapInvitesError(getPendingMapInvitesErrorMessage(error));
     } finally {
       setPendingMapInvitesLoading(false);
     }
   }, []);
+
+  const loadInviteInboxSentInvites = useCallback(async (mapId, { silent = false } = {}) => {
+    if (!mapId || !isLoggedIn) {
+      setInviteInboxSentInvites([]);
+      return;
+    }
+    if (!silent) {
+      setPendingMapInvitesLoading(true);
+    }
+    setPendingMapInvitesError('');
+
+    try {
+      const { collaboration } = await api.getMapCollaboration(mapId);
+      setInviteInboxSentInvites(collaboration?.invites || []);
+    } catch (error) {
+      setInviteInboxSentInvites([]);
+      if (error?.status !== 404) {
+        setPendingMapInvitesError(error.message || 'Failed to load sent invites.');
+      }
+    } finally {
+      if (!silent) {
+        setPendingMapInvitesLoading(false);
+      }
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!showInviteInboxModal || !inviteInboxSelectedMapId) {
+      setInviteInboxSentInvites([]);
+      return;
+    }
+    loadInviteInboxSentInvites(inviteInboxSelectedMapId, { silent: true });
+  }, [inviteInboxSelectedMapId, loadInviteInboxSentInvites, showInviteInboxModal]);
 
   const loadPendingAccessRequests = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
@@ -6670,7 +6824,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setPendingAccessRequests(accessRequests || []);
     } catch (error) {
       setPendingAccessRequests([]);
-      setPendingAccessRequestsError(error.message || 'Failed to load pending access requests.');
+      setPendingAccessRequestsError(getPendingAccessRequestsErrorMessage(error));
     } finally {
       setPendingAccessRequestsLoading(false);
     }
@@ -6765,7 +6919,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     if (authLoading) return undefined;
 
-    const shareRouteKey = `${currentRoute.shareId}:${currentRoute.search || ''}`;
+    const shareActorKey = currentUser?.id
+      ? `user:${currentUser.id}`
+      : (isLoggedIn ? 'auth' : 'anon');
+    const shareRouteKey = `${currentRoute.shareId}:${currentRoute.search || ''}:${shareActorKey}`;
     if (loadedShareRouteKeyRef.current === shareRouteKey) return undefined;
 
     let cancelled = false;
@@ -6785,6 +6942,8 @@ export default function App({ currentRoute, navigateToRoute }) {
             if (cancelled) return;
             if (hasRequiredPermissionForShareAccess(permissions, requestedAccess)) {
               loadedShareRouteKeyRef.current = shareRouteKey;
+              setRouteMapGateState(null);
+              setRouteAccessRequestMessage('');
               navigateToRoute(createMapRoute(share.mapId), { replace: true });
               return;
             }
@@ -6796,8 +6955,14 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
 
           loadedShareRouteKeyRef.current = shareRouteKey;
+          loadedShareVersionKeyRef.current = getShareRefreshVersionKey(share);
+          applySharedMapPayload({
+            ...share,
+            accessLevel: requestedAccess,
+          });
           setRouteMapGateState({
             mapId: share.mapId,
+            mapName: share.name || share.mapName || share.root?.title || '',
             loading: false,
             errorStatus: 403,
             errorMessage: `This link requires ${requestedRole} access to the saved map.`,
@@ -6849,6 +7014,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.shareId,
     currentRoute?.search,
     currentRoute?.surface,
+    currentUser?.id,
     isLoggedIn,
     navigateToRoute,
     showToast,
@@ -6859,7 +7025,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (authLoading || isLoggedIn) return undefined;
 
     const shareId = currentRoute.shareId;
-    const shareRouteKey = `${shareId}:${currentRoute.search || ''}`;
+    const shareRouteKey = `${shareId}:${currentRoute.search || ''}:anon`;
     let cancelled = false;
 
     const refreshShareIfChanged = async () => {
@@ -6985,6 +7151,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         return 'Reconnecting';
       case COEDITING_LIVE_STATUS.OUT_OF_SYNC:
         return 'Out of Sync';
+      case COEDITING_LIVE_STATUS.READ_ONLY:
+        return 'Read-Only';
       case COEDITING_LIVE_STATUS.CONNECTING:
         return 'Connecting';
       default:
@@ -6993,7 +7161,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [liveStatus]);
   const liveBannerTitle = isCoeditingReadOnlyMode && !canEditValue ? 'Live View' : 'Live Editing';
 
-  const liveBannerTone = liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+  const liveBannerTone = (
+    liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+    || liveStatus === COEDITING_LIVE_STATUS.READ_ONLY
+  )
     ? 'warning'
     : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
   const liveCollaborators = useMemo(
@@ -7017,8 +7188,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     isLiveActive
     && hasMap
     && currentMap?.id
-    && liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+    && (
+      liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+      || liveStatus === COEDITING_LIVE_STATUS.READ_ONLY
+    )
   );
+  const pendingReviewableAccessRequestCount = useMemo(() => (
+    pendingAccessRequests.filter((request) => (
+      request?.canReview && String(request.status || '').trim().toLowerCase() === 'pending'
+    )).length
+  ), [pendingAccessRequests]);
   const commentPopoverReadOnlyMessage = useMemo(() => {
     if (effectiveFeatureGates.mapComment) return '';
     if (showCoeditingReadOnlyBanner || canViewCommentsValue) {
@@ -7247,6 +7426,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setPendingMapInvites([]);
     setPendingMapInvitesError('');
     setPendingMapInvitesLoading(false);
+    setInviteInboxSentInvites([]);
     setPendingAccessRequests([]);
     setPendingAccessRequestsError('');
     setPendingAccessRequestsLoading(false);
@@ -7355,6 +7535,122 @@ export default function App({ currentRoute, navigateToRoute }) {
     guardAccountCanCreateWork,
     handleEntitlementError,
     loadCollaborationData,
+    showToast,
+  ]);
+
+  const sendInviteFromInbox = useCallback(async () => {
+    if (!guardAccountCanCreateWork('Inviting collaborators')) return;
+    const selectedMap = inviteInboxEligibleMapsValue.find((map) => sameId(map.id, inviteInboxSelectedMapId));
+    if (!selectedMap) {
+      showToast('Choose a map before sending an invite.', 'warning');
+      return;
+    }
+    const email = String(inviteInboxEmail || '').trim();
+    if (!email) {
+      showToast('Enter an email address to invite.', 'warning');
+      return;
+    }
+    if (
+      inviteInboxRoleOptionsValue.length > 0
+      && !inviteInboxRoleOptionsValue.includes(inviteInboxRole)
+    ) {
+      showToast('That invite role is not available for this map.', 'warning');
+      return;
+    }
+
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.createMapInvite(selectedMap.id, {
+        email,
+        role: inviteInboxRole,
+      });
+      trackEvent('invite_sent', {
+        map_id: String(selectedMap.id),
+        role: inviteInboxRole,
+        surface: 'invite_inbox',
+      });
+      setInviteInboxEmail('');
+      showToast('Invite sent', 'success');
+      await Promise.all([
+        loadPendingMapInvites({ silent: true }),
+        loadInviteInboxSentInvites(selectedMap.id, { silent: true }),
+        currentMap?.id && sameId(currentMap.id, selectedMap.id) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      if (handleEntitlementError(error, 'This account has reached its editor limit.')) {
+        setPendingMapInvitesError(error.message || 'Plan limit reached.');
+        return;
+      }
+      setPendingMapInvitesError(error.message || 'Failed to create invite.');
+      showToast(error.message || 'Failed to create invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [
+    currentMap?.id,
+    guardAccountCanCreateWork,
+    handleEntitlementError,
+    inviteInboxEligibleMapsValue,
+    inviteInboxEmail,
+    inviteInboxRole,
+    inviteInboxRoleOptionsValue,
+    inviteInboxSelectedMapId,
+    loadCollaborationData,
+    loadInviteInboxSentInvites,
+    loadPendingMapInvites,
+    showToast,
+  ]);
+
+  const cancelInviteFromInbox = useCallback(async (invite) => {
+    if (!invite?.id || !invite?.mapId) return;
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.revokeMapInvite(invite.mapId, invite.id);
+      showToast('Invite canceled', 'success');
+      await Promise.all([
+        loadInviteInboxSentInvites(invite.mapId, { silent: true }),
+        currentMap?.id && sameId(currentMap.id, invite.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      setPendingMapInvitesError(error.message || 'Failed to cancel invite.');
+      showToast(error.message || 'Failed to cancel invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, loadInviteInboxSentInvites, showToast]);
+
+  const resendInviteFromInbox = useCallback(async (invite, role) => {
+    if (!invite?.mapId || !invite?.inviteeEmail) return;
+    const inviteRole = String(role || invite.role || 'viewer').trim().toLowerCase();
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.createMapInvite(invite.mapId, {
+        email: invite.inviteeEmail,
+        role: inviteRole,
+      });
+      showToast('Invite email ready', 'success');
+      await Promise.all([
+        loadInviteInboxSentInvites(invite.mapId, { silent: true }),
+        currentMap?.id && sameId(currentMap.id, invite.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      if (handleEntitlementError(error, 'This account has reached its editor limit.')) {
+        setPendingMapInvitesError(error.message || 'Plan limit reached.');
+        return;
+      }
+      setPendingMapInvitesError(error.message || 'Failed to resend invite.');
+      showToast(error.message || 'Failed to resend invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [
+    currentMap?.id,
+    handleEntitlementError,
+    loadCollaborationData,
+    loadInviteInboxSentInvites,
     showToast,
   ]);
 
@@ -7922,6 +8218,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowImageReportDrawer(false);
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowVersionHistoryDrawer(false);
   }, [isLoggedIn, openAuthModal]);
 
@@ -8106,7 +8403,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       const anonymousIntentKey = `${intentKey}:anonymous`;
       if (handledSignupIntentKeyRef.current === anonymousIntentKey) return;
       handledSignupIntentKeyRef.current = anonymousIntentKey;
-      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+      nextSearchParams.delete('intent');
+      const nextSearch = nextSearchParams.toString();
+      const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+      window.history.replaceState({}, '', nextUrl);
       return;
     }
 
@@ -8125,7 +8426,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.search,
     currentRoute?.searchParams,
     isLoggedIn,
-    openAuthModal,
   ]);
 
   useEffect(() => {
@@ -8171,10 +8471,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     if (authLoading) return;
 
-    const intent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
-    const planKey = String(currentRoute?.searchParams?.get('billingPlan') || '').trim().toLowerCase();
     const requestedBillingCycle = normalizeBillingCycle(currentRoute?.searchParams?.get('billingCycle'));
-    if (intent !== 'checkout' || !BILLING_PLAN_KEYS.has(planKey)) {
+    if (!isBillingCheckoutIntentRoute) {
       handledBillingIntentKeyRef.current = '';
       return;
     }
@@ -8199,13 +8497,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     const nextSearch = nextSearchParams.toString();
     const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
     window.history.replaceState({}, '', nextUrl);
-    handlePlanCheckout(planKey, requestedBillingCycle);
+    handlePlanCheckout(billingIntentPlanKey, requestedBillingCycle);
   }, [
     authLoading,
+    billingIntentPlanKey,
     currentRoute?.pathname,
     currentRoute?.search,
     currentRoute?.searchParams,
     handlePlanCheckout,
+    isBillingCheckoutIntentRoute,
     isLoggedIn,
     openAuthModal,
   ]);
@@ -8388,6 +8688,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setShowAccessRequestsInboxModal(false);
         setShowProfileDrawer(false);
         setShowSettingsDrawer(false);
+        setShowSupportDrawer(false);
         setShowVersionHistoryDrawer(false);
         setShowImageReportDrawer(false);
         if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
@@ -8421,6 +8722,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowAccessRequestsInboxModal(false);
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
+      setShowSupportDrawer(false);
       setShowVersionHistoryDrawer(false);
       if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
         navigateToRoute(createAppHomeRoute(), { replace: true });
@@ -8466,20 +8768,19 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
-    const shouldPreserveAsViewOnly = Boolean(currentMap?.id)
-      && (
-        accessLevel === ACCESS_LEVELS.VIEW
-        || (hasCreatedShareLink && currentShareAccess === ACCESS_LEVELS.VIEW)
-      );
+    const shouldPreserveAsViewOnly = Boolean(root)
+      && currentRoute?.surface === ROUTE_SURFACES.SHARE
+      && (currentShareAccess === ACCESS_LEVELS.VIEW || accessLevel === ACCESS_LEVELS.VIEW);
 
     await performLogout({ preserveViewOnlyMap: shouldPreserveAsViewOnly });
   }, [
     accessLevel,
+    currentRoute?.surface,
     currentMap?.id,
-    hasCreatedShareLink,
     hasMap,
     currentShareAccess,
     performLogout,
+    root,
     showConfirm,
   ]);
 
@@ -8491,6 +8792,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleShowInviteInbox = useCallback(async () => {
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowProjectsModal(false);
     setShowHistoryModal(false);
     setShowVersionHistoryDrawer(false);
@@ -8499,12 +8801,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowShareModal(false);
     setShowCollaborationModal(false);
     setShowInviteInboxModal(true);
-    await loadPendingMapInvites();
-  }, [loadPendingMapInvites]);
+    await Promise.all([
+      loadPendingMapInvites(),
+      inviteInboxSelectedMapId ? loadInviteInboxSentInvites(inviteInboxSelectedMapId) : Promise.resolve(),
+    ]);
+  }, [inviteInboxSelectedMapId, loadInviteInboxSentInvites, loadPendingMapInvites]);
 
   const handleShowAccessRequestsInbox = useCallback(async () => {
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowProjectsModal(false);
     setShowHistoryModal(false);
     setShowVersionHistoryDrawer(false);
@@ -8666,6 +8972,42 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [currentMap?.id, loadCollaborationData, loadPendingAccessRequests, showToast]);
 
+  const handleUndoApprovedAccessRequest = useCallback(async (request) => {
+    if (!request?.id || !request?.mapId) return;
+    setPendingAccessRequestsLoading(true);
+    setPendingAccessRequestsError('');
+    try {
+      await api.reviewMapAccessRequest(request.mapId, request.id, {
+        status: 'pending',
+      });
+      trackEvent('access_request_undone', {
+        map_id: String(request.mapId),
+      });
+      showToast(`Undid access for ${request.requesterName || request.requesterEmail || 'user'}`, 'info');
+      await Promise.all([
+        loadPendingAccessRequests({ silent: true }),
+        currentMap?.id && sameId(currentMap.id, request.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      setPendingAccessRequestsError(error.message || 'Failed to undo access approval.');
+      showToast(error.message || 'Failed to undo access approval.', 'error');
+    } finally {
+      setPendingAccessRequestsLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, loadPendingAccessRequests, showToast]);
+
+  const handleOpenApprovedAccessRequestMap = useCallback(async (request) => {
+    if (!request?.mapId) return;
+    setShowAccessRequestsInboxModal(false);
+    setPendingAccessRequestsError('');
+    navigateToRoute(createMapRoute(request.mapId));
+    try {
+      await loadSavedMapByIdRef.current?.(request.mapId, { skipNavigation: true, silent: true });
+    } catch (error) {
+      showToast(error.message || 'Failed to open approved map.', 'error');
+    }
+  }, [navigateToRoute, showToast]);
+
   const handleRequestRouteMapAccess = useCallback(async () => {
     const mapId = currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map'
       ? currentRoute.mapId
@@ -8679,6 +9021,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     setRouteMapGateState((previous) => ({
       mapId,
+      mapName: previous?.mapName || '',
       loading: false,
       errorStatus: previous?.errorStatus || null,
       errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
@@ -8699,6 +9042,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       setRouteMapGateState((previous) => ({
         mapId,
+        mapName: previous?.mapName || '',
         loading: false,
         errorStatus: previous?.errorStatus || 403,
         errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
@@ -8718,18 +9062,22 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (error?.status === 409 && /pending invite/i.test(error.message || '')) {
         await loadPendingMapInvites({ silent: true });
       }
+      const requestErrorMessage = error?.status === 404 && /^not found$/i.test(error?.message || '')
+        ? 'Access requests are not available for this map right now.'
+        : (error?.message || 'Failed to send access request.');
       setRouteMapGateState((previous) => ({
         mapId,
+        mapName: previous?.mapName || '',
         loading: false,
         errorStatus: previous?.errorStatus || error?.status || null,
         errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
         requestStatus: error?.status === 403 ? 'disabled' : 'idle',
-        requestError: error?.message || 'Failed to send access request.',
+        requestError: requestErrorMessage,
         requestedRole,
         source: previous?.source || null,
       }));
       showToast(
-        error?.message || 'Failed to send access request.',
+        requestErrorMessage,
         error?.status === 403 ? 'warning' : 'error'
       );
     }
@@ -8749,6 +9097,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleShowProfile = useCallback(() => {
     setShowProfileDrawer(true);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
     setShowImageReportDrawer(false);
@@ -8760,6 +9109,19 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleShowSettings = useCallback(() => {
     setShowSettingsDrawer(true);
     setShowProfileDrawer(false);
+    setShowSupportDrawer(false);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
+    setShowVersionHistoryDrawer(false);
+    setShowProjectsModal(false);
+    setShowHistoryModal(false);
+  }, []);
+
+  const handleShowSupport = useCallback(() => {
+    setShowSupportDrawer(true);
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
     setShowImageReportDrawer(false);
@@ -8789,6 +9151,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowImageReportDrawer(false);
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowSupportDrawer(false);
     setShowVersionHistoryDrawer(false);
   }, [isLoggedIn, openAuthModal]);
 
@@ -8801,6 +9164,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     onShowProfile: handleShowProfile,
     onShowBilling: handleShowBilling,
     onShowSettings: handleShowSettings,
+    onShowSupport: handleShowSupport,
   }), [
     isLoggedIn,
     currentUser,
@@ -8810,6 +9174,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     handleShowProfile,
     handleShowBilling,
     handleShowSettings,
+    handleShowSupport,
   ]);
 
   const startMapNameEdit = useCallback(() => {
@@ -10967,7 +11332,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [guardAccountCanCreateWork, handleEntitlementError, loadAuthenticatedWorkspace, projectLimitReachedValue, root, showEntitlementLock, showToast]);
 
   const renameProject = async (projectId, newName) => {
-    if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
+    if (projectId === ONE_OFFS_GROUP_ID || projectId === SHARED_PROJECT_ID) {
       setEditingProjectId(null);
       return;
     }
@@ -11069,21 +11434,44 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const deleteProject = async (projectId) => {
-    if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
-      showToast('Cannot delete a virtual folder', 'warning');
+    if (projectId === ONE_OFFS_GROUP_ID || projectId === SHARED_PROJECT_ID) {
+      showToast('Cannot delete this map group', 'warning');
       return;
     }
+    const projectToDelete = projects.find((project) => project.id === projectId);
     const confirmed = await showConfirm({
       title: 'Delete Project',
-      message: 'Delete this project and all its maps?',
+      message: `Delete "${projectToDelete?.name || 'this project'}"? Its maps will move to One-offs.`,
       confirmText: 'Delete',
       danger: true
     });
     if (!confirmed) return;
     try {
       await api.deleteProject(projectId);
-      const deletedProject = projects.find((project) => project.id === projectId);
-      setProjects(prev => prev.filter(p => p.id !== projectId));
+      const deletedProject = projectToDelete;
+      setProjects((prev) => {
+        const removedProject = prev.find((project) => project.id === projectId);
+        const movedMaps = (removedProject?.maps || []).map((map) => ({
+          ...map,
+          project_id: null,
+        }));
+        const updated = prev.filter((project) => project.id !== projectId);
+        const oneOffs = updated.find(isOneOffsGroup);
+        if (oneOffs) {
+          return updated.map((project) => (
+            project.id === oneOffs.id
+              ? { ...project, maps: [...movedMaps, ...(project.maps || [])] }
+              : project
+          ));
+        }
+        return [
+          ...updated,
+          { id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: movedMaps, isVirtual: true },
+        ];
+      });
+      if (currentMap?.project_id === projectId) {
+        setCurrentMap((previous) => previous ? { ...previous, project_id: null } : previous);
+      }
       if (editingProjectId === projectId) {
         setEditingProjectId(null);
       }
@@ -11141,11 +11529,11 @@ export default function App({ currentRoute, navigateToRoute }) {
               : p
           );
         } else {
-          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          const uncategorized = updated.find(isOneOffsGroup);
           if (uncategorized) {
             uncategorized.maps = [map, ...(uncategorized.maps || [])];
           } else {
-            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+            updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
           }
         }
         return updated;
@@ -11255,11 +11643,11 @@ export default function App({ currentRoute, navigateToRoute }) {
               : p
           );
         } else {
-          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          const uncategorized = updated.find(isOneOffsGroup);
           if (uncategorized) {
             uncategorized.maps = [map, ...(uncategorized.maps || [])];
           } else {
-            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+            updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
           }
         }
         return updated;
@@ -11424,11 +11812,11 @@ export default function App({ currentRoute, navigateToRoute }) {
               : p
           );
         } else {
-          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          const uncategorized = updated.find(isOneOffsGroup);
           if (uncategorized) {
             uncategorized.maps = [map, ...(uncategorized.maps || [])];
           } else {
-            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+            updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
           }
         }
         return updated;
@@ -11526,11 +11914,11 @@ export default function App({ currentRoute, navigateToRoute }) {
               : p
           );
         } else {
-          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          const uncategorized = updated.find(isOneOffsGroup);
           if (uncategorized) {
             uncategorized.maps = [savedMap, ...(uncategorized.maps || [])];
           } else {
-            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [savedMap] });
+            updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [savedMap], isVirtual: true });
           }
         }
         return updated;
@@ -11564,11 +11952,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(`Map "${trimmedName}" saved`, 'success');
 
       if (pendingLogoutAfterSave) {
-        const shouldPreserveAsViewOnly = Boolean(savedMap?.id)
-          && (
-            accessLevel === ACCESS_LEVELS.VIEW
-            || (hasCreatedShareLink && currentShareAccess === ACCESS_LEVELS.VIEW)
-          );
+        const shouldPreserveAsViewOnly = Boolean(latestRoot)
+          && currentRoute?.surface === ROUTE_SURFACES.SHARE
+          && (currentShareAccess === ACCESS_LEVELS.VIEW || accessLevel === ACCESS_LEVELS.VIEW);
         await performLogout({ preserveViewOnlyMap: shouldPreserveAsViewOnly });
         return;
       }
@@ -11668,6 +12054,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const clearLoadedMapView = useCallback(() => {
+    routeGatePreviewMapLoadedRef.current = false;
+    routeGatePreviewMapIdRef.current = '';
     resetAutosaveTracking();
     cancelScheduledResetView();
     setMapPermissions(null);
@@ -11728,6 +12116,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [clearLoadedMapView, navigateToRoute, showConfirm]);
 
   const loadMap = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    routeGatePreviewMapLoadedRef.current = false;
+    routeGatePreviewMapIdRef.current = '';
     const normalizedOrphans = normalizeOrphans(map?.orphans);
     const hydratedMap = hydratePersistedScanLimitMap(map?.root, normalizedOrphans);
     const hydratedScanMeta = hydratedMap.scanMeta || { brokenLinks: [] };
@@ -11800,7 +12190,22 @@ export default function App({ currentRoute, navigateToRoute }) {
     scheduleResetViewRef.current?.();
   }, [applyTransform, clearCaptureIssues, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
 
+  const loadAccessPreviewMap = useCallback((previewMap) => {
+    if (!previewMap?.root) return false;
+    loadMap({
+      ...previewMap,
+      id: null,
+      project_id: null,
+      accessPreviewOnly: true,
+    }, { skipNavigation: true, silent: true });
+    routeGatePreviewMapLoadedRef.current = true;
+    routeGatePreviewMapIdRef.current = String(previewMap.id || '');
+    return true;
+  }, [loadMap]);
+
   const loadLargeMapShell = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    routeGatePreviewMapLoadedRef.current = false;
+    routeGatePreviewMapIdRef.current = '';
     const rootSummary = map?.rootSummary || {};
     const shellRoot = {
       id: rootSummary.id || `map-${map.id}-root`,
@@ -11910,9 +12315,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map') return;
     if (currentRoute?.surface === ROUTE_SURFACES.SHARE) return;
+    if (routeGatePreviewMapLoadedRef.current) {
+      clearLoadedMapView();
+    }
     setRouteMapGateState(null);
     setRouteAccessRequestMessage('');
-  }, [currentRoute?.section, currentRoute?.surface]);
+  }, [clearLoadedMapView, currentRoute?.section, currentRoute?.surface]);
 
   useEffect(() => {
     if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'invite_accept') return;
@@ -11924,9 +12332,21 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (currentMap?.id && sameId(currentMap.id, currentRoute.mapId)) return undefined;
     if (isBillingReturnRoute) return undefined;
     if (authLoading) return undefined;
+    if (
+      routeGatePreviewMapLoadedRef.current
+      && !sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
+    ) {
+      clearLoadedMapView();
+    }
+    if (
+      routeGatePreviewMapLoadedRef.current
+      && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
+    ) {
+      return undefined;
+    }
 
     if (!isLoggedIn) {
-      if (hasMap && !currentMap?.id) {
+      if (isUnsavedScannedMap) {
         const promptKey = `${currentRoute.mapId}:${root?.id || 'draft'}`;
         navigateToRoute(createAppHomeRoute(), { replace: true });
         if (!pendingUnsavedRoutePromptRef.current) {
@@ -11952,21 +12372,52 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         return undefined;
       }
+      let cancelled = false;
       setRouteMapGateState({
         mapId: currentRoute.mapId,
-        loading: false,
+        mapName: '',
+        loading: true,
         errorStatus: null,
         errorMessage: '',
         requestStatus: 'idle',
         requestError: '',
       });
-      openAuthModal();
-      return undefined;
+      api.getMapAccessPreview(currentRoute.mapId)
+        .then((preview) => {
+          if (cancelled) return;
+          const previewLoaded = loadAccessPreviewMap(preview?.map);
+          setRouteMapGateState((previous) => ({
+            mapId: currentRoute.mapId,
+            mapName: preview?.map?.name || previous?.mapName || 'Shared sitemap',
+            loading: false,
+            errorStatus: previous?.errorStatus || null,
+            errorMessage: previous?.errorMessage || '',
+            requestStatus: previous?.requestStatus || 'idle',
+            requestError: previous?.requestError || '',
+            previewLoaded,
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setRouteMapGateState((previous) => ({
+            mapId: currentRoute.mapId,
+            mapName: previous?.mapName || 'Shared sitemap',
+            loading: false,
+            errorStatus: previous?.errorStatus || null,
+            errorMessage: previous?.errorMessage || '',
+            requestStatus: previous?.requestStatus || 'idle',
+            requestError: previous?.requestError || '',
+          }));
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     let cancelled = false;
     setRouteMapGateState((previous) => ({
       mapId: currentRoute.mapId,
+      mapName: previous?.mapId === currentRoute.mapId ? previous?.mapName || '' : '',
       loading: true,
       errorStatus: null,
       errorMessage: '',
@@ -11980,16 +12431,23 @@ export default function App({ currentRoute, navigateToRoute }) {
         setRouteMapGateState(null);
         setRouteAccessRequestMessage('');
       })
-      .catch((error) => {
+      .catch(async (error) => {
         if (cancelled) return;
         clearLoadedMapView();
+        const preview = (error?.status === 404 || error?.status === 403)
+          ? await api.getMapAccessPreview(currentRoute.mapId).catch(() => null)
+          : null;
+        if (cancelled) return;
+        const previewLoaded = loadAccessPreviewMap(preview?.map);
         setRouteMapGateState({
           mapId: currentRoute.mapId,
+          mapName: preview?.map?.name || '',
           loading: false,
           errorStatus: error?.status || null,
           errorMessage: error?.message || 'Failed to load map',
           requestStatus: 'idle',
           requestError: '',
+          previewLoaded,
         });
         if (error?.status === 404 || error?.status === 403) {
           loadPendingMapInvites({ silent: true });
@@ -12010,9 +12468,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     isBillingReturnRoute,
     isLoggedIn,
     hasMap,
+    isUnsavedScannedMap,
+    loadAccessPreviewMap,
     loadPendingMapInvites,
     loadSavedMapById,
-    openAuthModal,
     root?.id,
     navigateToRoute,
     showConfirm,
@@ -12026,13 +12485,35 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (authLoading) return undefined;
 
     if (!isLoggedIn) {
+      let cancelled = false;
       setInviteAcceptState({
         token: currentRoute.inviteToken,
         status: 'auth_required',
         error: '',
+        invite: null,
       });
-      openAuthModal();
-      return undefined;
+      api.getMapInvitePreview(currentRoute.inviteToken)
+        .then((preview) => {
+          if (cancelled) return;
+          setInviteAcceptState((previous) => ({
+            token: currentRoute.inviteToken,
+            status: previous?.status || 'auth_required',
+            error: previous?.error || '',
+            invite: preview?.invite || null,
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setInviteAcceptState((previous) => ({
+            token: currentRoute.inviteToken,
+            status: previous?.status || 'auth_required',
+            error: previous?.error || '',
+            invite: previous?.invite || null,
+          }));
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     let cancelled = false;
@@ -12067,6 +12548,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           token: currentRoute.inviteToken,
           status: 'error',
           error: error?.message || 'Failed to accept invite.',
+          invite: error?.payload?.invite || null,
         });
       });
 
@@ -12083,7 +12565,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     loadPendingMapInvites,
     loadSavedMapById,
     navigateToRoute,
-    openAuthModal,
     showToast,
   ]);
 
@@ -13813,6 +14294,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowSupportDrawer(false);
             setShowProjectsModal(false);
             setShowHistoryModal(false);
           }
@@ -13827,6 +14309,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowSupportDrawer(false);
             setShowVersionHistoryDrawer(false);
             setShowProjectsModal(false);
             setShowHistoryModal(false);
@@ -13843,6 +14326,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowSupportDrawer(false);
             setShowProjectsModal(false);
             setShowHistoryModal(false);
           }
@@ -13858,6 +14342,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowSupportDrawer(false);
             setShowVersionHistoryDrawer(false);
             setShowHistoryModal(false);
           }
@@ -13914,6 +14399,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (showSettingsDrawer) {
           setShowSettingsDrawer(false);
         }
+        if (showSupportDrawer) {
+          setShowSupportDrawer(false);
+        }
         if (showVersionHistoryDrawer) {
           setShowVersionHistoryDrawer(false);
         }
@@ -13934,7 +14422,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, cancelActiveConnectionInteraction, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showSupportDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, cancelActiveConnectionInteraction, zoomAtClientPoint, getZoomBounds]);
 
   useEffect(() => {
     const handleWindowBlur = () => cancelActiveConnectionInteraction();
@@ -13949,6 +14437,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       || showImageReportDrawer
       || showProfileDrawer
       || showSettingsDrawer
+      || showSupportDrawer
       || showVersionHistoryDrawer
       || showProjectsModal
       || showHistoryModal
@@ -13984,6 +14473,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     showReportDrawer,
     showSaveMapModal,
     showSettingsDrawer,
+    showSupportDrawer,
     showShareModal,
     showVersionHistoryDrawer,
     showViewDropdown,
@@ -16058,6 +16548,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowAuthModal(false);
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
+      setShowSupportDrawer(false);
       setShowVersionHistoryDrawer(false);
       setShowReportDrawer(false);
       setShowImageReportDrawer(false);
@@ -17681,19 +18172,19 @@ export default function App({ currentRoute, navigateToRoute }) {
                       : p
                   );
                 } else {
-                  const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+                  const uncategorized = updated.find(isOneOffsGroup);
                   if (uncategorized) {
                     uncategorized.maps = [map, ...(uncategorized.maps || [])];
                   } else {
-                    updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+                    updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
                   }
                 }
               } else {
-                const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+                const uncategorized = updated.find(isOneOffsGroup);
                 if (uncategorized) {
                   uncategorized.maps = [map, ...(uncategorized.maps || [])];
                 } else {
-                  updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+                  updated.push({ id: ONE_OFFS_GROUP_ID, name: 'One-offs', maps: [map], isVirtual: true });
                 }
               }
               return updated;
@@ -18469,10 +18960,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       && !!routeMapGateState
   );
   const isWelcomeModalEligible = currentRoute?.surface === ROUTE_SURFACES.APP
-    && (currentRoute?.section === 'home' || currentRoute?.section === 'map')
+    && currentRoute?.section === 'home'
     && !showInviteAcceptGate
     && !showMapAccessGate
     && !isBillingReturnRoute
+    && !isBillingCheckoutIntentRoute
     && !shouldStartScanFromPrefill(currentRoute);
   const showWelcomeModal = isWelcomeModalEligible
     && !welcomeModalDismissedForSession
@@ -18564,7 +19056,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const showShareLoadingCanvas = !hasMap
     && currentRoute?.surface === ROUTE_SURFACES.SHARE
     && !showMapAccessGate;
-  const showBlankHome = !hasMap && currentRoute?.surface !== ROUTE_SURFACES.SHARE && !showInviteAcceptGate;
+  const showBlankHome = showAppHomeGrid && !showInviteAcceptGate && !showMapAccessGate;
   const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);
   const showTopbarScanBar = !showInviteAcceptGate
     && !showMapAccessGate
@@ -18573,6 +19065,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       isDefaultWorkspaceScanModalVisible
       || (isUnsavedScannedMap && !!root?.url)
     );
+  const routeGateActive = (
+    showInviteAcceptGate
+  ) || (
+    showMapAccessGate && !showInviteAcceptGate
+  );
+  const routeGateMapTitle = (
+    showInviteAcceptGate
+      ? inviteAcceptState?.invite?.mapName
+      : pendingInviteForCurrentRoute?.mapName || routeMapGateState?.mapName
+  ) || currentMap?.name || mapName || 'Shared sitemap';
+  const showRouteGatePreviewCanvas = routeGateActive && !hasMap;
 
   const renderCompletedConnection = (conn) => {
     const path = generateConnectionPath(conn);
@@ -18749,7 +19252,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         urlInput={urlInput}
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
-        hasMap={hasMap}
+        hasMap={hasMap || routeGateActive}
         appHome={showAppHomeGrid}
         floating={showShareLoadingCanvas || showInviteAcceptCanvas}
         showScanBar={showTopbarScanBar}
@@ -18769,7 +19272,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
         showClearUrl={!!urlInput.trim()}
-        mapName={mapName}
+        mapName={routeGateActive && !hasMap ? routeGateMapTitle : mapName}
         isEditingMapName={isEditingMapName}
         onMapNameChange={(e) => setMapName(e.target.value)}
         onMapNameBlur={commitMapNameEdit}
@@ -18792,11 +19295,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         onShowProjects={handleShowProjects}
         onShowHistory={handleShowHistory}
         pendingInviteCount={pendingMapInvites.length}
-        pendingAccessRequestCount={pendingAccessRequests.length}
+        pendingAccessRequestCount={pendingReviewableAccessRequestCount}
       />
 
       <div
-        className={`canvas ${hasMap ? 'has-map' : ''} ${showAppHomeGrid || showInviteAcceptCanvas ? 'app-home' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
+        className={`canvas ${hasMap || routeGateActive ? 'has-map' : ''} ${showAppHomeGrid || showInviteAcceptCanvas ? 'app-home' : ''} ${routeGateActive ? 'route-gate-backdrop' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
         ref={canvasRef}
         style={{
           '--canvas-pan-x': `${canvasRenderPan.x || 0}px`,
@@ -18810,7 +19313,30 @@ export default function App({ currentRoute, navigateToRoute }) {
         onScroll={resetCanvasNativeScroll}
        
       >
-        {showInviteAcceptGate && inviteAcceptState?.status !== 'auth_required' && (
+        {showRouteGatePreviewCanvas && (
+          <div className="route-gate-preview-map" aria-hidden="true">
+            <div className="route-gate-preview-content">
+              <div className="route-gate-preview-node route-gate-preview-node-root" />
+              <div className="route-gate-preview-branch route-gate-preview-branch-left">
+                {[0, 1, 2, 3].map((index) => (
+                  <div className="route-gate-preview-node" key={`left-${index}`} />
+                ))}
+              </div>
+              <div className="route-gate-preview-branch route-gate-preview-branch-right">
+                {[0, 1, 2, 3, 4].map((index) => (
+                  <div className="route-gate-preview-node" key={`right-${index}`} />
+                ))}
+              </div>
+              <div className="route-gate-preview-branch route-gate-preview-branch-bottom">
+                {[0, 1, 2].map((index) => (
+                  <div className="route-gate-preview-node" key={`bottom-${index}`} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showInviteAcceptGate && (
           <InviteAcceptGate
             status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
             error={inviteAcceptState?.error || ''}
@@ -18885,9 +19411,12 @@ export default function App({ currentRoute, navigateToRoute }) {
             className={`permission-banner live-edit-banner live-edit-banner-${liveBannerTone}`}
             icon={liveStatus === COEDITING_LIVE_STATUS.CONNECTED
               ? <Wifi size={16} />
-              : (liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+              : (
+                liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+                || liveStatus === COEDITING_LIVE_STATUS.READ_ONLY
+              )
                 ? <WifiOff size={16} />
-                : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />)}
+                : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />}
             contentClassName="permission-banner-main"
             actions={liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC ? (
               <div className="map-conflict-actions">
@@ -19041,7 +19570,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             onDragEnd={handleDndDragEnd}
           >
             <div
-              className={`content-shell ${useLargeMapSurface ? 'large-map-shell' : ''}`}
+              className={`content-shell ${useLargeMapSurface ? 'large-map-shell' : ''} ${routeGateActive ? 'content-shell--route-gate-blurred' : ''}`}
               ref={contentShellRef}
             >
             <div
@@ -19622,6 +20151,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowSupportDrawer(false);
                       setShowVersionHistoryDrawer(false);
                       setShowProjectsModal(false);
                       setShowHistoryModal(false);
@@ -19641,6 +20171,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowSupportDrawer(false);
                       setShowVersionHistoryDrawer(false);
                       setShowProjectsModal(false);
                       setShowHistoryModal(false);
@@ -19807,6 +20338,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowReportDrawer(false);
                   setShowProfileDrawer(false);
                   setShowSettingsDrawer(false);
+                  setShowSupportDrawer(false);
                   setShowVersionHistoryDrawer(false);
                   setShowProjectsModal(false);
                   setShowHistoryModal(false);
@@ -19843,6 +20375,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowSupportDrawer(false);
                       setShowProjectsModal(false);
                       setShowHistoryModal(false);
                     }
@@ -19865,7 +20398,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowCollaborationModal(true);
                 },
                 canOpenShare: canOpenShareModalValue,
-                canOpenCollaborate: canOpenCollaborationModalValue && !isReaderOnlyMapRoleValue,
+                canOpenCollaborate: canOpenCollaborationModalValue && canManageCollaborationForCurrentRoleValue,
                 hasMap,
                 hasSavedMap: !!currentMap?.id,
                 showVersionHistory: showVersionHistoryDrawer,
@@ -20050,6 +20583,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           authModal: showAuthModal,
           profileDrawer: showProfileDrawer,
           settingsDrawer: showSettingsDrawer,
+          supportDrawer: showSupportDrawer,
           versionHistoryDrawer: showVersionHistoryDrawer,
           inviteInboxModal: showInviteInboxModal,
           accessRequestsInboxModal: showAccessRequestsInboxModal,
@@ -20172,7 +20706,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         onShareEmailsChange={setShareEmails}
         onSendEmail={sendShareEmail}
         collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn && currentMap?.id && (
-          canViewCollaborationPanel()
+          canManageCollaborationForCurrentRoleValue
+          || canViewCollaborationPanel()
           || canSelfServeCollaborationValue
         )}
         collaborationAvailable={Boolean(currentMap?.id)}
@@ -20205,8 +20740,18 @@ export default function App({ currentRoute, navigateToRoute }) {
       <InviteInboxModal
         show={showInviteInboxModal}
         invites={pendingMapInvites}
+        sentInvites={inviteInboxSentInvites}
         loading={pendingMapInvitesLoading}
         error={pendingMapInvitesError}
+        eligibleMaps={inviteInboxEligibleMapsValue}
+        selectedMapId={inviteInboxSelectedMapId}
+        onSelectedMapIdChange={setInviteInboxSelectedMapId}
+        inviteEmail={inviteInboxEmail}
+        onInviteEmailChange={setInviteInboxEmail}
+        inviteRole={inviteInboxRole}
+        inviteRoleOptions={inviteInboxRoleOptionsValue}
+        onInviteRoleChange={setInviteInboxRole}
+        onSendInvite={sendInviteFromInbox}
         onClose={() => {
           setShowInviteInboxModal(false);
           setPendingMapInvitesError('');
@@ -20214,9 +20759,10 @@ export default function App({ currentRoute, navigateToRoute }) {
             navigateToRoute(getActiveAppRoute(), { replace: true });
           }
         }}
-        onRefresh={() => loadPendingMapInvites()}
         onAccept={handleAcceptPendingInvite}
         onDecline={handleDeclinePendingInvite}
+        onCancelSentInvite={cancelInviteFromInbox}
+        onResendSentInvite={resendInviteFromInbox}
       />
 
       <AccessRequestInboxModal
@@ -20231,9 +20777,10 @@ export default function App({ currentRoute, navigateToRoute }) {
             navigateToRoute(getActiveAppRoute(), { replace: true });
           }
         }}
-        onRefresh={() => loadPendingAccessRequests()}
         onApprove={handleApprovePendingAccessRequest}
         onDeny={handleDenyPendingAccessRequest}
+        onUndo={handleUndoApprovedAccessRequest}
+        onOpenMap={handleOpenApprovedAccessRequestMap}
       />
 
       <SaveMapModal
@@ -20878,6 +21425,14 @@ export default function App({ currentRoute, navigateToRoute }) {
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
         consent={consent}
         onOpenPrivacySettings={openPrivacySettings}
+        onLocaleChange={handleLocaleChange}
+      />
+
+      <SupportDrawer
+        isOpen={showSupportDrawer}
+        onClose={() => setShowSupportDrawer(false)}
+        user={currentUser}
+        showToast={showToast}
       />
 
       <VersionHistoryDrawer

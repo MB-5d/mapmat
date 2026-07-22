@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-17
+
+### Highlights
+
+- No product-facing repo changes landed during 2026-07-10 through 2026-07-17; first-parent history in this window only shows Codex worktree snapshot housekeeping commits (`startup-cleanup` and `archive-cleanup`).
+
+### Key PR Links
+
+- No merged PR links were found in repo history for 2026-07-10 through 2026-07-17.
+
 ## 2026-06-26
 
 ### Highlights

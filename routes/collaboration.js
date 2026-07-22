@@ -38,7 +38,7 @@ const COLLABORATION_BACKEND_ENABLED = parseEnvBool(
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ACCESS_POLICIES = new Set(['private', 'viewer_invites_open']);
 const PRESENCE_IDENTITY_MODES = new Set(['named', 'anonymous']);
-const ACCESS_REQUEST_STATUSES = new Set(['approved', 'denied']);
+const ACCESS_REQUEST_STATUSES = new Set(['approved', 'denied', 'pending']);
 
 const INVITE_ROLES = new Set([
   permissionPolicy.ROLES.EDITOR,
@@ -143,8 +143,11 @@ function serializeMembership(row) {
     invitedByUserId: row.invited_by_user_id || null,
     invitedByName: row.invited_by_name || null,
     invitedByEmail: row.invited_by_email || null,
+    invitedByAvatarUrl: row.invited_by_avatar_url || null,
     userName: row.user_name || null,
     userEmail: row.user_email || null,
+    avatarUrl: row.user_avatar_url || null,
+    userAvatarUrl: row.user_avatar_url || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     implicitOwner: !!row.is_implicit_owner,
@@ -210,6 +213,7 @@ function serializeAccessRequest(row) {
     decisionUserName: row.decision_user_name || null,
     decisionUserEmail: row.decision_user_email || null,
     decisionRole: row.decision_role || null,
+    canReview: row.can_review === 1 || row.can_review === true,
     decidedAt: row.decided_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -316,6 +320,7 @@ async function listCollaborationMembersAsync(mapRow) {
       user_email: creatorUser.email || null,
       created_at: mapRow.created_at,
       updated_at: mapRow.updated_at,
+      user_avatar_url: creatorUser.avatar_path || creatorUser.google_picture_url || null,
       is_implicit_owner: true,
     });
   }
@@ -422,6 +427,32 @@ router.use((req, res, next) => {
   if (!COLLABORATION_BACKEND_ENABLED) return notFound(res);
   return next();
 });
+
+// GET /api/collaboration/invites/:token/preview - safe title-only preview for invite gates
+router.get('/collaboration/invites/:token/preview', async (req, res) => {
+  try {
+    await collaborationStore.ensureCollaborationSchemaAsync();
+    const { token } = req.params;
+    if (!token || token.length < 12) {
+      return res.status(400).json({ error: 'Invalid invite token' });
+    }
+    const invite = await collaborationStore.getInviteByTokenAsync(token);
+    if (!invite) return res.status(404).json({ error: 'Invite not found' });
+
+    res.json({
+      invite: {
+        mapId: invite.map_id,
+        mapName: invite.map_name || 'Shared sitemap',
+        role: invite.role,
+        status: invite.status,
+      },
+    });
+  } catch (error) {
+    console.error('Invite preview error:', error);
+    res.status(500).json({ error: 'Failed to load invite preview' });
+  }
+});
+
 router.use(requireAuth);
 router.use(async (req, res, next) => {
   try {
@@ -758,7 +789,7 @@ router.post('/maps/:id/access-requests', async (req, res) => {
       mapId: id,
       requesterUserId: req.user.id,
       requestedRole,
-      message: String(message || '').trim().slice(0, 1000) || null,
+      message: String(message || '').trim().slice(0, 200) || null,
     });
 
     await recordMapActivityBestEffortAsync({
@@ -827,13 +858,36 @@ router.patch('/maps/:id/access-requests/:requestId', async (req, res) => {
     if (!request || request.map_id !== id) {
       return res.status(404).json({ error: 'Access request not found' });
     }
-    if (request.status !== 'pending') {
-      return res.status(409).json({ error: 'Access request is no longer pending' });
-    }
-
     const decisionStatus = normalizeAccessRequestStatus(status);
     if (!decisionStatus) {
-      return res.status(400).json({ error: 'Invalid status. Use approved or denied.' });
+      return res.status(400).json({ error: 'Invalid status. Use approved, denied, or pending.' });
+    }
+
+    if (decisionStatus === 'pending') {
+      if (request.status !== 'approved') {
+        return res.status(409).json({ error: 'Only approved access requests can be undone' });
+      }
+
+      const removedMemberships = await collaborationStore.deleteMembershipByMapAndUserAsync(
+        id,
+        request.requester_user_id
+      );
+      const resetRequest = await collaborationStore.resetAccessRequestToPendingAsync(requestId);
+
+      recordUsageEvent(req, 'access_request_undone', 1, {
+        mapId: id,
+        requestId,
+        removedMemberships,
+      });
+
+      return res.json({
+        accessRequest: serializeAccessRequest(resetRequest),
+        membership: null,
+      });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(409).json({ error: 'Access request is no longer pending' });
     }
 
     let membership = null;
@@ -1074,11 +1128,32 @@ router.post('/maps/:id/invites', async (req, res) => {
           email: inviteeEmail,
           role: inviteRole,
         });
-        const reusableInvite = existingPendingInvite.expires_at
+        let reusableInvite = existingPendingInvite.role === inviteRole
+          ? existingPendingInvite
+          : await collaborationStore.updateInviteRoleAsync(existingPendingInvite.id, inviteRole);
+        reusableInvite = reusableInvite.expires_at
           ? await collaborationStore.clearInviteExpirationAsync(existingPendingInvite.id)
-          : existingPendingInvite;
+          : reusableInvite;
+        let emailDelivery = null;
+        try {
+          const queuedEmail = await queueCollaborationInviteEmailAsync({
+            map,
+            invite: reusableInvite,
+            inviter: req.user,
+          });
+          emailDelivery = queuedEmail.delivery
+            ? {
+              id: queuedEmail.delivery.id,
+              jobId: queuedEmail.jobId,
+              status: queuedEmail.delivery.status,
+            }
+            : null;
+        } catch (emailError) {
+          console.error('Queue invite resend email error:', emailError);
+        }
         return res.json({
           invite: serializeInvite(reusableInvite, { includeToken: true }),
+          emailDelivery,
           reused: true,
         });
       }
@@ -1206,13 +1281,32 @@ router.get('/collaboration/invites', async (req, res) => {
   }
 });
 
-// GET /api/collaboration/access-requests - list pending requests reviewable by current owner
+// GET /api/collaboration/access-requests - list map access requests linked to current user
 router.get('/collaboration/access-requests', async (req, res) => {
   try {
-    const requests = await collaborationStore.listReviewableAccessRequestsForUserAsync(req.user.id, {
-      status: 'pending',
-      limit: 100,
-      offset: 0,
+    const [reviewableRequests, requesterRequests] = await Promise.all([
+      collaborationStore.listReviewableAccessRequestsForUserAsync(req.user.id, {
+        status: null,
+        limit: 100,
+        offset: 0,
+      }),
+      collaborationStore.listAccessRequestsForRequesterAsync(req.user.id, {
+        status: null,
+        limit: 100,
+        offset: 0,
+      }),
+    ]);
+    const byId = new Map();
+    [...reviewableRequests, ...requesterRequests].forEach((request) => {
+      const existing = byId.get(request.id);
+      if (!existing || request.can_review) {
+        byId.set(request.id, request);
+      }
+    });
+    const requests = Array.from(byId.values()).sort((left, right) => {
+      const leftTime = new Date(left.updated_at || left.created_at || 0).getTime();
+      const rightTime = new Date(right.updated_at || right.created_at || 0).getTime();
+      return rightTime - leftTime;
     });
 
     res.json({
@@ -1226,9 +1320,10 @@ router.get('/collaboration/access-requests', async (req, res) => {
 
 // POST /api/collaboration/invites/:inviteId/accept - accept invite from inbox
 router.post('/collaboration/invites/id/:inviteId/accept', async (req, res) => {
+  let invite = null;
   try {
     const { inviteId } = req.params;
-    const invite = await collaborationStore.getInviteByIdAsync(inviteId);
+    invite = await collaborationStore.getInviteByIdAsync(inviteId);
     const { invite: acceptedInvite, membership } = await acceptInviteForUserAsync(invite, req.user);
     recordUsageEvent(req, 'invite_accepted', 1, {
       mapId: acceptedInvite.map_id,
@@ -1244,7 +1339,10 @@ router.post('/collaboration/invites/id/:inviteId/accept', async (req, res) => {
     });
   } catch (error) {
     if (error?.status) {
-      return res.status(error.status).json({ error: error.message });
+      return res.status(error.status).json({
+        error: error.message,
+        invite: serializeInvite(invite),
+      });
     }
     console.error('Accept invite by id error:', error);
     res.status(500).json({ error: 'Failed to accept invite' });
@@ -1273,13 +1371,14 @@ router.post('/collaboration/invites/id/:inviteId/decline', async (req, res) => {
 
 // POST /api/collaboration/invites/:token/accept - accept invite as logged-in user
 router.post('/collaboration/invites/:token/accept', async (req, res) => {
+  let invite = null;
   try {
     const { token } = req.params;
     if (!token || token.length < 12) {
       return res.status(400).json({ error: 'Invalid invite token' });
     }
 
-    const invite = await collaborationStore.getInviteByTokenAsync(token);
+    invite = await collaborationStore.getInviteByTokenAsync(token);
     if (!invite) return res.status(404).json({ error: 'Invite not found' });
 
     const { invite: acceptedInvite, membership } = await acceptInviteForUserAsync(invite, req.user);
@@ -1297,7 +1396,10 @@ router.post('/collaboration/invites/:token/accept', async (req, res) => {
     });
   } catch (error) {
     if (error?.status) {
-      return res.status(error.status).json({ error: error.message });
+      return res.status(error.status).json({
+        error: error.message,
+        invite: serializeInvite(invite),
+      });
     }
     console.error('Accept invite error:', error);
     res.status(500).json({ error: 'Failed to accept invite' });

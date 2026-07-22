@@ -2,7 +2,8 @@
 
 Use these only on staging:
 
-- Frontend: `https://staging.vellic.io/app`
+- Marketing: `https://staging.vellic.io`
+- App: `https://app-staging.vellic.io/app`
 - Backend: `https://api-staging.vellic.io`
 
 ## Login Codes

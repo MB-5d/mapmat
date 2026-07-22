@@ -4,6 +4,10 @@ frontend/node_modules/
 
 # Build outputs
 frontend/build/
+marketing/.next/
+marketing/out/
+marketing/public/sitemap.xml
+marketing/public/robots.txt
 
 # Database
 data/

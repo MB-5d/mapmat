@@ -1,0 +1,1358 @@
+{
+  "locale": "ja",
+  "translationStatus": "machine draft",
+  "indexable": false,
+  "rows": [
+    {
+      "source": "Better Information Architecture",
+      "localized": "より良い情報アーキテクチャ",
+      "seoTerm": "情報アーキテクチャ",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Be the architect of your next build.",
+      "localized": "次のサイト設計を、あなたの手で。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic brings audits, planning, screenshots, flows, comments, and exports into one workspace.",
+      "localized": "Vellic は、監査、計画、スクリーンショット、フロー、コメント、エクスポートを 1 つのワークスペースにまとめます。",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Try it now. Enter a URL to start",
+      "localized": "今すぐお試しください。 URLを入力して開始してください",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Options",
+      "localized": "オプション",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Scan",
+      "localized": "スキャン",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Map",
+      "localized": "地図",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Scan a URL, import a file, or build from scratch.",
+      "localized": "URL をスキャンするか、ファイルをインポートするか、最初から構築します。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Audit",
+      "localized": "監査",
+      "seoTerm": "Webサイト監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Capture screenshots, trace flows, and mark findings.",
+      "localized": "スクリーンショットをキャプチャし、フローをトレースし、結果をマークします。",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Handoff",
+      "localized": "ハンドオフ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Invite reviewers and export useful deliverables.",
+      "localized": "レビュー担当者を招待し、有用な成果物をエクスポートします。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Use cases",
+      "localized": "使用例",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Designed for cross-functional teams.",
+      "localized": "部門を超えたチーム向けに設計されています。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "UX, content, product, dev, and SEO can review the same structure instead of trading screenshots and spreadsheets.",
+      "localized": "UX、コンテンツ、製品、開発、SEO は、スクリーンショットやスプレッドシートを交換する代わりに、同じ構造をレビューできます。",
+      "seoTerm": "UX監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "UX",
+      "localized": "UX",
+      "seoTerm": "UX監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Review hierarchy, navigation paths, and current-state structure before redesign work starts.",
+      "localized": "再設計作業を開始する前に、階層、ナビゲーション パス、および現在の状態の構造を確認します。",
+      "seoTerm": "Webサイトリニューアル",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Content strategy",
+      "localized": "コンテンツ戦略",
+      "seoTerm": "コンテンツ棚卸し",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Find gaps, duplicate pages, and content that is hard to reach.",
+      "localized": "隙間、重複ページ、アクセスしにくいコンテンツを見つけます。",
+      "seoTerm": "コンテンツ棚卸し",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Dev and engineering",
+      "localized": "開発とエンジニアリング",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Turn audit decisions into exports, redirects, migration notes, and handoff data.",
+      "localized": "監査の決定をエクスポート、リダイレクト、移行メモ、および引き継ぎデータに変換します。",
+      "seoTerm": "Webサイト移行",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "SEO",
+      "localized": "SEO",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Connect crawl context to depth, orphan pages, subdomains, and cleanup priority.",
+      "localized": "クロール コンテキストを深さ、孤立したページ、サブドメイン、クリーンアップの優先順位に接続します。",
+      "seoTerm": "Webクローラー",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Product",
+      "localized": "製品",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Keep scope, stakeholder feedback, priorities, and launch decisions tied to the map.",
+      "localized": "範囲、関係者のフィードバック、優先順位、および開始の決定をマップに関連付けて維持します。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Features",
+      "localized": "特長",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "The map is the workspace.",
+      "localized": "マップはワークスペースです。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Capture evidence, trace flows, strategise, collaborate, and hand off in one place.",
+      "localized": "証拠をキャプチャし、フローを追跡し、戦略を立て、共同作業し、引き継ぎを 1 か所で行います。",
+      "seoTerm": "ユーザーフロー",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Flexible inputs",
+      "localized": "柔軟な入力",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Start from a public URL, imported structure, or a map from scratch",
+      "localized": "パブリック URL、インポートされた構造、またはマップを最初から開始します",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Collaboration",
+      "localized": "コラボレーション",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Collect comments, decisions, and review context around the map",
+      "localized": "コメント、決定事項を収集し、マップのコンテキストを確認します。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Flows & crosslinks",
+      "localized": "フローとクロスリンク",
+      "seoTerm": "ユーザーフロー",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Show journeys, related pages, and paths that do not fit a simple tree",
+      "localized": "単純なツリーに収まらないジャーニー、関連ページ、パスを表示します",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Bulk screenshots",
+      "localized": "一括スクリーンショット",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Capture and download page screenshots for public web pages",
+      "localized": "公開 Web ページのページのスクリーンショットをキャプチャしてダウンロードする",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Audit findings",
+      "localized": "監査結果",
+      "seoTerm": "Webサイト監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Surface missing, disabled, duplicate, inactive, subdomain, and orphan pages",
+      "localized": "サーフェスが見つからない、無効になっている、重複している、非アクティブな、サブドメイン、および孤立したページ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Exports and handoff",
+      "localized": "エクスポートとハンドオフ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Download XML, JSON, CSV, PDF, PNG, text, and AI-ready packages",
+      "localized": "XML、JSON、CSV、PDF、PNG、テキスト、および AI 対応パッケージをダウンロード",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "This is just the start!",
+      "localized": "これはまだ始まりにすぎません。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic is moving rapidly, with improvements and implementations launching several times per week. Join our mailing list to stay updated.*",
+      "localized": "Vellic は急速に進歩しており、週に数回改良と実装が開始されます。メーリングリストに参加して最新情報を入手してください。*",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "*Emails sent only occasionally for bigger updates and major rollouts.",
+      "localized": "*メールは、より大きなアップデートや大規模なロールアウトの場合にのみ送信されます。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Join mailing list",
+      "localized": "メーリングリストに参加する",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Examples",
+      "localized": "例",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "See how decisions stay connected.",
+      "localized": "意思決定がどのようにつながっているかをご覧ください。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Example views show structure, screenshots, review context, flows, and handoff in one product-led surface.",
+      "localized": "ビューの例には、製品主導の 1 つの面で構造、スクリーンショット、レビュー コンテキスト、フロー、およびハンドオフが表示されます。",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Large site audit",
+      "localized": "大規模サイト監査",
+      "seoTerm": "Webサイト監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Nearly 5k page site scan, 7 levels deep with top-of-page screenshots.",
+      "localized": "約 5,000 ページのサイト スキャン、7 レベルの深さ、ページ上部のスクリーンショット。",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Show me",
+      "localized": "見せて",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Medium site audit",
+      "localized": "中規模サイト監査",
+      "seoTerm": "Webサイト監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Over 1,100 page scan including subdomains, orphan pages, and full-page screenshots",
+      "localized": "サブドメイン、孤立ページ、全ページのスクリーンショットを含む 1,100 ページ以上のスキャン",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Pricing",
+      "localized": "価格",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Start with the map. Upgrade when the workflow grows.",
+      "localized": "地図から始めましょう。ワークフローが拡大した場合はアップグレードしてください。",
+      "seoTerm": "ユーザーフロー",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Plans are shaped around saved maps, screenshots, exports, reports, and team review.",
+      "localized": "計画は、保存されたマップ、スクリーンショット、エクスポート、レポート、チーム レビューを中心に作成されます。",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Billing cycle",
+      "localized": "請求サイクル",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Monthly",
+      "localized": "毎月",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Yearly",
+      "localized": "毎年",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Free",
+      "localized": "無料",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "$0",
+      "localized": "$0",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "/mo",
+      "localized": "/月",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "($0/year)",
+      "localized": "(年間 $0)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "For trying Vellic on a small site or one-off audit.",
+      "localized": "小規模サイトまたは 1 回限りの監査で Vellic を試す場合。",
+      "seoTerm": "Webサイト監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "1 active project",
+      "localized": "1 つのアクティブなプロジェクト",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "1,000 active pages total on account",
+      "localized": "アカウントのアクティブ ページ合計 1,000",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "100 pages per scan",
+      "localized": "スキャンごとに 100 ページ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "25 screenshots incl.",
+      "localized": "スクリーンショット 25 枚 (含む)",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "5 downloads (XML and Index)",
+      "localized": "5 ダウンロード (XML およびインデックス)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "1 editor",
+      "localized": "編集者 1 名",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Get started",
+      "localized": "始めましょう",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "*additional screenshot credits can be purchased anytime",
+      "localized": "*追加のスクリーンショット クレジットはいつでも購入できます",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Pro",
+      "localized": "プロ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "$8",
+      "localized": "$8",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "($96/year)",
+      "localized": "(96 ドル/年)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "For solo audits with screenshots and saved work.",
+      "localized": "スクリーンショットと保存された作業を使用した単独監査用。",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "5 active projects",
+      "localized": "5 つのアクティブなプロジェクト",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "10,000 active pages total on account",
+      "localized": "アカウントのアクティブ ページ合計 10,000",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "300 screenshots incl.",
+      "localized": "300 枚のスクリーンショット (含む)",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Unlimited downloads (any format)",
+      "localized": "無制限のダウンロード (任意の形式)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Subscribe",
+      "localized": "購読する",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Studio",
+      "localized": "スタジオ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "$18",
+      "localized": "$18",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "($216/year)",
+      "localized": "($216/年)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "For small teams handling recurring site work.",
+      "localized": "繰り返しの現場作業を扱う小規模チーム向け。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "15 active projects",
+      "localized": "15 のアクティブなプロジェクト",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "50,000 active pages total on account",
+      "localized": "アカウントのアクティブ ページ合計 50,000",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "1,000 screenshots incl.",
+      "localized": "1,000 枚のスクリーンショット (含む)",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "3 editors",
+      "localized": "編集者 3 名",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Agency",
+      "localized": "代理店",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "$88",
+      "localized": "$88",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "($1,056/year)",
+      "localized": "($1,056/年)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "For heavier client audits and shared delivery.",
+      "localized": "より高度なクライアント監査と共有配信用。",
+      "seoTerm": "Webサイト監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Unlimited projects",
+      "localized": "無制限のプロジェクト",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "200,000 active pages total on account",
+      "localized": "アカウントのアクティブ ページ合計 200,000",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "5,000 screenshots incl.",
+      "localized": "5,000 枚のスクリーンショット (含む)",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "10 editors",
+      "localized": "編集者 10 名",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "FAQ",
+      "localized": "よくある質問",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Short answers before the first map.",
+      "localized": "最初のマップの前に短い回答。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "What is Vellic?",
+      "localized": "ヴェリックとは？",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Is Vellic only a website crawler?",
+      "localized": "Vellic は単なる Web サイト クローラーですか?",
+      "seoTerm": "Webクローラー",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Who is Vellic built for?",
+      "localized": "ヴェリックは誰のために作られていますか?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Can I import an existing sitemap or page list?",
+      "localized": "既存のサイトマップまたはページ リストをインポートできますか?",
+      "seoTerm": "ビジュアルサイトマップ",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Can Vellic capture screenshots in bulk?",
+      "localized": "Vellic はスクリーンショットを一括でキャプチャできますか?",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "How does collaboration work?",
+      "localized": "コラボレーションはどのように機能しますか?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "What can I export from Vellic?",
+      "localized": "Vellic から何を輸出できますか?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Can Vellic help with redesigns or migrations?",
+      "localized": "Vellic は再設計や移行を支援できますか?",
+      "seoTerm": "Webサイトリニューアル",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Does Vellic find orphan, disabled, duplicate, or hard-to-reach pages?",
+      "localized": "Vellic は、孤立したページ、無効なページ、重複したページ、またはアクセスしにくいページを見つけますか?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Is Vellic a replacement for a deep SEO crawler?",
+      "localized": "Vellic はディープ SEO クローラーの代替品ですか?",
+      "seoTerm": "Webクローラー",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "How is Vellic different from sitemap tools and SEO crawlers?",
+      "localized": "Vellic はサイトマップ ツールや SEO クローラーとどう違うのですか?",
+      "seoTerm": "ビジュアルサイトマップ",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Does Vellic work with private or password-protected sites?",
+      "localized": "Vellic はプライベート サイトやパスワードで保護されたサイトでも機能しますか?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Does Vellic work on mobile?",
+      "localized": "Vellic はモバイルでも動作しますか?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Mission",
+      "localized": "ミッション",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Because foundations matter",
+      "localized": "基礎が大事だから",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Information architecture shapes how people find, understand, and act. Vellic helps to surface the foundations for the whole team.",
+      "localized": "情報アーキテクチャは、人々がどのように見つけ、理解し、行動するかを形作ります。ベリッチはチーム全体の基礎を表面化するのに役立ちます。",
+      "seoTerm": "情報アーキテクチャ",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "01",
+      "localized": "01",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Bring information architecture back to the foreground of crafting better websites and software.",
+      "localized": "より良い Web サイトやソフトウェアを作成するために、情報アーキテクチャを最前線に戻します。",
+      "seoTerm": "情報アーキテクチャ",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "02",
+      "localized": "02",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Save teams time and stress when auditing, updating, creating, planning, and maintaining site structure.",
+      "localized": "サイト構造の監査、更新、作成、計画、維持時にチームの時間とストレスを節約します。",
+      "seoTerm": "Webサイト構造",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "03",
+      "localized": "03",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Improve constantly with and for the people doing the work, shipping small and large updates to make Vellic their own.",
+      "localized": "作業に携わる人々とともに、また人々のために絶えず改善し、Vellic を自分のものにするために大小のアップデートを提供します。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Contact",
+      "localized": "お問い合わせ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Need help? Want a demo? Have some feedback? Or just want to say Hello👋?",
+      "localized": "助けが必要ですか?デモが必要ですか?フィードバックはありますか?それとも単にこんにちは👋と言いたいだけですか？",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Send a note to the right inbox and we will follow up ASAP.",
+      "localized": "右の受信箱にメモを送信してください。できるだけ早くフォローアップいたします。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Inquiries and feedback",
+      "localized": "お問い合わせ・ご意見",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Questions, demo requests, ideas, partnerships, and early product feedback.",
+      "localized": "質問、デモリクエスト、アイデア、パートナーシップ、初期の製品フィードバック。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Contact us",
+      "localized": "お問い合わせ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Product support",
+      "localized": "製品サポート",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Help with maps, scans, screenshots, exports, account access, or product issues.",
+      "localized": "マップ、スキャン、スクリーンショット、エクスポート、アカウント アクセス、または製品の問題に関するヘルプ。",
+      "seoTerm": "Webサイトのスクリーンショット",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Get help",
+      "localized": "ヘルプを表示する",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Start planning your next site",
+      "localized": "次のサイトの計画を開始します",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter a URL to start",
+      "localized": "URL を入力して開始してください",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Better UX starts with solid foundations.\nMake those foundations with Vellic.",
+      "localized": "より良い UX は強固な基盤から始まります。\nVellic でその基礎を作りましょう。",
+      "seoTerm": "UX監査",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "(Go to desktop for the canvas experience)",
+      "localized": "(キャンバス エクスペリエンスを表示するにはデスクトップに移動します)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Help us improve Vellic",
+      "localized": "ヴェリックの改善にご協力ください",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "We use necessary storage to keep Vellic working. With your permission, we also use analytics and session feedback tools to understand what is useful, confusing, or broken to improve the site and app for you. We do not use these cookies for marketing, advertising, retargeting, or selling personal data.",
+      "localized": "Vellic の動作を維持するために必要なストレージを使用します。また、お客様の許可を得て、サイトとアプリを改善するために、分析ツールとセッション フィードバック ツールを使用して、何が役立つか、何が混乱するか、何が壊れているかを把握します。当社はこれらの Cookie をマーケティング、広告、リターゲティング、または個人データの販売には使用しません。",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Accept cookies",
+      "localized": "Cookie を受け入れる",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Cookie settings",
+      "localized": "クッキーの設定",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic home",
+      "localized": "Vellicホーム",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Open navigation",
+      "localized": "ナビゲーションを開く",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Close navigation",
+      "localized": "ナビゲーションを閉じる",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Marketing navigation",
+      "localized": "マーケティングナビゲーション",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic canvas preview",
+      "localized": "Vellicキャンバスのプレビュー",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic canvas showing a visual sitemap generator workspace with page screenshot cards connected across a large website audit map",
+      "localized": "ページのスクリーンショットカードが大規模なウェブサイト監査マップ上でつながる、ビジュアルサイトマップ生成ワークスペースを表示したVellicキャンバス",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Competitor comparison matrix",
+      "localized": "競合比較表",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Comparison category",
+      "localized": "比較カテゴリー",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Feature",
+      "localized": "機能",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic workflow summary",
+      "localized": "Vellicワークフローの概要",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter a public website URL, like example.com.",
+      "localized": "example.comのような公開ウェブサイトのURLを入力してください。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Join Vellic updates",
+      "localized": "Vellicの最新情報を受け取る",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "A lightweight list for larger release notes and product updates.",
+      "localized": "主なリリースノートや製品アップデートをお届けするシンプルなリストです。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Close",
+      "localized": "閉じる",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Joining",
+      "localized": "登録中",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Join list",
+      "localized": "リストに登録",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "You are on the preview list.",
+      "localized": "プレビューリストに登録されています。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Email",
+      "localized": "メールアドレス",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "you@example.com",
+      "localized": "you@example.com",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Could not join the mailing list. Please try again.",
+      "localized": "メーリングリストに登録できませんでした。もう一度お試しください。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "We will keep it quiet and only send bigger release or product updates.",
+      "localized": "配信は控えめにし、大きなリリースや製品アップデートのみをお知らせします。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Use a larger screen",
+      "localized": "大きな画面を使用してください",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic maps need room for the canvas, screenshots, flows, and review tools.",
+      "localized": "Vellicのマップには、キャンバス、スクリーンショット、フロー、レビュー用ツールを表示するための広さが必要です。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Spread the word",
+      "localized": "Vellicを共有",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Contact Vellic",
+      "localized": "Vellicに問い合わせる",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "General question",
+      "localized": "一般的な質問",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Other",
+      "localized": "その他",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Sending",
+      "localized": "送信中",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Send message",
+      "localized": "メッセージを送信",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Message sent",
+      "localized": "メッセージを送信しました",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "We will follow up soon.",
+      "localized": "近日中にご連絡します。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Name",
+      "localized": "名前",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Your name",
+      "localized": "お名前",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Reason",
+      "localized": "お問い合わせ理由",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Reason details",
+      "localized": "理由の詳細",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Optional detail",
+      "localized": "任意の詳細",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Message",
+      "localized": "メッセージ",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "What should we know?",
+      "localized": "お知らせいただきたいこと",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter your name.",
+      "localized": "お名前を入力してください。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter a valid email address.",
+      "localized": "有効なメールアドレスを入力してください。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter a message.",
+      "localized": "メッセージを入力してください。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Could not send your message. Try again or email us directly.",
+      "localized": "メッセージを送信できませんでした。もう一度お試しいただくか、メールで直接お問い合わせください。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "You are already on the mailing list.",
+      "localized": "すでにメーリングリストに登録されています。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "You are on the mailing list. We will only send bigger release or product updates.",
+      "localized": "メーリングリストに登録されました。大きなリリースや製品アップデートのみをお知らせします。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Privacy settings",
+      "localized": "プライバシー設定",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Choose optional product research tools for Vellic.",
+      "localized": "Vellicで使用する任意の製品調査ツールを選択してください。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Save choices",
+      "localized": "選択内容を保存",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Reject all optional",
+      "localized": "任意項目をすべて拒否",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Necessary storage",
+      "localized": "必須ストレージ",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Analytics",
+      "localized": "分析",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Experience research",
+      "localized": "エクスペリエンス調査",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Marketing",
+      "localized": "マーケティング",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Required. Used for login, security, preferences, core app functionality, and remembering your privacy choices. Always on.",
+      "localized": "必須。ログイン、セキュリティ、設定、アプリの基本機能、プライバシー選択の保存に使用されます。常に有効です。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Optional. Helps us understand aggregate product usage so we can improve Vellic. Not used for marketing or advertising.",
+      "localized": "任意。製品の利用状況を集計して把握し、Vellicの改善に役立てます。マーケティングや広告には使用しません。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Optional. Helps us understand confusing flows, usability issues, and product bugs through session feedback tools. Not used for marketing or advertising.",
+      "localized": "任意。セッションフィードバックツールを通じて、分かりにくいフロー、使いやすさの問題、製品の不具合を把握するために使用します。マーケティングや広告には使用しません。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Not used. Vellic does not use advertising, retargeting, or marketing cookies.",
+      "localized": "未使用。Vellicは広告、リターゲティング、マーケティングCookieを使用しません。",
+      "seoTerm": "アクセシビリティ / UI状態",
+      "reviewer": "—",
+      "status": "machine draft"
+    }
+  ]
+}

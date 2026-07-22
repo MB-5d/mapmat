@@ -162,6 +162,7 @@ async function ensureAuthSchemaAsync() {
     await ensureColumnAsync('users', 'google_sub', 'TEXT');
     await ensureColumnAsync('users', 'google_picture_url', 'TEXT');
     await ensureColumnAsync('users', 'auth_provider', "TEXT NOT NULL DEFAULT 'password'");
+    await ensureColumnAsync('users', 'preferred_locale', 'TEXT');
 
     await adapter.executeAsync(
       "UPDATE users SET account_status = 'active' WHERE account_status IS NULL OR TRIM(account_status) = ''"
@@ -227,6 +228,7 @@ async function getPublicUserByIdAsync(userId) {
         email_verified_at,
         email_verification_required,
         auth_provider,
+        preferred_locale,
         CASE WHEN COALESCE(password_hash, '') <> '' THEN 1 ELSE 0 END AS has_password,
         created_at,
         updated_at
@@ -433,6 +435,14 @@ async function updateUserEmailAsync(userId, email) {
   );
 }
 
+async function updateUserPreferredLocaleAsync(userId, preferredLocale) {
+  await ensureAuthSchemaAsync();
+  return await adapter.executeAsync(
+    'UPDATE users SET preferred_locale = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [preferredLocale, userId]
+  );
+}
+
 async function updateUserAvatarPathAsync(userId, avatarPath) {
   await ensureAuthSchemaAsync();
   return await adapter.executeAsync(
@@ -627,6 +637,7 @@ module.exports = {
   linkGoogleIdentityAsync,
   updateUserNameAsync,
   updateUserEmailAsync,
+  updateUserPreferredLocaleAsync,
   updateUserAvatarPathAsync,
   getUserPasswordHashAsync,
   deleteUserAsync,

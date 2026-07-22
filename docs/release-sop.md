@@ -11,7 +11,8 @@ This is the operational playbook for shipping safely from `staging` to `main`.
 ## 2) Before Any Release
 
 1. Confirm you are testing on staging frontend:
-- `https://staging.vellic.io`
+- Marketing: `https://staging.vellic.io`
+- App: `https://app-staging.vellic.io`
 2. Confirm staging backend health:
 - `https://api-staging.vellic.io/health`
 - Expect: `{"ok":true}`
@@ -109,7 +110,8 @@ This keeps future work based on the latest released state.
 ### Staging (Railway)
 
 - `NODE_ENV=production`
-- `FRONTEND_URL=https://staging.vellic.io`
+- `FRONTEND_URL=https://app-staging.vellic.io,https://staging.vellic.io`
+- `APP_BASE_URL=https://app-staging.vellic.io`
 - `TEST_AUTH_ENABLED=true`
 - `AUTH_HEADER_FALLBACK=true`
 - `ALLOW_VERCEL_PREVIEWS=true`

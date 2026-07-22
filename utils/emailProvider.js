@@ -152,11 +152,12 @@ function joinPostmarkRecipients(emails) {
   return Array.isArray(emails) && emails.length > 0 ? emails.join(',') : undefined;
 }
 
-async function sendViaResendAsync({ config, recipients, subject, text, html, replyToEmail = null }) {
+async function sendViaResendAsync({ config, recipients, subject, text, html, replyToEmail = null, suppressDefaultReplyTo = false }) {
   if (!config.resendApiKeyConfigured) {
     throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend.');
   }
-  const resolvedReplyToEmail = normalizeEmailAddress(replyToEmail) || config.replyToAddress;
+  const resolvedReplyToEmail = normalizeEmailAddress(replyToEmail)
+    || (suppressDefaultReplyTo ? null : config.replyToAddress);
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -204,11 +205,12 @@ async function sendViaResendAsync({ config, recipients, subject, text, html, rep
   };
 }
 
-async function sendViaPostmarkAsync({ config, recipients, subject, text, html, replyToEmail = null }) {
+async function sendViaPostmarkAsync({ config, recipients, subject, text, html, replyToEmail = null, suppressDefaultReplyTo = false }) {
   if (!config.postmarkServerTokenConfigured) {
     throw new Error('POSTMARK_SERVER_TOKEN is required when EMAIL_PROVIDER=postmark.');
   }
-  const resolvedReplyToEmail = normalizeEmailAddress(replyToEmail) || config.replyToAddress;
+  const resolvedReplyToEmail = normalizeEmailAddress(replyToEmail)
+    || (suppressDefaultReplyTo ? null : config.replyToAddress);
 
   const response = await fetch('https://api.postmarkapp.com/email', {
     method: 'POST',
@@ -263,6 +265,7 @@ async function sendEmailAsync({
   text,
   html,
   replyToEmail = null,
+  suppressDefaultReplyTo = false,
   metadata = null,
 }) {
   const config = getEmailConfigSnapshot();
@@ -306,7 +309,7 @@ async function sendEmailAsync({
       copySuppressed: recipients.copySuppressed,
       recipientOverridden: recipients.overridden,
       subject: normalizedSubject,
-      replyTo: normalizedReplyToEmail || config.replyToAddress,
+      replyTo: normalizedReplyToEmail || (suppressDefaultReplyTo ? null : config.replyToAddress),
       metadata: metadata || null,
       text: String(text || '').trim(),
     }));
@@ -334,6 +337,7 @@ async function sendEmailAsync({
       text,
       html,
       replyToEmail: normalizedReplyToEmail,
+      suppressDefaultReplyTo,
     });
   }
 
@@ -345,6 +349,7 @@ async function sendEmailAsync({
       text,
       html,
       replyToEmail: normalizedReplyToEmail,
+      suppressDefaultReplyTo,
     });
   }
 

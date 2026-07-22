@@ -18,6 +18,7 @@ const STATUS = Object.freeze({
   CONNECTING: 'connecting',
   CONNECTED: 'connected',
   RECONNECTING: 'reconnecting',
+  READ_ONLY: 'read_only',
   OUT_OF_SYNC: 'out_of_sync',
 });
 
@@ -354,7 +355,9 @@ export function useCoeditingLive({
     } catch (error) {
       inFlightOpIdRef.current = '';
       if (error?.code === 'COEDITING_READ_ONLY_FALLBACK') {
-        markOutOfSync('Live editing is temporarily read-only');
+        removePendingDraft(draft.opId);
+        applyOptimisticDocument();
+        setLiveStatus(STATUS.READ_ONLY, 'Live editing is temporarily read-only');
         onWarn?.('Live editing is temporarily read-only for this map.');
         return;
       }
@@ -393,7 +396,7 @@ export function useCoeditingLive({
         }, 0);
       }
     }
-  }, [actorId, applyCommittedOperation, canEdit, enabled, hydrateFromServer, mapId, markOutOfSync, onWarn, removePendingDraft]);
+  }, [actorId, applyCommittedOperation, applyOptimisticDocument, canEdit, enabled, hydrateFromServer, mapId, markOutOfSync, onWarn, removePendingDraft, setLiveStatus]);
 
   const acceptCommittedOperation = useCallback((operation, options = {}) => {
     if (!operation?.opId) return false;
@@ -506,7 +509,7 @@ export function useCoeditingLive({
             const isReadOnlyViewer = isReadOnlyRoom && !canEdit;
             participantsRef.current = Array.isArray(message.participants) ? message.participants : [];
             setLiveStatus(
-              isReadOnlyRoom && canEdit ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED,
+              isReadOnlyRoom && canEdit ? STATUS.READ_ONLY : STATUS.CONNECTED,
               isReadOnlyViewer
                 ? 'Read-only live updates'
                 : (isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected')
@@ -560,7 +563,7 @@ export function useCoeditingLive({
 
           if (message.type === 'error') {
             if (message.code === 'COEDITING_READ_ONLY_FALLBACK') {
-              markOutOfSync('Live editing is temporarily read-only');
+              setLiveStatus(STATUS.READ_ONLY, 'Live editing is temporarily read-only');
               return;
             }
             if (message.error) {
@@ -599,7 +602,6 @@ export function useCoeditingLive({
     enabled,
     flushQueue,
     mapId,
-    markOutOfSync,
     resetHeartbeat,
     sendSocketJson,
     setLiveStatus,
@@ -691,6 +693,9 @@ export function useCoeditingLive({
     if (!enabled || !mapId || !actorId || !canEdit) {
       return { ok: false, error: 'Live editing is not available for this map.' };
     }
+    if (statusRef.current === STATUS.READ_ONLY) {
+      return { ok: false, error: 'Live editing is temporarily read-only.' };
+    }
     if (statusRef.current === STATUS.OUT_OF_SYNC || !authoritativeDocumentRef.current) {
       return { ok: false, error: 'Live document is not ready. Resync before editing again.' };
     }
@@ -743,6 +748,10 @@ export function useCoeditingLive({
       await hydrateFromServer();
       return await openLiveSocket({ requireJoin: true });
     } catch (error) {
+      if (/temporarily read-only/i.test(error?.message || '')) {
+        setLiveStatus(STATUS.READ_ONLY, 'Live editing is temporarily read-only');
+        return false;
+      }
       markOutOfSync(error?.message || 'Failed to resync live document');
       return false;
     }
@@ -790,7 +799,7 @@ export function useCoeditingLive({
     participants,
     remoteSelections,
     sessionId: sessionIdRef.current,
-    canSubmit: enabled && canEdit && status !== STATUS.OUT_OF_SYNC,
+    canSubmit: enabled && canEdit && status !== STATUS.OUT_OF_SYNC && status !== STATUS.READ_ONLY,
     isLiveActive: enabled && !!mapId,
     submitDraft,
     updateSelection,

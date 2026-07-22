@@ -56,6 +56,14 @@ describe('SaveMapModal', () => {
     const inputs = container.querySelectorAll('input, textarea');
     const mapNameInput = inputs[0];
     const notesInput = inputs[1];
+    const saveInSelect = container.querySelector('select');
+
+    expect(Array.from(container.querySelectorAll('label')).map((label) => label.textContent)).toContain('Save in');
+    expect(saveInSelect.value).toBe('');
+    expect(saveInSelect.options[0].textContent).toBe('One-offs');
+    expect(saveInSelect.querySelector('optgroup')?.label).toBe('Projects');
+    expect(container.textContent).not.toContain('Uncategorized');
+    expect(container.textContent).not.toContain('No project');
 
     act(() => {
       setInputValue(mapNameInput, 'Homepage map');
@@ -112,6 +120,31 @@ describe('SaveMapModal', () => {
     inlineButtons.forEach((button) => {
       expect(button.className).toContain('ui-btn');
     });
+  });
+
+  test('normalizes uncategorized defaults to the One-offs option', () => {
+    act(() => {
+      root.render(
+        <SaveMapModal
+          show
+          onClose={jest.fn()}
+          isLoggedIn
+          onRequireLogin={jest.fn()}
+          projects={[{ id: 'p1', name: 'Project One' }]}
+          currentMap={{ name: 'Current map' }}
+          rootUrl="https://example.com"
+          defaultProjectId="uncategorized"
+          onSave={jest.fn()}
+          onCreateProject={jest.fn()}
+        />
+      );
+    });
+
+    const saveInSelect = container.querySelector('select');
+    expect(saveInSelect.value).toBe('');
+    expect(saveInSelect.options[saveInSelect.selectedIndex].textContent).toBe('One-offs');
+    expect(container.textContent).not.toContain('uncategorized');
+    expect(container.textContent).not.toContain('No Project');
   });
 
   test('disables inline project creation when the project limit is reached', () => {
@@ -291,6 +324,6 @@ describe('SaveMapModal', () => {
     });
 
     expect(onSave).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('already exists in this folder');
+    expect(container.textContent).toContain('already exists in this location');
   });
 });

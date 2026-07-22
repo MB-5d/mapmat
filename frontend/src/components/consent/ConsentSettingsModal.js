@@ -14,10 +14,12 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-const ConsentSettingsModal = () => {
+const ConsentSettingsModal = ({ translateText = (source) => source }) => {
+  const t = translateText;
   const {
     consent,
     hasStoredConsent,
+    isConsentReady,
     isSettingsOpen,
     closeSettings,
     rejectOptional,
@@ -27,13 +29,13 @@ const ConsentSettingsModal = () => {
   const [experienceResearch, setExperienceResearch] = useState(consent.experienceResearch);
 
   useEffect(() => {
-    if (!isSettingsOpen) return;
+    if (!isConsentReady || !isSettingsOpen) return;
     setAnalytics(hasStoredConsent ? consent.analytics : true);
     setExperienceResearch(hasStoredConsent ? consent.experienceResearch : true);
-  }, [consent.analytics, consent.experienceResearch, hasStoredConsent, isSettingsOpen]);
+  }, [consent.analytics, consent.experienceResearch, hasStoredConsent, isConsentReady, isSettingsOpen]);
 
   useEffect(() => {
-    if (!isSettingsOpen) return undefined;
+    if (!isConsentReady || !isSettingsOpen) return undefined;
 
     const modal = document.querySelector('.consent-settings-modal');
     const focusable = Array.from(modal?.querySelectorAll(FOCUSABLE_SELECTOR) || []);
@@ -59,7 +61,7 @@ const ConsentSettingsModal = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSettingsOpen]);
+  }, [isConsentReady, isSettingsOpen]);
 
   const handleReject = () => {
     rejectOptional();
@@ -73,10 +75,10 @@ const ConsentSettingsModal = () => {
 
   return (
     <Modal
-      show={isSettingsOpen}
+      show={isConsentReady && isSettingsOpen}
       onClose={closeSettings}
-      title="Privacy settings"
-      subtitle="Choose optional product research tools for Vellic."
+      title={t('Privacy settings')}
+      subtitle={t('Choose optional product research tools for Vellic.')}
       size="md"
       scrollable
       className="consent-settings-modal"
@@ -84,42 +86,42 @@ const ConsentSettingsModal = () => {
       footer={(
         <div className="consent-settings-modal__actions">
           <Button onClick={handleSave}>
-            Save choices
+            {t('Save choices')}
           </Button>
-          <Button variant="secondary" type="secondary" buttonStyle="brand" onClick={handleReject}>
-            Reject all optional
+          <Button variant="secondary" type="secondary" buttonStyle="brand" data-consent-action="reject-optional" onClick={handleReject}>
+            {t('Reject all optional')}
           </Button>
         </div>
       )}
     >
       <div className="consent-settings-modal__content">
         <ToggleSwitch
-          className="consent-toggle-row"
+          className="consent-toggle-row consent-toggle-row--locked-on"
           checked
           disabled
-          label="Necessary storage"
-          description="Required. Used for login, security, preferences, core app functionality, and remembering your privacy choices. Always on."
+          label={t('Necessary storage')}
+          description={t('Required. Used for login, security, preferences, core app functionality, and remembering your privacy choices. Always on.')}
         />
         <ToggleSwitch
           className="consent-toggle-row"
           checked={analytics}
           onChange={(event) => setAnalytics(event.target.checked)}
-          label="Analytics"
-          description="Optional. Helps us understand aggregate product usage so we can improve Vellic. Not used for marketing or advertising."
+          label={t('Analytics')}
+          description={t('Optional. Helps us understand aggregate product usage so we can improve Vellic. Not used for marketing or advertising.')}
         />
         <ToggleSwitch
           className="consent-toggle-row"
           checked={experienceResearch}
           onChange={(event) => setExperienceResearch(event.target.checked)}
-          label="Experience research"
-          description="Optional. Helps us understand confusing flows, usability issues, and product bugs through session feedback tools. Not used for marketing or advertising."
+          label={t('Experience research')}
+          description={t('Optional. Helps us understand confusing flows, usability issues, and product bugs through session feedback tools. Not used for marketing or advertising.')}
         />
         <ToggleSwitch
-          className="consent-toggle-row"
+          className="consent-toggle-row consent-toggle-row--locked-off"
           checked={false}
           disabled
-          label="Marketing"
-          description="Not used. Vellic does not use advertising, retargeting, or marketing cookies."
+          label={t('Marketing')}
+          description={t('Not used. Vellic does not use advertising, retargeting, or marketing cookies.')}
         />
       </div>
     </Modal>

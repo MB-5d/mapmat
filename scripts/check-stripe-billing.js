@@ -65,6 +65,8 @@ function buildSubscription({ accountId, status = 'active', extraEditors = 0 }) {
   const now = Math.floor(Date.now() / 1000);
   const items = [
     {
+      id: 'si_test_plan',
+      quantity: 1,
       price: {
         id: 'price_pro_test',
         product: 'prod_test_pro',
@@ -242,6 +244,52 @@ async function main() {
   assert.deepEqual(planPayload.line_items, [
     { price: 'price_pro_test', quantity: 1 },
   ]);
+
+  const activeSubscriberUser = await createTestUser('active-plan-change');
+  const activeSubscriberAccount = await billingStore.getOrCreateBillingAccountForUserAsync(activeSubscriberUser);
+  await billingStore.updateBillingAccountFromStripeSubscriptionAsync({
+    accountId: activeSubscriberAccount.id,
+    planKey: 'pro',
+    accountState: 'active',
+    stripeCustomerId: 'cus_active_plan_change',
+    stripeSubscriptionId: 'sub_active_plan_change',
+    stripePriceId: 'price_pro_test',
+    stripeSubscriptionStatus: 'active',
+  });
+  const activeSubscriberAccountWithSubscription = await billingStore.getBillingAccountByIdAsync(activeSubscriberAccount.id);
+  let planChangePortalPayload = null;
+  const planChangeSession = await createBundleCheckoutSessionAsync({
+    user: activeSubscriberUser,
+    account: activeSubscriberAccountWithSubscription,
+    planKey: 'studio',
+    billingCycle: 'monthly',
+    addOns: [],
+    returnPath: '/app/profile',
+    stripeClient: {
+      subscriptions: {
+        retrieve: async (subscriptionId) => {
+          assert.equal(subscriptionId, 'sub_active_plan_change');
+          return buildSubscription({ accountId: activeSubscriberAccount.id });
+        },
+      },
+      billingPortal: {
+        sessions: {
+          create: async (payload) => {
+            planChangePortalPayload = payload;
+            return { id: 'bps_plan_change', url: 'https://billing.stripe.test/plan-change' };
+          },
+        },
+      },
+    },
+  });
+  assert.equal(planChangeSession.url, 'https://billing.stripe.test/plan-change');
+  assert.equal(planChangePortalPayload.customer, 'cus_active_plan_change');
+  assert.equal(planChangePortalPayload.flow_data.type, 'subscription_update_confirm');
+  assert.equal(planChangePortalPayload.flow_data.subscription_update_confirm.subscription, 'sub_active_plan_change');
+  assert.deepEqual(planChangePortalPayload.flow_data.subscription_update_confirm.items, [
+    { id: 'si_test_plan', price: 'price_studio_monthly_test', quantity: 1 },
+  ]);
+  assert.equal(planChangePortalPayload.flow_data.after_completion.type, 'redirect');
 
   let bundlePayload = null;
   await createBundleCheckoutSessionAsync({

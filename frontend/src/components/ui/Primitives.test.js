@@ -422,6 +422,14 @@ describe('ui primitives', () => {
     expect(onToggleChange).toHaveBeenCalledTimes(1);
   });
 
+  test('ToggleSwitch uses design-system color tokens for switch states', () => {
+    expect(getCssRule('.ui-toggle__input')).toContain('border: 1px solid var(--ui-color-border-strong)');
+    expect(getCssRule('.ui-toggle__input')).toContain('background: var(--ui-color-border-strong)');
+    expect(getCssRule('.ui-toggle__input:checked')).toContain('background: var(--ui-button-brand-fill)');
+    expect(getCssRule('.ui-toggle__input:checked')).toContain('border-color: var(--ui-button-brand-fill)');
+    expect(getCssRule('.ui-toggle__input:disabled:checked')).toContain('background: var(--ui-button-brand-fill)');
+  });
+
   test('TextInput supports shell props, field wrapper props, and icon slots', () => {
     act(() => {
       root.render(

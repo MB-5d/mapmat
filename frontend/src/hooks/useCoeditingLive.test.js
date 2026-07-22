@@ -402,7 +402,7 @@ describe('useCoeditingLive', () => {
       });
     });
 
-    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.OUT_OF_SYNC);
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.READ_ONLY);
 
     const staleSocket = socket;
     const nextSocket = createMockSocket();
@@ -464,7 +464,7 @@ describe('useCoeditingLive', () => {
       });
     });
 
-    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.OUT_OF_SYNC);
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.READ_ONLY);
 
     openCoeditingSocket.mockClear();
     getCoeditingLiveDocument.mockRejectedValueOnce(new Error('Live document unavailable'));

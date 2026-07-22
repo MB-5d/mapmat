@@ -1035,6 +1035,7 @@ describe('map image asset persistence', () => {
     expect(appJs).toContain('className="plans-modal-pack-price"');
     expect(appCss).toMatch(/\.modal-card\.plans-modal \{[\s\S]*height: min\(640px, calc\(100vh - 48px\)\);/);
     expect(appCss).toMatch(/\.plans-modal-pricing-card \{[\s\S]*--plans-modal-pricing-card-copy-color: #475569;/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card \{[\s\S]*padding: 13px 13px 29px;/);
     expect(appCss).toMatch(/\.plans-modal-pricing-card > p \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);
     expect(appCss).toMatch(/\.plans-modal-pricing-card li \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);
     expect(appCss).toMatch(/\.plans-modal-pricing-card__screenshot-note \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);

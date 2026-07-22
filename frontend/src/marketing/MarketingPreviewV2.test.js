@@ -95,7 +95,7 @@ describe('MarketingPreviewV2', () => {
   const fillContactForm = ({
     name = 'Avery Test',
     email = 'avery@example.com',
-    reason = 'Demo request',
+    reason = 'General inquiry',
     reasonDetail = 'Enterprise rollout',
     message = 'I would like to schedule a demo.',
   } = {}) => {
@@ -253,7 +253,8 @@ describe('MarketingPreviewV2', () => {
     const hostMatcher = new RegExp(hostCondition.value);
 
     expect(robotsRule.headers).toContainEqual({ key: 'X-Robots-Tag', value: 'noindex, nofollow' });
-    expect(hostMatcher.test('staging.vellic.io')).toBe(true);
+    expect(hostMatcher.test('app-staging.vellic.io')).toBe(true);
+    expect(hostMatcher.test('staging.vellic.io')).toBe(false);
     expect(hostMatcher.test('mapmat-staging.vercel.app')).toBe(true);
     expect(hostMatcher.test('preview-123.vercel.app')).toBe(true);
     expect(hostMatcher.test('vellic.io')).toBe(false);
@@ -295,6 +296,46 @@ describe('MarketingPreviewV2', () => {
       marketingPreviewVersion: 'v2',
       marketingPageId: 'examples',
     }));
+  });
+
+  test('smooth scrolls marketing nav links when rendered without the app router', () => {
+    renderAt('/', null);
+    scrollTo.mockClear();
+    const featuresLink = Array.from(container.querySelectorAll('a')).find((link) => (
+      link.getAttribute('href') === '/features'
+    ));
+
+    act(() => {
+      featuresLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+
+    expect(window.location.pathname).toBe('/features');
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({
+      behavior: 'smooth',
+      top: expect.any(Number),
+    }));
+    expect(document.title).toContain('Features');
+  });
+
+  test('smooth scrolls hash section links used by the static marketing site', () => {
+    renderAt('/', null, {
+      buildSectionHref: (sectionId) => (sectionId === 'home' ? '/' : `/#marketing-v2-${sectionId}`),
+    });
+    scrollTo.mockClear();
+    const featuresLink = Array.from(container.querySelectorAll('a')).find((link) => (
+      link.getAttribute('href') === '/#marketing-v2-features'
+    ));
+
+    act(() => {
+      featuresLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+
+    expect(window.location.hash).toBe('#marketing-v2-features');
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({
+      behavior: 'smooth',
+      top: expect.any(Number),
+    }));
+    expect(document.title).toContain('Features');
   });
 
   test('opens the app scan URL on desktop', () => {
@@ -511,8 +552,8 @@ describe('MarketingPreviewV2', () => {
       exampleButtons[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
 
-    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/wd5bpg', { target: '_blank' });
-    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/amh6jd', { target: '_blank' });
+    expect(openApp).toHaveBeenCalledWith('https://app-staging.vellic.io/share/wd5bpg', { target: '_blank' });
+    expect(openApp).toHaveBeenCalledWith('https://app-staging.vellic.io/share/amh6jd', { target: '_blank' });
   });
 
   test('renders public pricing plans without the internal Solo plan', () => {
@@ -623,7 +664,8 @@ describe('MarketingPreviewV2', () => {
 
     const urls = openApp.mock.calls.map(([url]) => new URL(url));
     expect(urls).toHaveLength(4);
-    expect(urls[0].searchParams.get('intent')).toBe('signup');
+    expect(urls[0].pathname).toBe('/app');
+    expect(urls[0].searchParams.get('intent')).toBeNull();
     expect(urls[1].searchParams.get('intent')).toBe('checkout');
     expect(urls[1].searchParams.get('billingPlan')).toBe('pro');
     expect(urls[1].searchParams.get('billingCycle')).toBe('yearly');
@@ -689,8 +731,20 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('Sends to hello@vellic.io.');
     expect(container.querySelector('#marketing-v2-contact-name')).not.toBeNull();
     expect(container.querySelector('#marketing-v2-contact-email')).not.toBeNull();
-    expect(container.querySelector('#marketing-v2-contact-reason')).not.toBeNull();
+    const reason = container.querySelector('#marketing-v2-contact-reason');
+    expect(reason).not.toBeNull();
+    expect(reason.value).toBe('General inquiry');
+    expect(Array.from(reason.options).map((option) => option.value)[0]).toBe('General inquiry');
     expect(container.querySelector('#marketing-v2-contact-message')).not.toBeNull();
+
+    act(() => {
+      container.querySelector('.marketing-v2-contact-modal .account-drawer-close, .marketing-v2-contact-modal .modal-close')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+      );
+    });
+
+    openContactModal('Get help');
+    expect(container.querySelector('#marketing-v2-contact-reason').value).toBe('General inquiry');
   });
 
   test('submits inquiry contact forms to the backend and shows success', async () => {
@@ -708,7 +762,7 @@ describe('MarketingPreviewV2', () => {
       targetKey: 'inquiries',
       name: 'Avery Test',
       email: 'avery@example.com',
-      reason: 'Demo request',
+      reason: 'General inquiry',
       reasonDetail: 'Enterprise rollout',
       message: 'I would like to schedule a demo.',
     }));

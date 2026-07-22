@@ -1,0 +1,1358 @@
+{
+  "locale": "de",
+  "translationStatus": "machine draft",
+  "indexable": false,
+  "rows": [
+    {
+      "source": "Better Information Architecture",
+      "localized": "Bessere Informationsarchitektur",
+      "seoTerm": "Informationsarchitektur",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Be the architect of your next build.",
+      "localized": "Gestalte die Architektur deiner nächsten Website.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic brings audits, planning, screenshots, flows, comments, and exports into one workspace.",
+      "localized": "Vellic vereint Audits, Planung, Screenshots, Flows, Kommentare und Exporte in einem Arbeitsbereich.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Try it now. Enter a URL to start",
+      "localized": "Probieren Sie es jetzt aus. Geben Sie zum Starten eine URL ein",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Options",
+      "localized": "Optionen",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Scan",
+      "localized": "Scannen",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Map",
+      "localized": "Karte",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Scan a URL, import a file, or build from scratch.",
+      "localized": "Scannen Sie eine URL, importieren Sie eine Datei oder erstellen Sie von Grund auf neu.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Audit",
+      "localized": "Prüfung",
+      "seoTerm": "Website-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Capture screenshots, trace flows, and mark findings.",
+      "localized": "Erfassen Sie Screenshots, verfolgen Sie Abläufe und markieren Sie Ergebnisse.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Handoff",
+      "localized": "Übergabe",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Invite reviewers and export useful deliverables.",
+      "localized": "Laden Sie Gutachter ein und exportieren Sie nützliche Ergebnisse.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Use cases",
+      "localized": "Anwendungsfälle",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Designed for cross-functional teams.",
+      "localized": "Entwickelt für funktionsübergreifende Teams.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "UX, content, product, dev, and SEO can review the same structure instead of trading screenshots and spreadsheets.",
+      "localized": "UX, Inhalt, Produkt, Entwicklung und SEO können dieselbe Struktur überprüfen, anstatt Screenshots und Tabellenkalkulationen auszutauschen.",
+      "seoTerm": "UX-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "UX",
+      "localized": "UX",
+      "seoTerm": "UX-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Review hierarchy, navigation paths, and current-state structure before redesign work starts.",
+      "localized": "Überprüfen Sie die Hierarchie, die Navigationspfade und die aktuelle Struktur, bevor Sie mit der Neugestaltung beginnen.",
+      "seoTerm": "Website-Relaunch",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Content strategy",
+      "localized": "Content-Strategie",
+      "seoTerm": "Content-Inventar",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Find gaps, duplicate pages, and content that is hard to reach.",
+      "localized": "Finden Sie Lücken, doppelte Seiten und schwer zugängliche Inhalte.",
+      "seoTerm": "Content-Inventar",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Dev and engineering",
+      "localized": "Entwicklung und Technik",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Turn audit decisions into exports, redirects, migration notes, and handoff data.",
+      "localized": "Wandeln Sie Prüfentscheidungen in Exporte, Weiterleitungen, Migrationshinweise und Übergabedaten um.",
+      "seoTerm": "Website-Migration",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "SEO",
+      "localized": "SEO",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Connect crawl context to depth, orphan pages, subdomains, and cleanup priority.",
+      "localized": "Verknüpfen Sie den Crawling-Kontext mit der Tiefe, verwaisten Seiten, Subdomains und der Bereinigungspriorität.",
+      "seoTerm": "Website-Crawler",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Product",
+      "localized": "Produkt",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Keep scope, stakeholder feedback, priorities, and launch decisions tied to the map.",
+      "localized": "Halten Sie Umfang, Stakeholder-Feedback, Prioritäten und Startentscheidungen mit der Karte verknüpft.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Features",
+      "localized": "Funktionen",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "The map is the workspace.",
+      "localized": "Die Karte ist der Arbeitsbereich.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Capture evidence, trace flows, strategise, collaborate, and hand off in one place.",
+      "localized": "Erfassen Sie Beweise, verfolgen Sie Abläufe, entwickeln Sie Strategien, arbeiten Sie zusammen und übergeben Sie sie an einem Ort.",
+      "seoTerm": "User Flows",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Flexible inputs",
+      "localized": "Flexible Eingaben",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Start from a public URL, imported structure, or a map from scratch",
+      "localized": "Beginnen Sie mit einer öffentlichen URL, einer importierten Struktur oder einer Karte von Grund auf",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Collaboration",
+      "localized": "Zusammenarbeit",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Collect comments, decisions, and review context around the map",
+      "localized": "Sammeln Sie Kommentare, Entscheidungen und überprüfen Sie den Kontext rund um die Karte",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Flows & crosslinks",
+      "localized": "Flüsse und Querverbindungen",
+      "seoTerm": "User Flows",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Show journeys, related pages, and paths that do not fit a simple tree",
+      "localized": "Zeigt Fahrten, verwandte Seiten und Pfade an, die nicht in einen einfachen Baum passen",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Bulk screenshots",
+      "localized": "Massen-Screenshots",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Capture and download page screenshots for public web pages",
+      "localized": "Erfassen und laden Sie Seiten-Screenshots für öffentliche Webseiten herunter",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Audit findings",
+      "localized": "Prüfungsfeststellungen",
+      "seoTerm": "Website-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Surface missing, disabled, duplicate, inactive, subdomain, and orphan pages",
+      "localized": "Oberfläche fehlt, ist deaktiviert, dupliziert, inaktiv, Subdomain und verwaiste Seiten",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Exports and handoff",
+      "localized": "Exporte und Übergabe",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Download XML, JSON, CSV, PDF, PNG, text, and AI-ready packages",
+      "localized": "Laden Sie XML-, JSON-, CSV-, PDF-, PNG-, Text- und AI-fähige Pakete herunter",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "This is just the start!",
+      "localized": "Das ist erst der Anfang!",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic is moving rapidly, with improvements and implementations launching several times per week. Join our mailing list to stay updated.*",
+      "localized": "Vellic entwickelt sich rasant, Verbesserungen und Implementierungen werden mehrmals pro Woche eingeführt. Treten Sie unserer Mailingliste bei, um auf dem Laufenden zu bleiben.*",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "*Emails sent only occasionally for bigger updates and major rollouts.",
+      "localized": "*E-Mails werden nur gelegentlich für größere Updates und größere Rollouts gesendet.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Join mailing list",
+      "localized": "Mailingliste beitreten",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Examples",
+      "localized": "Beispiele",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "See how decisions stay connected.",
+      "localized": "Sehen Sie, wie Entscheidungen verbunden bleiben.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Example views show structure, screenshots, review context, flows, and handoff in one product-led surface.",
+      "localized": "Beispielansichten zeigen Struktur, Screenshots, Überprüfungskontext, Abläufe und Übergabe in einer produktgesteuerten Oberfläche.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Large site audit",
+      "localized": "Großes Site-Audit",
+      "seoTerm": "Website-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Nearly 5k page site scan, 7 levels deep with top-of-page screenshots.",
+      "localized": "Fast 5.000 Seiten Seitenscan, 7 Ebenen tief mit Top-of-Page-Screenshots.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Show me",
+      "localized": "Zeig es mir",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Medium site audit",
+      "localized": "Mittleres Site-Audit",
+      "seoTerm": "Website-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Over 1,100 page scan including subdomains, orphan pages, and full-page screenshots",
+      "localized": "Scan von über 1.100 Seiten, einschließlich Subdomains, verwaisten Seiten und ganzseitigen Screenshots",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Pricing",
+      "localized": "Preise",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Start with the map. Upgrade when the workflow grows.",
+      "localized": "Beginnen Sie mit der Karte. Aktualisieren Sie, wenn der Workflow wächst.",
+      "seoTerm": "User Flows",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Plans are shaped around saved maps, screenshots, exports, reports, and team review.",
+      "localized": "Pläne basieren auf gespeicherten Karten, Screenshots, Exporten, Berichten und Teambewertungen.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Billing cycle",
+      "localized": "Abrechnungszyklus",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Monthly",
+      "localized": "Monatlich",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Yearly",
+      "localized": "Jährlich",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Free",
+      "localized": "Kostenlos",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "$0",
+      "localized": "$0",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "/mo",
+      "localized": "/mo",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "($0/year)",
+      "localized": "(0 $/Jahr)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "For trying Vellic on a small site or one-off audit.",
+      "localized": "Zum Ausprobieren von Vellic auf einer kleinen Website oder bei einem einmaligen Audit.",
+      "seoTerm": "Website-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "1 active project",
+      "localized": "1 aktives Projekt",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "1,000 active pages total on account",
+      "localized": "Insgesamt 1.000 aktive Seiten auf Rechnung",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "100 pages per scan",
+      "localized": "100 Seiten pro Scan",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "25 screenshots incl.",
+      "localized": "25 Screenshots inkl.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "5 downloads (XML and Index)",
+      "localized": "5 Downloads (XML und Index)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "1 editor",
+      "localized": "1 Herausgeber",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Get started",
+      "localized": "Legen Sie los",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "*additional screenshot credits can be purchased anytime",
+      "localized": "*Zusätzliche Screenshot-Credits können jederzeit erworben werden",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Pro",
+      "localized": "Pro",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "$8",
+      "localized": "8 $",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "($96/year)",
+      "localized": "(96 $/Jahr)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "For solo audits with screenshots and saved work.",
+      "localized": "Für Solo-Audits mit Screenshots und gespeicherter Arbeit.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "5 active projects",
+      "localized": "5 aktive Projekte",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "10,000 active pages total on account",
+      "localized": "Insgesamt 10.000 aktive Seiten auf Rechnung",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "300 screenshots incl.",
+      "localized": "300 Screenshots inkl.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Unlimited downloads (any format)",
+      "localized": "Unbegrenzte Downloads (jedes Format)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Subscribe",
+      "localized": "Abonnieren",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Studio",
+      "localized": "Studio",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "$18",
+      "localized": "18 $",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "($216/year)",
+      "localized": "(216 $/Jahr)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "For small teams handling recurring site work.",
+      "localized": "Für kleine Teams, die wiederkehrende Arbeiten vor Ort erledigen.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "15 active projects",
+      "localized": "15 aktive Projekte",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "50,000 active pages total on account",
+      "localized": "Insgesamt 50.000 aktive Seiten auf Rechnung",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "1,000 screenshots incl.",
+      "localized": "1.000 Screenshots inkl.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "3 editors",
+      "localized": "3 Redakteure",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Agency",
+      "localized": "Agentur",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "$88",
+      "localized": "88 $",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "($1,056/year)",
+      "localized": "(1.056 $/Jahr)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "For heavier client audits and shared delivery.",
+      "localized": "Für umfangreichere Kundenprüfungen und gemeinsame Bereitstellung.",
+      "seoTerm": "Website-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Unlimited projects",
+      "localized": "Unbegrenzte Projekte",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "200,000 active pages total on account",
+      "localized": "Insgesamt 200.000 aktive Seiten auf Rechnung",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "5,000 screenshots incl.",
+      "localized": "5.000 Screenshots inkl.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "10 editors",
+      "localized": "10 Redakteure",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "FAQ",
+      "localized": "FAQ",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Short answers before the first map.",
+      "localized": "Kurze Antworten vor der ersten Karte.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "What is Vellic?",
+      "localized": "Was ist Vellic?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Is Vellic only a website crawler?",
+      "localized": "Ist Vellic nur ein Website-Crawler?",
+      "seoTerm": "Website-Crawler",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Who is Vellic built for?",
+      "localized": "Für wen ist Vellic konzipiert?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Can I import an existing sitemap or page list?",
+      "localized": "Kann ich eine vorhandene Sitemap oder Seitenliste importieren?",
+      "seoTerm": "visuelle Sitemap",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Can Vellic capture screenshots in bulk?",
+      "localized": "Kann Vellic Screenshots in großen Mengen aufnehmen?",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "How does collaboration work?",
+      "localized": "Wie funktioniert die Zusammenarbeit?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "What can I export from Vellic?",
+      "localized": "Was kann ich aus Vellic exportieren?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Can Vellic help with redesigns or migrations?",
+      "localized": "Kann Vellic bei Neugestaltungen oder Migrationen helfen?",
+      "seoTerm": "Website-Relaunch",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Does Vellic find orphan, disabled, duplicate, or hard-to-reach pages?",
+      "localized": "Findet Vellic verwaiste, deaktivierte, doppelte oder schwer erreichbare Seiten?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Is Vellic a replacement for a deep SEO crawler?",
+      "localized": "Ist Vellic ein Ersatz für einen Deep-SEO-Crawler?",
+      "seoTerm": "Website-Crawler",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "How is Vellic different from sitemap tools and SEO crawlers?",
+      "localized": "Wie unterscheidet sich Vellic von Sitemap-Tools und SEO-Crawlern?",
+      "seoTerm": "visuelle Sitemap",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Does Vellic work with private or password-protected sites?",
+      "localized": "Funktioniert Vellic mit privaten oder passwortgeschützten Websites?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Does Vellic work on mobile?",
+      "localized": "Funktioniert Vellic auf Mobilgeräten?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Mission",
+      "localized": "Mission",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Because foundations matter",
+      "localized": "Weil Fundamente wichtig sind",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Information architecture shapes how people find, understand, and act. Vellic helps to surface the foundations for the whole team.",
+      "localized": "Informationsarchitektur prägt die Art und Weise, wie Menschen finden, verstehen und handeln. Vellic hilft dabei, die Grundlagen für das gesamte Team zu schaffen.",
+      "seoTerm": "Informationsarchitektur",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "01",
+      "localized": "01",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Bring information architecture back to the foreground of crafting better websites and software.",
+      "localized": "Bringen Sie die Informationsarchitektur wieder in den Vordergrund, um bessere Websites und Software zu erstellen.",
+      "seoTerm": "Informationsarchitektur",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "02",
+      "localized": "02",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Save teams time and stress when auditing, updating, creating, planning, and maintaining site structure.",
+      "localized": "Sparen Sie Zeit und Stress für Teams bei der Prüfung, Aktualisierung, Erstellung, Planung und Pflege der Standortstruktur.",
+      "seoTerm": "Website-Struktur",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "03",
+      "localized": "03",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Improve constantly with and for the people doing the work, shipping small and large updates to make Vellic their own.",
+      "localized": "Verbessern Sie sich ständig mit und für die Leute, die die Arbeit machen, indem Sie kleine und große Updates veröffentlichen, um Vellic zu ihrem eigenen zu machen.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Contact",
+      "localized": "Kontakt",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Need help? Want a demo? Have some feedback? Or just want to say Hello👋?",
+      "localized": "Brauchen Sie Hilfe? Möchten Sie eine Demo? Haben Sie Feedback? Oder möchten Sie einfach nur Hallo sagen👋?",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Send a note to the right inbox and we will follow up ASAP.",
+      "localized": "Senden Sie eine Notiz an den richtigen Posteingang und wir werden uns so schnell wie möglich bei Ihnen melden.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Inquiries and feedback",
+      "localized": "Anfragen und Feedback",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Questions, demo requests, ideas, partnerships, and early product feedback.",
+      "localized": "Fragen, Demo-Anfragen, Ideen, Partnerschaften und frühes Produkt-Feedback.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Contact us",
+      "localized": "Kontaktieren Sie uns",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Product support",
+      "localized": "Produktunterstützung",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Help with maps, scans, screenshots, exports, account access, or product issues.",
+      "localized": "Hilfe bei Karten, Scans, Screenshots, Exporten, Kontozugriff oder Produktproblemen.",
+      "seoTerm": "Website-Screenshots",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Get help",
+      "localized": "Holen Sie sich Hilfe",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Start planning your next site",
+      "localized": "Beginnen Sie mit der Planung Ihrer nächsten Website",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter a URL to start",
+      "localized": "Geben Sie zum Starten eine URL ein",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Better UX starts with solid foundations.\nMake those foundations with Vellic.",
+      "localized": "Besseres UX beginnt mit soliden Grundlagen.\nSchaffen Sie diese Grundlagen mit Vellic.",
+      "seoTerm": "UX-Audit",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "(Go to desktop for the canvas experience)",
+      "localized": "(Gehe zum Desktop für das Canvas-Erlebnis)",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Help us improve Vellic",
+      "localized": "Helfen Sie uns, Vellic zu verbessern",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "We use necessary storage to keep Vellic working. With your permission, we also use analytics and session feedback tools to understand what is useful, confusing, or broken to improve the site and app for you. We do not use these cookies for marketing, advertising, retargeting, or selling personal data.",
+      "localized": "Wir nutzen den notwendigen Speicher, um Vellic am Laufen zu halten. Mit Ihrer Erlaubnis verwenden wir auch Analyse- und Sitzungsfeedback-Tools, um zu verstehen, was nützlich, verwirrend oder fehlerhaft ist, um die Website und die App für Sie zu verbessern. Wir verwenden diese Cookies nicht für Marketing, Werbung, Retargeting oder den Verkauf personenbezogener Daten.",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Accept cookies",
+      "localized": "Cookies akzeptieren",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Cookie settings",
+      "localized": "Cookie-Einstellungen",
+      "seoTerm": "—",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic home",
+      "localized": "Vellic-Startseite",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Open navigation",
+      "localized": "Navigation öffnen",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Close navigation",
+      "localized": "Navigation schließen",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Marketing navigation",
+      "localized": "Marketing-Navigation",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic canvas preview",
+      "localized": "Vorschau der Vellic-Arbeitsfläche",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic canvas showing a visual sitemap generator workspace with page screenshot cards connected across a large website audit map",
+      "localized": "Vellic-Arbeitsfläche mit einem visuellen Sitemap-Generator, verbundenen Seiten-Screenshot-Karten und einer großen Website-Audit-Karte",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Competitor comparison matrix",
+      "localized": "Wettbewerber-Vergleichsmatrix",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Comparison category",
+      "localized": "Vergleichskategorie",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Feature",
+      "localized": "Funktion",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic workflow summary",
+      "localized": "Zusammenfassung des Vellic-Workflows",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter a public website URL, like example.com.",
+      "localized": "Gib die URL einer öffentlichen Website ein, zum Beispiel example.com.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Join Vellic updates",
+      "localized": "Vellic-Updates abonnieren",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "A lightweight list for larger release notes and product updates.",
+      "localized": "Eine kompakte Liste für größere Versionshinweise und Produktupdates.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Close",
+      "localized": "Schließen",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Joining",
+      "localized": "Beitritt läuft",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Join list",
+      "localized": "Liste abonnieren",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "You are on the preview list.",
+      "localized": "Du stehst auf der Vorschau-Liste.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Email",
+      "localized": "E-Mail",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "you@example.com",
+      "localized": "du@beispiel.de",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Could not join the mailing list. Please try again.",
+      "localized": "Die Anmeldung zur Mailingliste war nicht möglich. Bitte versuche es erneut.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "We will keep it quiet and only send bigger release or product updates.",
+      "localized": "Wir halten uns kurz und senden nur größere Versions- oder Produktupdates.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Use a larger screen",
+      "localized": "Größeren Bildschirm verwenden",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Vellic maps need room for the canvas, screenshots, flows, and review tools.",
+      "localized": "Vellic-Karten benötigen Platz für Arbeitsfläche, Screenshots, Abläufe und Review-Werkzeuge.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Spread the word",
+      "localized": "Weitersagen",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Contact Vellic",
+      "localized": "Vellic kontaktieren",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "General question",
+      "localized": "Allgemeine Frage",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Other",
+      "localized": "Sonstiges",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Sending",
+      "localized": "Wird gesendet",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Send message",
+      "localized": "Nachricht senden",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Message sent",
+      "localized": "Nachricht gesendet",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "We will follow up soon.",
+      "localized": "Wir melden uns bald.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Name",
+      "localized": "Name",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Your name",
+      "localized": "Dein Name",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Reason",
+      "localized": "Grund",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Reason details",
+      "localized": "Details zum Grund",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Optional detail",
+      "localized": "Optionale Details",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Message",
+      "localized": "Nachricht",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "What should we know?",
+      "localized": "Was sollten wir wissen?",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter your name.",
+      "localized": "Gib deinen Namen ein.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter a valid email address.",
+      "localized": "Gib eine gültige E-Mail-Adresse ein.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Enter a message.",
+      "localized": "Gib eine Nachricht ein.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Could not send your message. Try again or email us directly.",
+      "localized": "Deine Nachricht konnte nicht gesendet werden. Versuche es erneut oder schreibe uns direkt.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "You are already on the mailing list.",
+      "localized": "Du bist bereits auf der Mailingliste.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "You are on the mailing list. We will only send bigger release or product updates.",
+      "localized": "Du bist auf der Mailingliste. Wir senden nur größere Versions- oder Produktupdates.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Privacy settings",
+      "localized": "Datenschutzeinstellungen",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Choose optional product research tools for Vellic.",
+      "localized": "Wähle optionale Werkzeuge für die Produktforschung bei Vellic.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Save choices",
+      "localized": "Auswahl speichern",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Reject all optional",
+      "localized": "Alle optionalen ablehnen",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Necessary storage",
+      "localized": "Notwendiger Speicher",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Analytics",
+      "localized": "Analyse",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Experience research",
+      "localized": "Nutzungsforschung",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Marketing",
+      "localized": "Marketing",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Required. Used for login, security, preferences, core app functionality, and remembering your privacy choices. Always on.",
+      "localized": "Erforderlich. Wird für Anmeldung, Sicherheit, Einstellungen, grundlegende App-Funktionen und zum Speichern deiner Datenschutzwahl verwendet. Immer aktiv.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Optional. Helps us understand aggregate product usage so we can improve Vellic. Not used for marketing or advertising.",
+      "localized": "Optional. Hilft uns, die aggregierte Produktnutzung zu verstehen und Vellic zu verbessern. Nicht für Marketing oder Werbung verwendet.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Optional. Helps us understand confusing flows, usability issues, and product bugs through session feedback tools. Not used for marketing or advertising.",
+      "localized": "Optional. Hilft uns, verwirrende Abläufe, Bedienprobleme und Produktfehler mithilfe von Sitzungsfeedback zu verstehen. Nicht für Marketing oder Werbung verwendet.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    },
+    {
+      "source": "Not used. Vellic does not use advertising, retargeting, or marketing cookies.",
+      "localized": "Nicht verwendet. Vellic nutzt keine Werbe-, Retargeting- oder Marketing-Cookies.",
+      "seoTerm": "Accessibility / UI state",
+      "reviewer": "—",
+      "status": "machine draft"
+    }
+  ]
+}

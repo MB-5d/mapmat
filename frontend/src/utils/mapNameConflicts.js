@@ -47,5 +47,5 @@ export const findMapNameConflict = (
 };
 
 export const getMapNameConflictMessage = (name) => (
-  `A map named "${String(name || '').trim()}" already exists in this folder.`
+  `A map named "${String(name || '').trim()}" already exists in this location.`
 );

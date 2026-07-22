@@ -1,0 +1,13 @@
+.marketing-preview-v2 { font-family: Sora, var(--font-sans); }
+html[lang="ja"] .marketing-preview-v2 { font-family: "Noto Sans JP", Sora, var(--font-sans); }
+.marketing-language-control { position: fixed; right: 0; bottom: 24px; z-index: 80; }
+.marketing-language-tab.ui-icon-btn { width: 48px; height: 48px; border-right: 0; border-radius: var(--ui-radius-lg) 0 0 var(--ui-radius-lg); box-shadow: var(--shadow-canvas-control); background: var(--ui-color-surface); }
+.marketing-language-menu.ui-menu-panel { position: absolute; right: 16px; bottom: 56px; width: 216px; }
+.marketing-language-menu .ui-menu-item__content { min-width: 0; }
+.marketing-language-check-space { display: block; width: 16px; height: 16px; }
+.marketing-translation-toast.toast { position: fixed; top: auto; right: auto; left: 24px; bottom: 24px; transform: none; z-index: 70; width: auto; max-width: min(420px, calc(100vw - 96px)); }
+@media (max-width: 720px) {
+  .marketing-language-control { bottom: 18px; }
+  .marketing-language-tab.ui-icon-btn { width: 44px; height: 44px; }
+  .marketing-translation-toast.toast { left: 14px; bottom: 72px; max-width: calc(100vw - 28px); }
+}

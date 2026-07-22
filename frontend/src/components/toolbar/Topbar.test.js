@@ -6,6 +6,13 @@ import path from 'path';
 import Topbar from './Topbar';
 import { AuthProvider } from '../../contexts/AuthContext';
 
+jest.mock('../../contexts/LocaleContext', () => ({
+  useLocale: () => ({
+    locale: 'en',
+    t: (source) => source,
+  }),
+}));
+
 const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 
 describe('Topbar', () => {
@@ -17,6 +24,7 @@ describe('Topbar', () => {
       onShowProfile: jest.fn(),
       onShowBilling: jest.fn(),
       onShowSettings: jest.fn(),
+      onShowSupport: jest.fn(),
       onLogout: jest.fn(),
       onLogin: jest.fn(),
       onSignup: jest.fn(),
@@ -109,8 +117,32 @@ describe('Topbar', () => {
       'Account',
     ]);
     expect(container.textContent).toContain('Maps');
+    expect(container.textContent).toContain('Support');
     expect(container.textContent).not.toContain('Projects');
     expect(container.querySelectorAll('.account-menu-item-badge')).toHaveLength(2);
+  });
+
+  test('opens support from the account menu', () => {
+    const auth = renderTopbar();
+
+    const trigger = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Matthew')
+    );
+
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const supportButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Support')
+    );
+
+    act(() => {
+      supportButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(auth.onShowSupport).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.account-menu')).toBeNull();
   });
 
   test('uses a primary brand login button when logged out', () => {

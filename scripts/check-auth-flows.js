@@ -404,6 +404,32 @@ async function run() {
     });
     assert.strictEqual(me.user?.emailVerified, true, '/auth/me should show verified email');
     assert.strictEqual(me.user?.hasPassword, true, '/auth/me should show password login enabled');
+    assert.strictEqual(me.user?.preferredLocale, null, 'new accounts should not override browser language before an explicit choice');
+
+    const localizedProfile = await fetchJson(`${API_BASE}/auth/me`, {
+      method: 'PUT',
+      token: verified.token,
+      body: JSON.stringify({ preferredLocale: 'es' }),
+    });
+    assert.strictEqual(localizedProfile.user?.preferredLocale, 'es', 'profile update should persist the app language');
+
+    const localizedMe = await fetchJson(`${API_BASE}/auth/me`, {
+      token: verified.token,
+    });
+    assert.strictEqual(localizedMe.user?.preferredLocale, 'es', '/auth/me should return the saved app language');
+
+    let unsupportedLocaleError = null;
+    try {
+      await fetchJson(`${API_BASE}/auth/me`, {
+        method: 'PUT',
+        token: verified.token,
+        body: JSON.stringify({ preferredLocale: 'fr' }),
+      });
+    } catch (error) {
+      unsupportedLocaleError = error;
+    }
+    assert(unsupportedLocaleError, 'profile update should reject unsupported languages');
+    assert.strictEqual(unsupportedLocaleError.status, 400, 'unsupported language should return 400');
 
     const staleBearerMe = await fetchJson(`${API_BASE}/auth/me`, {
       headers: {

@@ -102,6 +102,40 @@ describe('ProjectsModal', () => {
     expect(container.textContent).toContain('Delete project');
   });
 
+  test('separates map groups from project folders', () => {
+    const oneOffs = {
+      id: 'uncategorized',
+      name: 'One-offs',
+      maps: [{ id: 'map-one-off', name: 'Quick audit', project_id: null }],
+      isVirtual: true,
+    };
+    const shared = {
+      id: 'shared-with-me',
+      name: 'Shared with me',
+      maps: [{ id: 'map-shared', name: 'Shared audit', membership_role: 'viewer' }],
+      isVirtual: true,
+    };
+
+    renderModal({
+      projects: [ownedProject, shared, oneOffs],
+      expandedProjects: {
+        uncategorized: true,
+        'shared-with-me': true,
+        'project-1': true,
+      },
+    });
+
+    expect(Array.from(container.querySelectorAll('.projects-section-title')).map((title) => title.textContent))
+      .toEqual(['Maps', 'Projects']);
+    expect(Array.from(container.querySelectorAll('.map-group-name')).map((title) => title.textContent))
+      .toEqual(['One-offs', 'Shared with me']);
+    expect(container.querySelectorAll('.map-group .project-folder-icon')).toHaveLength(0);
+    expect(container.querySelectorAll('.map-group .project-title-edit-button')).toHaveLength(0);
+    expect(container.querySelector('.project-folder .project-folder-icon')).not.toBeNull();
+    expect(container.textContent).not.toContain('Uncategorized');
+    expect(container.textContent).not.toContain('No project');
+  });
+
   test('uses plain project icons with tighter title spacing', () => {
     const mainRule = getCssRule('.project-folder-main');
     const iconRule = getCssRule('.project-folder-icon');
@@ -201,6 +235,11 @@ describe('ProjectsModal', () => {
     );
 
     expect(moveSelect.className).toContain('ui-select');
+    expect(moveSelect.value).toBe('project-1');
+    expect(moveSelect.options[0].textContent).toBe('One-offs');
+    expect(moveSelect.querySelector('optgroup')?.label).toBe('Projects');
+    expect(moveSelect.textContent).not.toContain('Uncategorized');
+    expect(moveSelect.textContent).not.toContain('No project');
     expect(confirmMoveButton.className).toContain('ui-btn');
   });
 

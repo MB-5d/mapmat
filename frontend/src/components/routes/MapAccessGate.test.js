@@ -47,8 +47,10 @@ describe('MapAccessGate', () => {
 
     const textarea = container.querySelector('textarea');
     const requestButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Request viewer access')
+      button.textContent.includes('Request access')
     );
+
+    expect(textarea.getAttribute('maxlength')).toBe('200');
 
     act(() => {
       setTextareaValue(textarea, 'Need review access');
@@ -58,5 +60,25 @@ describe('MapAccessGate', () => {
 
     expect(onRequestMessageChange).toHaveBeenCalledWith('Need review access');
     expect(onRequestAccess).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not show request controls while a map is opening', () => {
+    act(() => {
+      root.render(
+        <MapAccessGate
+          isLoggedIn
+          loading
+          requestStatus="idle"
+          requestMessage=""
+          onGoHome={jest.fn()}
+          onRequestMessageChange={jest.fn()}
+          onRequestAccess={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Opening map');
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(container.textContent).not.toContain('Request access');
   });
 });

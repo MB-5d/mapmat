@@ -8,6 +8,7 @@ import MarketingPreviewV2 from './marketing/MarketingPreviewV2';
 import MarketingSite from './marketing/MarketingSite';
 import { initAnalytics, trackPageView } from './utils/analytics';
 import { useConsent } from './contexts/ConsentContext';
+import { LocaleProvider, useLocale } from './contexts/LocaleContext';
 import {
   ROUTE_SURFACES,
   buildRouteUrl,
@@ -17,12 +18,13 @@ import {
 import { getAppDeviceSupport } from './utils/deviceSupport';
 
 function DeviceSupportBlocker({ message }) {
+  const { t } = useLocale();
   return (
     <main className="device-support-blocker" aria-labelledby="device-support-blocker-title">
       <section className="device-support-blocker__panel">
-        <div className="device-support-blocker__eyebrow">Screen size not supported</div>
-        <h1 id="device-support-blocker-title">Use desktop or tablet landscape</h1>
-        <p>{message}</p>
+        <div className="device-support-blocker__eyebrow">{t('Screen size not supported')}</div>
+        <h1 id="device-support-blocker-title">{t('Use desktop or tablet landscape')}</h1>
+        <p>{t(message)}</p>
       </section>
     </main>
   );
@@ -45,7 +47,7 @@ function getInitialRoute() {
 function RootApp() {
   const [route, setRoute] = useState(getInitialRoute);
   const [deviceSupport, setDeviceSupport] = useState(() => getAppDeviceSupport());
-  const { consent, hasStoredConsent } = useConsent();
+  const { consent, hadSeenConsentPromptOnLoad, hasStoredConsent } = useConsent();
 
   const navigateToRoute = useCallback((nextRoute, { replace = false } = {}) => {
     const resolvedRoute = typeof nextRoute === 'function' ? nextRoute(parseCurrentRoute(window.location)) : nextRoute;
@@ -115,9 +117,10 @@ function RootApp() {
     });
   }, [consent.analytics, hasStoredConsent, route]);
 
+  const showConsentDrawer = route.surface !== ROUTE_SURFACES.APP || !hadSeenConsentPromptOnLoad;
   const consentUi = (
     <>
-      <ConsentDrawer />
+      <ConsentDrawer show={showConsentDrawer} />
       <ConsentSettingsModal />
     </>
   );
@@ -152,10 +155,10 @@ function RootApp() {
   if (route.surface === ROUTE_SURFACES.ADMIN) {
     if (!deviceSupport.supported) {
       return (
-        <>
+        <LocaleProvider>
           <DeviceSupportBlocker message={deviceSupport.message} />
           {consentUi}
-        </>
+        </LocaleProvider>
       );
     }
 
@@ -169,18 +172,18 @@ function RootApp() {
 
   if (route.surface === ROUTE_SURFACES.APP && !deviceSupport.supported) {
     return (
-      <>
+      <LocaleProvider>
         <DeviceSupportBlocker message={deviceSupport.message} />
         {consentUi}
-      </>
+      </LocaleProvider>
     );
   }
 
   return (
-    <>
+    <LocaleProvider>
       <App currentRoute={route} navigateToRoute={navigateToRoute} />
       {consentUi}
-    </>
+    </LocaleProvider>
   );
 }
 

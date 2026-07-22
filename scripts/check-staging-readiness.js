@@ -104,13 +104,25 @@ function requireHttps(report, scope, key, { label = key } = {}) {
   return value;
 }
 
+function requireHttpsOrigins(report, scope, key, { label = key } = {}) {
+  const value = requireValue(report, scope, key, { label });
+  if (!value) return [];
+  const origins = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+  if (!origins.length || origins.some((origin) => !isHttpsUrl(origin))) {
+    report.error(scope, key, `${label} must contain only comma-separated https origins`);
+    return origins;
+  }
+  report.info(scope, key, `${label} contains ${origins.length} https origin(s)`);
+  return origins;
+}
+
 function checkBackend(report) {
   const scope = 'backend';
 
   requireExact(report, scope, 'NODE_ENV', 'production');
   requireExact(report, scope, 'DB_PROVIDER', 'postgres');
   requireValue(report, scope, 'DATABASE_URL');
-  requireHttps(report, scope, 'FRONTEND_URL');
+  requireHttpsOrigins(report, scope, 'FRONTEND_URL');
   requireValue(report, scope, 'JWT_SECRET');
   requireValue(report, scope, 'ADMIN_API_KEY');
 

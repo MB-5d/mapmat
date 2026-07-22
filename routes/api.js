@@ -33,6 +33,7 @@ const {
 const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
 const { buildHealthSnapshot: getEmailHealthSnapshot, sendEmailAsync } = require('../utils/emailProvider');
 const { EMAIL_TEMPLATE_KEYS, renderTemplatedEmail } = require('../utils/emailTemplates');
+const { queueFeedbackSubmissionEmailsAsync, queueTemplatedEmailAsync } = require('../utils/emailDelivery');
 const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
 const { MAP_INSIGHTS_VERSION, analyzeMapInsights } = require('../utils/mapInsights');
 const { recordUsageEvent } = require('../utils/usageMetering');
@@ -615,6 +616,74 @@ function summarizeMapRow(row, options = {}) {
   }
 
   return summary;
+}
+
+function redactMapAccessPreviewNode(node, createPreviewNodeId, nodeIdMap) {
+  if (!node || typeof node !== 'object') return null;
+  const originalNodeId = normalizeIdKey(node.id);
+  const nodeId = createPreviewNodeId();
+  if (originalNodeId) nodeIdMap.set(originalNodeId, nodeId);
+  return {
+    id: nodeId,
+    title: 'Page',
+    url: '',
+    children: Array.isArray(node.children)
+      ? node.children
+        .map((child) => redactMapAccessPreviewNode(child, createPreviewNodeId, nodeIdMap))
+        .filter(Boolean)
+      : [],
+  };
+}
+
+function buildMapAccessPreview(row) {
+  const parsed = parseMapFields(row);
+  const nodeIdMap = new Map();
+  let nodeIndex = 0;
+  const createPreviewNodeId = () => {
+    nodeIndex += 1;
+    return `preview-node-${nodeIndex}`;
+  };
+  const root = redactMapAccessPreviewNode(parsed.root, createPreviewNodeId, nodeIdMap);
+  const orphans = Array.isArray(parsed.orphans)
+    ? parsed.orphans
+      .map((orphan) => redactMapAccessPreviewNode(orphan, createPreviewNodeId, nodeIdMap))
+      .filter(Boolean)
+    : [];
+
+  const connections = Array.isArray(parsed.connections)
+    ? parsed.connections
+      .map((connection) => {
+        const sourceNodeId = nodeIdMap.get(normalizeIdKey(connection?.sourceNodeId));
+        const targetNodeId = nodeIdMap.get(normalizeIdKey(connection?.targetNodeId));
+        if (!sourceNodeId || !targetNodeId) return null;
+        return {
+          sourceNodeId,
+          targetNodeId,
+          sourceAnchor: connection.sourceAnchor || null,
+          targetAnchor: connection.targetAnchor || null,
+          type: connection.type === 'userflow' ? 'userflow' : 'crosslink',
+        };
+      })
+      .filter(Boolean)
+      .map((connection, index) => ({
+        id: `preview-connection-${index + 1}`,
+        sourceNodeId: connection.sourceNodeId,
+        targetNodeId: connection.targetNodeId,
+        sourceAnchor: connection.sourceAnchor || null,
+        targetAnchor: connection.targetAnchor || null,
+        type: connection.type,
+      }))
+    : [];
+
+  return {
+    id: row.id,
+    name: row.name || 'Untitled map',
+    root,
+    orphans,
+    connections,
+    colors: parsed.colors,
+    connectionColors: parsed.connectionColors,
+  };
 }
 
 function stripStaleImageAssetFields(node) {
@@ -1872,6 +1941,21 @@ router.post('/contact', async (req, res) => {
       return res.status(503).json({ error: 'Email delivery is not configured.' });
     }
 
+    try {
+      await queueTemplatedEmailAsync({
+        templateKey: EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT_CONFIRMATION,
+        toEmail: email,
+        payload: {
+          targetKey,
+          name,
+          reason,
+          appBaseUrl: process.env.APP_BASE_URL || undefined,
+        },
+      });
+    } catch (error) {
+      console.error('Marketing contact confirmation queue error:', error);
+    }
+
     return res.status(201).json({
       ok: true,
       contact: {
@@ -1985,6 +2069,18 @@ router.post('/feedback', async (req, res) => {
     });
 
     const refreshed = await feedbackStore.getFeedbackItemByIdAsync(created.id);
+    const screenshotUrl = refreshed?.screenshot_path
+      ? new URL(refreshed.screenshot_path, `${getNodeAssetUploadBaseUrl(req)}/`).toString()
+      : null;
+    const feedbackEmailResults = await queueFeedbackSubmissionEmailsAsync({
+      feedback: refreshed,
+      screenshotUrl,
+    });
+    feedbackEmailResults
+      .filter((result) => result.status === 'rejected')
+      .forEach((result) => {
+        console.error(`Feedback ${result.kind} email queue error:`, result.error);
+      });
     return res.status(201).json({
       feedback: serializeFeedbackItem(refreshed),
     });
@@ -2395,6 +2491,22 @@ router.get('/maps/:id/summary', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Get map summary error:', error);
     res.status(500).json({ error: 'Failed to get map summary' });
+  }
+});
+
+// GET /api/maps/:id/access-preview - safe redacted preview for access gates
+router.get('/maps/:id/access-preview', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const map = await mapStore.getMapByIdAsync(id);
+    if (!map) return res.status(404).json({ error: 'Map not found' });
+
+    res.json({
+      map: buildMapAccessPreview(map),
+    });
+  } catch (error) {
+    console.error('Get map access preview error:', error);
+    res.status(500).json({ error: 'Failed to get map preview' });
   }
 });
 

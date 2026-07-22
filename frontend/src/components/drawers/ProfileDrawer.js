@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { AlertTriangle, ExternalLink, Eye, EyeOff, ImagePlus, Infinity as InfinityIcon, Plus, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Eye, EyeOff, ImagePlus, Infinity as InfinityIcon, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
@@ -109,7 +109,7 @@ const ProfileDrawer = ({
   const [avatarCropPixels, setAvatarCropPixels] = useState(null);
   const [pendingAvatarDataUrl, setPendingAvatarDataUrl] = useState('');
   const [pendingAvatarRemoved, setPendingAvatarRemoved] = useState(false);
-  const [openProfileAccordion, setOpenProfileAccordion] = useState('plan');
+  const [openProfileAccordion, setOpenProfileAccordion] = useState(null);
   const [activeProfileField, setActiveProfileField] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -144,7 +144,7 @@ const ProfileDrawer = ({
       setAvatarCropPixels(null);
       setPendingAvatarDataUrl('');
       setPendingAvatarRemoved(false);
-      setOpenProfileAccordion('plan');
+      setOpenProfileAccordion(null);
       setActiveProfileField(null);
       setAccountEditors([]);
       setAccountEditorsError('');
@@ -177,8 +177,8 @@ const ProfileDrawer = ({
   const isPrimaryBillingOwner = !entitlements?.account?.ownerUserId
     || entitlements.account.ownerUserId === user?.id;
   const accountRole = String(entitlements?.account?.membershipRole || '').trim().toLowerCase();
-  const canViewPlanDetails = isPrimaryBillingOwner || accountRole === 'owner' || accountRole === 'editor';
   const canManageAccountEditors = isPrimaryBillingOwner || accountRole === 'owner';
+  const canViewPlanDetails = canManageAccountEditors;
   const planDetailsOpen = openProfileAccordion === 'plan';
   const profileDetailsOpen = openProfileAccordion === 'profile';
   const passwordDetailsOpen = openProfileAccordion === 'password';
@@ -626,53 +626,30 @@ const ProfileDrawer = ({
                   </div>
                 </div>
               ) : null}
-              {isPrimaryBillingOwner ? (
+              {canViewPlanDetails ? (
                 <div className="account-plan-actions">
-	                <Button
-	                  type="button"
-	                  variant="secondary"
-	                  buttonStyle="mono"
-	                  size="sm"
-	                  onClick={onOpenPlans}
-	                  disabled={!user}
-	                >
-	                  Switch
-	                </Button>
                   <Button
                     type="button"
-                    variant="secondary"
-                    buttonStyle="mono"
+                    variant="primary"
                     size="sm"
-                    onClick={() => onOpenPlans?.('page-credits')}
+                    onClick={onOpenPlans}
                     disabled={!user}
-                    startIcon={<Plus size={14} />}
                   >
-                    Pages
+                    Upgrade
                   </Button>
                   <Button
-                    type="button"
-                    variant="secondary"
+                    type="link"
+                    htmlType="button"
                     buttonStyle="mono"
                     size="sm"
-                    onClick={() => onOpenPlans?.('screenshot-credits')}
-                    disabled={!user}
-                    startIcon={<Plus size={14} />}
+                    onClick={onOpenBilling}
+                    disabled={!user || !onOpenBilling}
+                    loading={billingLoading}
+                    endIcon={<ExternalLink size={14} />}
                   >
-                    Screenshots
+                    Manage billing
                   </Button>
-	                <Button
-	                  type="link"
-	                  htmlType="button"
-	                  buttonStyle="mono"
-	                  size="sm"
-	                  onClick={onOpenBilling}
-	                  disabled={!user || !onOpenBilling}
-	                  loading={billingLoading}
-	                  endIcon={<ExternalLink size={14} />}
-	                >
-	                  Manage billing
-	                </Button>
-	              </div>
+                </div>
               ) : null}
 	            </Accordion>
           ) : null}

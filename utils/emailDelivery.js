@@ -46,6 +46,8 @@ async function queueTemplatedEmailAsync({
   userId = null,
   mapId = null,
   inviteId = null,
+  replyToEmail = undefined,
+  suppressDefaultReplyTo = false,
 }) {
   await emailDeliveryStore.ensureEmailDeliverySchemaAsync();
 
@@ -55,7 +57,7 @@ async function queueTemplatedEmailAsync({
     templateKey,
     toEmail,
     fromEmail: config.fromAddress,
-    replyToEmail: config.replyToAddress,
+    replyToEmail: replyToEmail === undefined ? config.replyToAddress : replyToEmail,
     subject: rendered.subject,
     provider: config.provider,
     payload,
@@ -73,6 +75,7 @@ async function queueTemplatedEmailAsync({
     ipHash: null,
     payload: JSON.stringify({
       deliveryId: delivery.id,
+      suppressDefaultReplyTo: Boolean(suppressDefaultReplyTo),
     }),
   });
 
@@ -286,6 +289,85 @@ async function queuePromoCodeSharedEmailAsync({
   });
 }
 
+const FEEDBACK_RECIPIENTS = Object.freeze({
+  broken: 'support@vellic.io',
+  confusing: 'support@vellic.io',
+  idea: 'hello@vellic.io',
+  like: 'hello@vellic.io',
+  dislike: 'hello@vellic.io',
+});
+
+function getFeedbackRecipientEmail(intent) {
+  return FEEDBACK_RECIPIENTS[String(intent || '').trim().toLowerCase()] || null;
+}
+
+function serializeFeedbackForEmail(feedback, screenshotUrl = null) {
+  return {
+    appBaseUrl: getDefaultAppBaseUrl(),
+    intent: feedback.intent,
+    scope: feedback.scope,
+    rating: feedback.rating,
+    message: feedback.message || null,
+    actorName: feedback.actor_name || 'Anonymous',
+    actorEmail: feedback.actor_email || null,
+    surface: feedback.surface || null,
+    routePath: feedback.route_path || null,
+    routeSection: feedback.route_section || null,
+    mapId: feedback.map_id || null,
+    shareId: feedback.share_id || null,
+    componentKey: feedback.component_key || null,
+    componentLabel: feedback.component_label || null,
+    screenshotUrl: screenshotUrl || feedback.screenshot_path || null,
+    allowFollowUp: Number(feedback.allow_follow_up || 0) > 0,
+    context: parseJsonSafe(feedback.context_json) || null,
+    submittedAt: feedback.created_at || null,
+  };
+}
+
+async function queueFeedbackSubmissionEmailsAsync({ feedback, screenshotUrl = null }) {
+  const intent = String(feedback?.intent || '').trim().toLowerCase();
+  const recipientEmail = getFeedbackRecipientEmail(intent);
+  if (!feedback?.id || !recipientEmail) {
+    throw new Error('Stored feedback with a supported intent is required to queue feedback email.');
+  }
+
+  const payload = serializeFeedbackForEmail(feedback, screenshotUrl);
+  const allowFollowUp = Boolean(payload.allowFollowUp && payload.actorEmail);
+  const tasks = [{
+    kind: 'internal',
+    promise: queueTemplatedEmailAsync({
+      templateKey: EMAIL_TEMPLATE_KEYS.FEEDBACK_INTERNAL,
+      toEmail: recipientEmail,
+      payload,
+      userId: feedback.actor_user_id || null,
+      mapId: feedback.map_id || null,
+      replyToEmail: allowFollowUp ? payload.actorEmail : null,
+      suppressDefaultReplyTo: !allowFollowUp,
+    }),
+  }];
+
+  if (allowFollowUp) {
+    tasks.push({
+      kind: 'confirmation',
+      promise: queueTemplatedEmailAsync({
+        templateKey: EMAIL_TEMPLATE_KEYS.FEEDBACK_CONFIRMATION,
+        toEmail: payload.actorEmail,
+        payload,
+        userId: feedback.actor_user_id || null,
+        mapId: feedback.map_id || null,
+      }),
+    });
+  }
+
+  const settled = await Promise.allSettled(tasks.map((task) => task.promise));
+  return settled.map((result, index) => ({
+    kind: tasks[index].kind,
+    status: result.status,
+    value: result.status === 'fulfilled' ? result.value : null,
+    error: result.status === 'rejected' ? result.reason?.message || 'Failed to queue email.' : null,
+  }));
+}
+
 async function processEmailDeliveryJobAsync(job) {
   const payload = parseJsonSafe(job?.payload) || {};
   const deliveryId = String(payload.deliveryId || '').trim();
@@ -325,6 +407,8 @@ async function processEmailDeliveryJobAsync(job) {
       subject: rendered.subject,
       text: rendered.text,
       html: rendered.html,
+      replyToEmail: delivery.reply_to_email || null,
+      suppressDefaultReplyTo: Boolean(payload.suppressDefaultReplyTo),
       metadata: {
         deliveryId,
         jobId: job?.id || null,
@@ -371,5 +455,7 @@ module.exports = {
   queueMembershipRoleChangedEmailAsync,
   queueMembershipRemovedEmailAsync,
   queuePromoCodeSharedEmailAsync,
+  queueFeedbackSubmissionEmailsAsync,
+  getFeedbackRecipientEmail,
   processEmailDeliveryJobAsync,
 };

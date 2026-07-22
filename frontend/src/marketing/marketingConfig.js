@@ -64,9 +64,7 @@ export const buildAppBillingUrl = (planKey = '', billingCycle = 'monthly') => {
 };
 
 export const buildAppSignupUrl = () => {
-  const params = new URLSearchParams();
-  params.set('intent', 'signup');
-  return `${APP_ORIGIN}/app?${params.toString()}`;
+  return `${APP_ORIGIN}/app`;
 };
 
 export const buildAppTrialUrl = (planKey = 'pro') => {

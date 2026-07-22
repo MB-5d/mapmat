@@ -9,6 +9,7 @@ const AuthContext = createContext({
   onShowProfile: () => {},
   onShowBilling: () => {},
   onShowSettings: () => {},
+  onShowSupport: () => {},
 });
 
 export const AuthProvider = AuthContext.Provider;

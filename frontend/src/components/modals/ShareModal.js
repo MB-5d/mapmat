@@ -188,9 +188,7 @@ const ShareModal = ({
   const visibleInviteRoleOptions = ROLE_OPTIONS.filter((option) => (
     option.value !== 'owner' && inviteRoleOptionValues.has(option.value)
   ));
-  const accessRequestRoleOptions = visibleInviteRoleOptions.length
-    ? visibleInviteRoleOptions
-    : ROLE_OPTIONS.filter((option) => option.value === 'viewer');
+  const accessRequestRoleOptions = ROLE_OPTIONS.filter((option) => option.value !== 'owner');
   const memberGrantRoleValues = new Set(visibleInviteRoleOptions.map((option) => option.value));
   if (canGrantOwner && inviteRoleOptionValues.has('owner')) {
     memberGrantRoleValues.add('owner');
@@ -263,6 +261,11 @@ const ShareModal = ({
   const hasValidShareEmail = hasValidShareEmailInput(shareEmails);
   const shareEmailSendDisabled = shareActionDisabled || !hasValidShareEmail;
   const shareEmailHasInvalidValue = Boolean(String(shareEmails || '').trim()) && !hasValidShareEmail;
+  const handleShareEmailSubmit = (event) => {
+    event.preventDefault();
+    if (shareEmailSendDisabled) return;
+    onSendEmail?.();
+  };
 
   const renderMembershipRow = (member) => {
     const isSelf = sameId(member.userId, currentUserId);
@@ -475,7 +478,7 @@ const ShareModal = ({
 
                 <div className="share-provider-divider"><span>or</span></div>
 
-                <div className="share-email-section">
+                <form className="share-email-section" onSubmit={handleShareEmailSubmit}>
                   <TextInput
                     type="text"
                     shellClassName="share-email-input"
@@ -489,13 +492,13 @@ const ShareModal = ({
                   />
                   <Button
                     className="share-email-btn"
+                    htmlType="submit"
                     startIcon={<Send size={14} />}
-                    onClick={onSendEmail}
                     disabled={shareEmailSendDisabled}
                   >
                     Send
                   </Button>
-                </div>
+                </form>
               </div>
             </>
           ) : null}
