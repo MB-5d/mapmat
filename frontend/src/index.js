@@ -7,6 +7,9 @@ import RootApp from './RootApp';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConsentProvider } from './contexts/ConsentContext';
 import reportWebVitals from './reportWebVitals';
+import { clearLegacyServiceWorkers } from './utils/legacyServiceWorkerCleanup';
+
+clearLegacyServiceWorkers();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
