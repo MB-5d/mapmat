@@ -13,13 +13,6 @@ export const createDefaultConsent = () => ({
   updatedAt: new Date().toISOString(),
 });
 
-export const createAcceptedResearchConsent = () => ({
-  necessary: true,
-  analytics: true,
-  experienceResearch: true,
-  marketing: false,
-});
-
 const normalizeConsent = (value) => ({
   necessary: true,
   analytics: value?.analytics === true,
@@ -28,22 +21,6 @@ const normalizeConsent = (value) => ({
   version: CONSENT_VERSION,
   updatedAt: typeof value?.updatedAt === 'string' ? value.updatedAt : new Date().toISOString(),
 });
-
-export const writeStoredConsent = (
-  nextConsent,
-  storage = typeof window !== 'undefined' ? window.localStorage : null
-) => {
-  const normalized = normalizeConsent({
-    ...nextConsent,
-    updatedAt: new Date().toISOString(),
-  });
-
-  if (!storage) return normalized;
-
-  storage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(normalized));
-  storage.removeItem(LEGACY_CONSENT_STORAGE_KEY);
-  return normalized;
-};
 
 export const readStoredConsent = (
   storage = typeof window !== 'undefined' ? window.localStorage : null
@@ -99,10 +76,14 @@ export function ConsentProvider({ children }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const persistConsent = useCallback((nextConsent) => {
-    let normalized = normalizeConsent(nextConsent);
+    const normalized = normalizeConsent({
+      ...nextConsent,
+      updatedAt: new Date().toISOString(),
+    });
 
     try {
-      normalized = writeStoredConsent(nextConsent);
+      window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(normalized));
+      window.localStorage.removeItem(LEGACY_CONSENT_STORAGE_KEY);
     } catch (error) {
       console.warn('Failed to save consent settings', error);
     }
@@ -112,7 +93,12 @@ export function ConsentProvider({ children }) {
     return normalized;
   }, []);
 
-  const acceptResearch = useCallback(() => persistConsent(createAcceptedResearchConsent()), [persistConsent]);
+  const acceptResearch = useCallback(() => persistConsent({
+    necessary: true,
+    analytics: true,
+    experienceResearch: true,
+    marketing: false,
+  }), [persistConsent]);
 
   const rejectOptional = useCallback(() => persistConsent({
     necessary: true,

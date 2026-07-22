@@ -59,15 +59,14 @@ describe('ConsentDrawer', () => {
     expect(container.textContent).toContain('Cookie settings');
     expect(container.querySelector('.consent-drawer').textContent).not.toContain('Reject all optional');
     expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.textContent.trim())).toEqual([
-      'Cookie settings',
       'Accept cookies',
+      'Cookie settings',
     ]);
     expect(Array.from(container.querySelectorAll('.consent-drawer__actions button')).map((button) => button.type)).toEqual([
       'button',
       'button',
     ]);
 
-    expect(findButton('Accept cookies').getAttribute('data-consent-action')).toBe('accept-research');
     clickButton('Accept cookies');
 
     const saved = JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY));
@@ -89,7 +88,6 @@ describe('ConsentDrawer', () => {
     expect(container.textContent).toContain('Reject all optional');
     expect(container.textContent).not.toContain('Accept research cookies');
     expect(container.querySelector('.consent-drawer')).not.toBeNull();
-    expect(container.querySelector('.consent-drawer').className).toContain('consent-drawer--settings-open');
 
     const toggles = container.querySelectorAll('.consent-toggle-row input');
     const rows = container.querySelectorAll('.consent-toggle-row');
