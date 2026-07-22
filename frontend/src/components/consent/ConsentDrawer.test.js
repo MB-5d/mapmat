@@ -91,6 +91,7 @@ describe('ConsentDrawer', () => {
     expect(container.textContent).toContain('Reject all optional');
     expect(container.textContent).not.toContain('Accept research cookies');
     expect(container.querySelector('.consent-drawer')).not.toBeNull();
+    expect(container.querySelector('.consent-drawer').className).toContain('consent-drawer--settings-open');
 
     const toggles = container.querySelectorAll('.consent-toggle-row input');
     expect(toggles[0].checked).toBe(true);

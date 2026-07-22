@@ -7,6 +7,7 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
   const t = translateText;
   const {
     needsConsent,
+    isSettingsOpen,
     acceptResearch,
     openSettings,
   } = useConsent();
@@ -18,7 +19,7 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
   if (!show || !needsConsent) return null;
 
   return (
-    <aside className="consent-drawer" aria-labelledby="consent-drawer-title">
+    <aside className={`consent-drawer${isSettingsOpen ? ' consent-drawer--settings-open' : ''}`} aria-labelledby="consent-drawer-title">
       <div className="consent-drawer__copy">
         <h2 id="consent-drawer-title">{t('Help us improve Vellic')}</h2>
         <p>

@@ -8237,7 +8237,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 2100;
+  z-index: 10020;
   pointer-events: auto;
   width: 100%;
   display: flex;
@@ -8253,6 +8253,10 @@ body {
   background: var(--modal-bg);
   box-shadow: var(--ui-overlay-shadow);
   animation: consentDrawerIn 0.18s ease-out;
+}
+
+.consent-drawer--settings-open {
+  z-index: 2100;
 }
 
 @keyframes consentDrawerIn {
