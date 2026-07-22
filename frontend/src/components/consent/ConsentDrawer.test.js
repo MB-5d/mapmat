@@ -68,6 +68,7 @@ describe('ConsentDrawer', () => {
     ]);
 
     const acceptButton = findButton('Accept cookies');
+    expect(acceptButton.getAttribute('data-consent-action')).toBe('accept-research');
     act(() => {
       acceptButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     });
@@ -94,6 +95,9 @@ describe('ConsentDrawer', () => {
     expect(container.querySelector('.consent-drawer').className).toContain('consent-drawer--settings-open');
 
     const toggles = container.querySelectorAll('.consent-toggle-row input');
+    const rows = container.querySelectorAll('.consent-toggle-row');
+    expect(rows[0].className).toContain('consent-toggle-row--locked-on');
+    expect(rows[3].className).toContain('consent-toggle-row--locked-off');
     expect(toggles[0].checked).toBe(true);
     expect(toggles[0].disabled).toBe(true);
     expect(toggles[1].checked).toBe(true);

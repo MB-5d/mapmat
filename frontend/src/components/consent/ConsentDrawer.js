@@ -1,6 +1,10 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 
-import { useConsent } from '../../contexts/ConsentContext';
+import {
+  createAcceptedResearchConsent,
+  useConsent,
+  writeStoredConsent,
+} from '../../contexts/ConsentContext';
 import Button from '../ui/Button';
 
 const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
@@ -11,12 +15,36 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
     acceptResearch,
     openSettings,
   } = useConsent();
+  const [acceptedLocally, setAcceptedLocally] = useState(false);
 
-  const handleAccept = useCallback(() => {
-    acceptResearch();
+  const handleAccept = useCallback((event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    let acceptedConsent = null;
+    try {
+      acceptedConsent = writeStoredConsent(createAcceptedResearchConsent());
+    } catch (error) {
+      acceptedConsent = null;
+    }
+
+    acceptedConsent = acceptResearch() || acceptedConsent;
+    setAcceptedLocally(true);
+
+    if (typeof document !== 'undefined') {
+      document
+        .querySelectorAll('.consent-drawer')
+        .forEach((drawer) => drawer.setAttribute('hidden', ''));
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('vellic:consent-updated', {
+        detail: acceptedConsent,
+      }));
+    }
   }, [acceptResearch]);
 
-  if (!show || !needsConsent) return null;
+  if (!show || !needsConsent || acceptedLocally) return null;
 
   return (
     <aside className={`consent-drawer${isSettingsOpen ? ' consent-drawer--settings-open' : ''}`} aria-labelledby="consent-drawer-title">
@@ -35,6 +63,8 @@ const ConsentDrawer = ({ show = true, translateText = (source) => source }) => {
           className="ui-btn ui-btn--type-primary ui-btn--style-brand ui-btn--sm"
           data-consent-action="accept-research"
           onPointerDownCapture={handleAccept}
+          onMouseDownCapture={handleAccept}
+          onTouchStartCapture={handleAccept}
           onClick={handleAccept}
         >
           <span className="ui-btn__content">{t('Accept cookies')}</span>

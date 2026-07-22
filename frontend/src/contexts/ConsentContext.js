@@ -13,6 +13,13 @@ export const createDefaultConsent = () => ({
   updatedAt: new Date().toISOString(),
 });
 
+export const createAcceptedResearchConsent = () => ({
+  necessary: true,
+  analytics: true,
+  experienceResearch: true,
+  marketing: false,
+});
+
 const normalizeConsent = (value) => ({
   necessary: true,
   analytics: value?.analytics === true,
@@ -21,6 +28,22 @@ const normalizeConsent = (value) => ({
   version: CONSENT_VERSION,
   updatedAt: typeof value?.updatedAt === 'string' ? value.updatedAt : new Date().toISOString(),
 });
+
+export const writeStoredConsent = (
+  nextConsent,
+  storage = typeof window !== 'undefined' ? window.localStorage : null
+) => {
+  const normalized = normalizeConsent({
+    ...nextConsent,
+    updatedAt: new Date().toISOString(),
+  });
+
+  if (!storage) return normalized;
+
+  storage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(normalized));
+  storage.removeItem(LEGACY_CONSENT_STORAGE_KEY);
+  return normalized;
+};
 
 export const readStoredConsent = (
   storage = typeof window !== 'undefined' ? window.localStorage : null
@@ -76,14 +99,10 @@ export function ConsentProvider({ children }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const persistConsent = useCallback((nextConsent) => {
-    const normalized = normalizeConsent({
-      ...nextConsent,
-      updatedAt: new Date().toISOString(),
-    });
+    let normalized = normalizeConsent(nextConsent);
 
     try {
-      window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(normalized));
-      window.localStorage.removeItem(LEGACY_CONSENT_STORAGE_KEY);
+      normalized = writeStoredConsent(nextConsent);
     } catch (error) {
       console.warn('Failed to save consent settings', error);
     }
@@ -93,12 +112,7 @@ export function ConsentProvider({ children }) {
     return normalized;
   }, []);
 
-  const acceptResearch = useCallback(() => persistConsent({
-    necessary: true,
-    analytics: true,
-    experienceResearch: true,
-    marketing: false,
-  }), [persistConsent]);
+  const acceptResearch = useCallback(() => persistConsent(createAcceptedResearchConsent()), [persistConsent]);
 
   const rejectOptional = useCallback(() => persistConsent({
     necessary: true,
@@ -122,13 +136,23 @@ export function ConsentProvider({ children }) {
         : null
     );
 
+    const acceptAndHideDrawers = () => {
+      const acceptedConsent = acceptResearch();
+      document
+        .querySelectorAll('.consent-drawer')
+        .forEach((drawer) => drawer.setAttribute('hidden', ''));
+      window.dispatchEvent(new CustomEvent('vellic:consent-updated', {
+        detail: acceptedConsent,
+      }));
+    };
+
     const handleNativeConsentAction = (event) => {
       const target = getConsentActionTarget(event);
       if (!target) return;
 
       const action = target.getAttribute('data-consent-action');
       if (action === 'accept-research') {
-        acceptResearch();
+        acceptAndHideDrawers();
       } else if (action === 'open-settings') {
         setIsSettingsOpen(true);
       } else if (action === 'reject-optional') {
@@ -140,14 +164,18 @@ export function ConsentProvider({ children }) {
     const handleNativeAcceptPointerDown = (event) => {
       const target = getConsentActionTarget(event);
       if (target?.getAttribute('data-consent-action') === 'accept-research') {
-        acceptResearch();
+        acceptAndHideDrawers();
       }
     };
 
     document.addEventListener('pointerdown', handleNativeAcceptPointerDown, true);
+    document.addEventListener('mousedown', handleNativeAcceptPointerDown, true);
+    document.addEventListener('touchstart', handleNativeAcceptPointerDown, true);
     document.addEventListener('click', handleNativeConsentAction, true);
     return () => {
       document.removeEventListener('pointerdown', handleNativeAcceptPointerDown, true);
+      document.removeEventListener('mousedown', handleNativeAcceptPointerDown, true);
+      document.removeEventListener('touchstart', handleNativeAcceptPointerDown, true);
       document.removeEventListener('click', handleNativeConsentAction, true);
     };
   }, [acceptResearch, rejectOptional]);

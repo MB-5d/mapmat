@@ -95,7 +95,7 @@ const ConsentSettingsModal = ({ translateText = (source) => source }) => {
     >
       <div className="consent-settings-modal__content">
         <ToggleSwitch
-          className="consent-toggle-row"
+          className="consent-toggle-row consent-toggle-row--locked-on"
           checked
           disabled
           label={t('Necessary storage')}
@@ -116,7 +116,7 @@ const ConsentSettingsModal = ({ translateText = (source) => source }) => {
           description={t('Optional. Helps us understand confusing flows, usability issues, and product bugs through session feedback tools. Not used for marketing or advertising.')}
         />
         <ToggleSwitch
-          className="consent-toggle-row"
+          className="consent-toggle-row consent-toggle-row--locked-off"
           checked={false}
           disabled
           label={t('Marketing')}
