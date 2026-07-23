@@ -217,7 +217,7 @@ describe('NodeCard', () => {
     expect(container.querySelector('.deferred-group-number')?.textContent).toBe('368');
     expect(container.querySelector('.deferred-group-count')?.textContent).toBe('more pages like this');
     expect(button?.classList.contains('ui-btn--type-secondary')).toBe(true);
-    expect(button?.querySelector('svg')).not.toBeNull();
+    expect(button?.querySelector('svg[data-icon="scan"]')).not.toBeNull();
     expect(container.querySelector('.page-number')).toBeNull();
     act(() => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(onCaptureDeferredGroup).toHaveBeenCalledTimes(1);

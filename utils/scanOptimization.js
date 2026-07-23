@@ -36,6 +36,10 @@ function getParentUrl(url) {
   const normalized = normalizeScanUrl(url);
   if (!normalized) return null;
   const parsed = new URL(normalized);
+  if (parsed.search) {
+    parsed.search = '';
+    return normalizeScanUrl(parsed.toString());
+  }
   const parts = getPathSegments(normalized);
   if (parts.length === 0) return null;
   if (parts.length === 1) return `${parsed.origin}/`;
@@ -103,9 +107,26 @@ function getRepetitiveGroupDescriptor(url) {
   if (!normalized) return null;
   const parsed = new URL(normalized);
   const segments = getPathSegments(normalized);
-  if (segments.length < 2) return null;
   const parentUrl = getParentUrl(normalized);
   if (!parentUrl) return null;
+  if (parsed.search) {
+    const queryTemplate = Array.from(parsed.searchParams.keys())
+      .sort()
+      .map((key) => `${key.toLowerCase()}=:${getLeafShape(parsed.searchParams.get(key))}`)
+      .join('&');
+    const routeTemplate = `${segments.join('/')}?${queryTemplate}`;
+    const key = `${parentUrl}|${routeTemplate}`;
+    const groupId = `deferred_${Buffer.from(key).toString('base64url').slice(0, 40)}`;
+    return {
+      groupId,
+      key,
+      parentUrl,
+      shape: 'query',
+      routeTemplate,
+      extension: null,
+    };
+  }
+  if (segments.length < 2) return null;
   const leaf = segments[segments.length - 1];
   const extensionMatch = leaf.match(/\.([a-z0-9]{1,8})$/i);
   const extension = extensionMatch ? extensionMatch[1].toLowerCase() : '';
@@ -168,6 +189,15 @@ function buildRepetitiveGroups(urls, {
 function buildPreservedNumberMap(urlEntries, startUrl) {
   const descriptor = createFocusedScanDescriptor(startUrl);
   const records = new Map();
+  const querySeed = new URL(descriptor.seed).search ? descriptor.seed : null;
+  const getNumberingParentUrl = (url) => {
+    if (querySeed && url === querySeed) {
+      const queryless = new URL(url);
+      queryless.search = '';
+      return getParentUrl(queryless.toString());
+    }
+    return getParentUrl(url);
+  };
   const addRecord = (rawUrl, order = Number.POSITIVE_INFINITY) => {
     const url = normalizeScanUrl(rawUrl);
     if (!url) return;
@@ -179,12 +209,12 @@ function buildPreservedNumberMap(urlEntries, startUrl) {
     } else if (Number.isFinite(order)) {
       current.order = Math.min(current.order, order);
     }
-    let parentUrl = getParentUrl(url);
+    let parentUrl = getNumberingParentUrl(url);
     while (parentUrl) {
       if (!records.has(parentUrl)) {
         records.set(parentUrl, { url: parentUrl, order: Number.POSITIVE_INFINITY });
       }
-      parentUrl = getParentUrl(parentUrl);
+      parentUrl = getNumberingParentUrl(parentUrl);
     }
   };
 
@@ -198,7 +228,7 @@ function buildPreservedNumberMap(urlEntries, startUrl) {
   const childrenByParent = new Map();
   records.forEach((record) => {
     if (record.url === descriptor.siteRootUrl) return;
-    const parentUrl = getParentUrl(record.url) || descriptor.siteRootUrl;
+    const parentUrl = getNumberingParentUrl(record.url) || descriptor.siteRootUrl;
     if (!childrenByParent.has(parentUrl)) childrenByParent.set(parentUrl, []);
     childrenByParent.get(parentUrl).push(record.url);
   });

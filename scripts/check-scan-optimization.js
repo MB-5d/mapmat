@@ -62,12 +62,13 @@ assert.notEqual(queryNumbers.get('https://example.com/blog/post-1?edition=gb'), 
 
 const blogUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/blog/post-${index + 1}`);
 const newsUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/news/story-${index + 1}`);
+const paginationUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/news?page=${index + 1}`);
 const datedUrls = Array.from(
   { length: 20 },
   (_, index) => `https://example.com/archive/2026/${String((index % 12) + 1).padStart(2, '0')}/entry-${index + 1}`
 );
-const groups = buildRepetitiveGroups([...blogUrls, blogUrls[0], ...newsUrls, ...datedUrls]);
-assert.equal(groups.length, 3);
+const groups = buildRepetitiveGroups([...blogUrls, blogUrls[0], ...newsUrls, ...datedUrls, ...paginationUrls]);
+assert.equal(groups.length, 4);
 assert.equal(groups[0].capturedEntries.length, 10);
 assert.equal(groups[0].deferredEntries.length, 10);
 assert.equal(groups[1].capturedEntries.length, 10);
@@ -76,6 +77,9 @@ assert.equal(groups[0].parentUrl, 'https://example.com/blog');
 assert.equal(groups[1].parentUrl, 'https://example.com/news');
 assert.equal(groups[2].parentUrl, 'https://example.com/archive');
 assert.equal(groups[2].routeTemplate, 'archive/:number/:number/:mixed');
+assert.equal(groups[3].parentUrl, 'https://example.com/news');
+assert.equal(groups[3].shape, 'query');
+assert.equal(groups[3].routeTemplate, 'news?page=:number');
 
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:article', 'schema:article']), true);
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:jobposting', 'element:product']), false);

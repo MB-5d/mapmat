@@ -221,4 +221,21 @@ assert.strictEqual(
   'focused ghost ancestors must not make a failed one-page scan look valid'
 );
 
+const focusedChallengeResult = {
+  ...focusedDiscoveryFailure,
+  scanScope: {
+    focused: true,
+  },
+  scanDiagnostics: {
+    capturedTreeNodeCount: 1,
+    rootClassification: 'scan_limited',
+    rootStatus: 403,
+  },
+};
+assert.strictEqual(
+  getInvalidScanResultReason(focusedChallengeResult),
+  null,
+  'focused challenge pages should complete as limited maps so the real issue remains visible'
+);
+
 console.log('[scan-result-quality] Passed.');

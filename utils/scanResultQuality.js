@@ -80,6 +80,11 @@ function getInvalidScanResultReason(result) {
   if (!result?.root) return 'no_root';
   const rootTreeNodeCount = getCapturedTreeNodeCount(result);
   if (rootTreeNodeCount > 1) return null;
+  const isUsableFocusedChallenge = result?.scanScope?.focused === true
+    && result?.partialReason === 'root_discovery_failed'
+    && result?.scanDiagnostics?.rootClassification === 'scan_limited'
+    && toNonNegativeInteger(result?.scanDiagnostics?.rootStatus) >= 400;
+  if (isUsableFocusedChallenge) return null;
   if (ROOT_ONLY_DEGRADED_PARTIAL_REASONS.has(result.partialReason)) return result.partialReason;
   if (result.partialReason === 'stopped_by_user') return 'stopped_before_valid_partial';
   return null;

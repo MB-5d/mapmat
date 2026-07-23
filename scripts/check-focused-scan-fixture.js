@@ -32,6 +32,9 @@ function createFixtureServer() {
         `${origin}/blogger`,
         `${origin}/blog`,
         ...Array.from({ length: 20 }, (_, index) => `${origin}/blog/post-${index + 1}`),
+        `${origin}/section/science`,
+        `${origin}/section/science/space`,
+        ...Array.from({ length: 20 }, (_, index) => `${origin}/section/science/space?page=${index + 1}`),
       ];
       res.writeHead(200, { 'content-type': 'application/xml' });
       res.end(`<urlset>${urls.map((entry) => `<url><loc>${entry}</loc></url>`).join('')}</urlset>`);
@@ -70,6 +73,23 @@ function createFixtureServer() {
       res.end('<html><head><title>Story comments</title></head><body><h1>Comments</h1></body></html>');
       return;
     }
+    if (url.pathname === '/section/science/space') {
+      const page = Math.max(1, Number(url.searchParams.get('page') || 1) || 1);
+      const links = page === 1
+        ? Array.from(
+          { length: 20 },
+          (_, index) => `<a href="/section/science/space?page=${index + 1}">Page ${index + 1}</a>`
+        ).join('')
+        : '';
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Space page ${page}</title></head><body><h1>Space page ${page}</h1>${links}</body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/science') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Science</title></head><body><h1>Science</h1></body></html>');
+      return;
+    }
     if (url.pathname === '/' || url.pathname === '/about' || url.pathname === '/blogger') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname === '/' ? 'Home' : url.pathname.slice(1)}</title></head><body><h1>Page</h1></body></html>`);
@@ -100,7 +120,15 @@ async function waitForJob(jobId, accessToken, authToken) {
     const response = await fetchJson(`${API_BASE}/scan-jobs/${jobId}?access_token=${accessToken}`, {
       headers: authToken ? { authorization: `Bearer ${authToken}` } : {},
     });
-    if (response.job?.status === 'complete') return response.job.result;
+    if (response.job?.status === 'complete') {
+      assert.ok(Number(response.job.progress?.sequence || 0) > 0, 'completed jobs should persist sequenced progress');
+      assert.equal(response.job.progress?.final, true, 'completed jobs should persist their final progress snapshot');
+      assert.ok(
+        Number(response.job.progress?.discovered || 0) >= Number(response.job.progress?.mapped || 0),
+        'discovered progress should not trail mapped progress'
+      );
+      return response.job.result;
+    }
     if (response.job?.status === 'failed') throw new Error(response.job.error || 'Scan failed');
     await sleep(500);
   }
@@ -264,6 +292,42 @@ async function main() {
     assert.ok(
       issueNodes.some((node) => node.url === `${fixtureOrigin}/archive/story/comments`),
       'descendants should remain in the focused result'
+    );
+
+    const paginationResult = await createScan({
+      url: `${fixtureOrigin}/section/science/space`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const paginationNodes = flattenTree(paginationResult.root);
+    const paginationTarget = paginationNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/science/space`
+    );
+    const paginationPlaceholder = paginationNodes.find((node) => node.nodeKind === 'deferred-group');
+    const capturedPaginationChildren = paginationTarget.children.filter(
+      (node) => node.nodeKind !== 'deferred-group'
+    );
+    assert.equal(paginationTarget.nodeKind, undefined);
+    assert.equal(paginationPlaceholder.parentUrl, paginationTarget.url);
+    assert.equal(paginationPlaceholder.remainingCount, 10);
+    assert.equal(capturedPaginationChildren.length, 10);
+    assert.deepEqual(
+      capturedPaginationChildren.map((node) => Number(new URL(node.url).searchParams.get('page'))),
+      Array.from({ length: 10 }, (_, index) => index + 1),
+      'pagination children should render in natural page-number order'
+    );
+    capturedPaginationChildren.forEach((node) => {
+      assert.equal(node.parentUrl, paginationTarget.url);
+      assert.equal(
+        node.scanNumber.split('.').length,
+        paginationTarget.scanNumber.split('.').length + 1,
+        'query pagination should keep the focused page level in its number'
+      );
+    });
+    assert.equal(
+      paginationResult.pageCountSummary.totalDiscoveredPageCount,
+      21,
+      'focused pagination should retain captured and deferred page totals'
     );
     console.log('[focused-scan-fixture] Passed.');
   } finally {

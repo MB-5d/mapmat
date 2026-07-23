@@ -78,7 +78,6 @@ import {
   DEFAULT_CONNECTION_COLORS,
   getDepthColor,
   ACCESS_LEVELS,
-  SCAN_MESSAGES,
   REPORT_TYPE_OPTIONS,
   ANNOTATION_STATUS_OPTIONS,
   LAYOUT,
@@ -169,6 +168,7 @@ import {
   shouldPreserveExistingMapForCollapsedScan,
   shouldRejectFreshRootOnlyScan,
 } from './utils/scanCompletion';
+import { createEmptyScanProgress, reconcileScanProgress } from './utils/scanProgress';
 import {
   clearAnalyticsUser,
   identifyAnalyticsUser,
@@ -1809,6 +1809,7 @@ const normalizePersistedScanMeta = (scanMeta = null) => {
     ? {
       capturedPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.capturedPageCount || 0) || 0)),
       deferredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.deferredPageCount || 0) || 0)),
+      estimatedRemainingPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.estimatedRemainingPageCount || 0) || 0)),
       totalDiscoveredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.totalDiscoveredPageCount || 0) || 0)),
     }
     : null;
@@ -3377,7 +3378,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [currentRoute]);
   const [scanMessage, setScanMessage] = useState('');
   const [scanElapsed, setScanElapsed] = useState(0);
-  const [scanProgress, setScanProgress] = useState({ scanned: 0, mapped: 0, queued: 0 });
+  const [scanProgress, setScanProgress] = useState(createEmptyScanProgress);
   const [scanLimitProgressNote, setScanLimitProgressNote] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
@@ -3693,7 +3694,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handledScanIntentKeyRef = useRef('');
   const scanRef = useRef(null);
   const scanTimerRef = useRef(null);
-  const messageTimerRef = useRef(null);
   const contentRef = useRef(null);
   const contentShellRef = useRef(null);
   const layoutRef = useRef(null);
@@ -4590,7 +4590,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     return () => {
       if (scanTimerRef.current) clearInterval(scanTimerRef.current);
-      if (messageTimerRef.current) clearInterval(messageTimerRef.current);
       if (eventSourceRef.current) eventSourceRef.current.close();
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
       if (thumbnailAutosaveTimerRef.current) clearTimeout(thumbnailAutosaveTimerRef.current);
@@ -12900,26 +12899,18 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const startScanTimers = () => {
     setScanElapsed(0);
-    setScanMessage(SCAN_MESSAGES[0]);
+    setScanMessage('Starting scan...');
     let elapsed = 0;
-    let msgIndex = 0;
 
     scanTimerRef.current = setInterval(() => {
       elapsed += 1;
       setScanElapsed(elapsed);
     }, 1000);
-
-    messageTimerRef.current = setInterval(() => {
-      msgIndex = (msgIndex + 1) % SCAN_MESSAGES.length;
-      setScanMessage(SCAN_MESSAGES[msgIndex]);
-    }, 3000);
   };
 
   const stopScanTimers = () => {
     if (scanTimerRef.current) clearInterval(scanTimerRef.current);
-    if (messageTimerRef.current) clearInterval(messageTimerRef.current);
     scanTimerRef.current = null;
-    messageTimerRef.current = null;
   };
 
   const closeScanStream = () => {
@@ -12939,7 +12930,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowStopConfirm(false);
     setIsStoppingScan(false);
     if (clearProgress) {
-      setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+      setScanProgress(createEmptyScanProgress());
     }
     setScanLimitProgressNote('');
     if (clearError) {
@@ -12956,14 +12947,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowCancelConfirm(false);
     setShowStopConfirm(false);
     setIsStoppingScan(false);
-    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+    setScanProgress(createEmptyScanProgress());
     setScanLimitProgressNote('');
     setScanErrorMessage(message || 'Scan failed');
   };
 
   const dismissScanError = () => {
     setScanErrorMessage('');
-    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+    setScanProgress(createEmptyScanProgress());
   };
 
   const requestCancelScan = () => {
@@ -13181,7 +13172,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setLastHistoryId(null);
     setLastScanUrl('');
     setLoading(true);
-    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+    setScanProgress(createEmptyScanProgress());
     startScanTimers();
     trackEvent('scan_started', {
       authenticated_pages: AUTHENTICATED_SCAN_ENABLED && scanOptions.authenticatedPages ? 'true' : 'false',
@@ -13266,6 +13257,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     const handleCompletedJob = (job) => {
       if (streamHandled) return;
       if (ignoredScanJobIdsRef.current.has(jobId)) return;
+      if (job?.progress) {
+        setScanProgress((current) => reconcileScanProgress(current, job.progress));
+      }
 
       if (job?.status === 'failed') {
         streamHandled = true;
@@ -13506,7 +13500,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         const job = JSON.parse(e.data);
         streamErrorCount = 0;
         if (job?.progress) {
-          setScanProgress(job.progress);
+          setScanProgress((current) => reconcileScanProgress(current, job.progress));
         }
         if (job?.status === 'stopping') {
           setIsStoppingScan(true);
@@ -13574,7 +13568,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         if (job) {
           streamErrorCount = 0;
-          if (job.progress) setScanProgress(job.progress);
+          if (job.progress) {
+            setScanProgress((current) => reconcileScanProgress(current, job.progress));
+          }
           if (job.status === 'stopping') {
             setIsStoppingScan(true);
           }
@@ -13679,6 +13675,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           pageCountSummary: {
             capturedPageCount: Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0) + applied.capturedCount,
             deferredPageCount: Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0) - applied.capturedCount,
+            estimatedRemainingPageCount: Math.max(
+              0,
+              Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0) - applied.capturedCount
+            ),
             totalDiscoveredPageCount: Math.max(
               Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0),
               Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)

@@ -95,10 +95,20 @@ async function runCheck() {
   const root = result.root;
   const rootChildren = root?.children?.length || 0;
   const totalNodes = countTree(root);
+  const discoveredTotal = Number(result.pageCountSummary?.totalDiscoveredPageCount || 0);
+  const manifestTotal = Number(result.discoveryManifest?.totalDiscoveredPageCount || 0);
 
   if (rootChildren < MIN_ROOT_CHILDREN || totalNodes < MIN_TOTAL_NODES) {
     throw new Error(
       `Scan job tree collapsed: rootChildren=${rootChildren}, totalNodes=${totalNodes}, url=${SCAN_URL}`
+    );
+  }
+  if (!Number(job.progress?.sequence || 0) || job.progress?.final !== true) {
+    throw new Error('Completed scan did not preserve its final sequenced progress snapshot');
+  }
+  if (discoveredTotal < manifestTotal) {
+    throw new Error(
+      `Page count summary lost discovered pages: summary=${discoveredTotal}, manifest=${manifestTotal}`
     );
   }
 

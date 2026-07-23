@@ -10,7 +10,6 @@ import {
   Lock,
   Maximize2,
   Scan,
-  Search,
 } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import NodeActionBar from './NodeActionBar';
@@ -455,12 +454,7 @@ const NodeCard = ({
             type="secondary"
             htmlType="button"
             size="md"
-            startIcon={(
-              <span className="scan-search-icon" aria-hidden="true">
-                <Scan className="scan-search-icon-frame" />
-                <Search className="scan-search-icon-lens" />
-              </span>
-            )}
+            startIcon={<Scan data-icon="scan" aria-hidden="true" />}
             loading={deferredCaptureLoading}
             disabled={deferredCaptureLoading || !onCaptureDeferredGroup}
             onClick={(event) => {

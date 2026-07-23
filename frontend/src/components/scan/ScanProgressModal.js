@@ -64,11 +64,21 @@ const ScanProgressModal = ({
   const queuedCount = Math.max(0, Number(scanProgress.queued || 0) || 0);
   const primaryCount = mappedCount === null ? scannedCount : mappedCount;
   const primaryLabel = mappedCount === null ? 'Scanned' : 'Captured';
-  const hasQueue = queuedCount > 0;
-  const pageTotal = Math.max(primaryCount, primaryCount + queuedCount);
+  const discoveredCount = Math.max(0, Number(scanProgress.discovered || 0) || 0);
+  const pageTotal = Math.max(
+    primaryCount,
+    primaryCount + queuedCount,
+    discoveredCount
+  );
+  const remainingCount = Math.max(0, pageTotal - primaryCount);
+  const hasRemaining = remainingCount > 0;
   const pagePercent = pageTotal > 0 ? Math.min(100, Math.round((primaryCount / pageTotal) * 100)) : 0;
   const elapsedSeconds = Math.max(0, Math.floor(Number(scanElapsed || 0) || 0));
-  const estimatedTotalSeconds = getTimeEstimateSeconds({ elapsedSeconds, scannedCount, queuedCount });
+  const estimatedTotalSeconds = getTimeEstimateSeconds({
+    elapsedSeconds,
+    scannedCount,
+    queuedCount: remainingCount,
+  });
   const timePercent = estimatedTotalSeconds > 0
     ? Math.min(100, Math.max(0, (elapsedSeconds / estimatedTotalSeconds) * 100))
     : 0;
@@ -83,9 +93,14 @@ const ScanProgressModal = ({
     0,
     Number(scanProgress.totalFindings || findingItems.reduce((sum, item) => sum + item.count, 0)) || 0
   );
+  const phaseMessage = {
+    discovering: 'Finding pages...',
+    scanning: 'Capturing pages...',
+    finalizing: 'Preparing your map...',
+  }[scanProgress.phase];
   const displayMessage = isStoppingScan
     ? 'Stopping scan and preparing current results...'
-    : scanMessage;
+    : (phaseMessage || scanMessage);
 
   let body = null;
   let footer = null;
@@ -141,10 +156,10 @@ const ScanProgressModal = ({
                 style={{ width: `${pagePercent}%` }}
               />
             </div>
-            {hasQueue ? (
+            {hasRemaining ? (
               <div className="scan-queue-note">
-                <span>{formatCount(queuedCount)}</span>
-                <span>in queue</span>
+                <span>{formatCount(remainingCount)}</span>
+                <span>remaining</span>
               </div>
             ) : null}
           </div>

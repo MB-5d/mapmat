@@ -3439,6 +3439,10 @@ function getCanonicalKey(urlStr) {
 
 function getParentUrl(urlStr) {
   const u = new URL(urlStr);
+  if (u.search) {
+    u.search = '';
+    return normalizeUrl(u.toString());
+  }
   if (u.pathname === '/' || u.pathname === '') return null;
 
   const parts = u.pathname.split('/').filter(Boolean);
@@ -4572,6 +4576,21 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const queue = [];
   const queued = new Set();
   let queueIndex = 0;
+  let lastDiscoveryProgressAt = 0;
+  const reportDiscoveryProgress = (force = false) => {
+    if (!onProgress) return;
+    const now = Date.now();
+    if (!force && now - lastDiscoveryProgressAt < 250) return;
+    lastDiscoveryProgressAt = now;
+    const queuedCount = Math.max(0, queue.length - queueIndex);
+    onProgress({
+      scanned: visited.size,
+      mapped: 0,
+      queued: queuedCount,
+      discovered: Math.max(scopedDiscoveredUrls.size, visited.size + queuedCount),
+      phase: 'discovering',
+    });
+  };
   const filesByUrl = new Map();
   const crawlBrowserContextsByHost = new Map();
   const addFileArtifact = (url, sourceUrl = null, contentType = null, detectedInfo = null) => {
@@ -4611,6 +4630,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (source === 'sitemap' || source === 'robots_sitemap') scanDiagnostics.sitemapUrlsQueued += 1;
     if (source === 'robots_sitemap') scanDiagnostics.robotsSitemapUrlsQueued += 1;
     if (source === 'rendered') scanDiagnostics.renderedLinksQueued += 1;
+    reportDiscoveryProgress();
   };
   enqueue(seed, 0);
   recordDiscovery(seed, 'crawl');
@@ -4834,6 +4854,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       await processSitemap(`${origin}${altSitemap}`);
     }
   }
+  reportDiscoveryProgress(true);
 
   // url -> { url, title, parentUrl }
   const pageMap = new Map();
@@ -4914,10 +4935,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       totalFindings: Object.values(findings).reduce((sum, value) => sum + (Number(value) || 0), 0),
     };
   };
-  const getScanProgressSnapshot = ({ final = false } = {}) => ({
+  const getScanProgressSnapshot = ({ final = false, phase = null } = {}) => ({
     scanned: visited.size,
     mapped: pageMap.size,
     queued: Math.max(0, queue.length - queueIndex),
+    discovered: Math.max(
+      scopedDiscoveredUrls.size,
+      visited.size + Math.max(0, queue.length - queueIndex),
+      pageMap.size
+    ),
+    phase: phase || (final ? 'finalizing' : 'scanning'),
     ...(final && finalProgressSummary ? finalProgressSummary : getProgressSummary()),
     ...(final ? { final: true } : {}),
   });
@@ -5424,6 +5451,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     };
   };
 
+  reportScanProgress({ phase: 'finalizing' });
+
   if (scanScope.focused && !targetedGroupCapture && !stopRequested) {
     const ancestorUrls = getFocusedAncestorUrls(seed)
       .map((url) => normalizeUrl(url))
@@ -5928,6 +5957,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (a._treeSize !== b._treeSize) return b._treeSize - a._treeSize;
     return compareAlpha(a, b);
   };
+  const compareScanNumbers = (a, b) => {
+    const left = String(a?.scanNumber || '').split('.').map(Number);
+    const right = String(b?.scanNumber || '').split('.').map(Number);
+    if (!left.length || !right.length || left.some(Number.isNaN) || right.some(Number.isNaN)) return 0;
+    const length = Math.max(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const difference = (left[index] ?? -1) - (right[index] ?? -1);
+      if (difference !== 0) return difference;
+    }
+    return 0;
+  };
 
   const computeStats = (node) => {
     if (!node) return { depth: 0, size: 0 };
@@ -5953,6 +5993,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     node.children.sort((a, b) => {
       if (a?.nodeKind === 'deferred-group' && b?.nodeKind !== 'deferred-group') return 1;
       if (a?.nodeKind !== 'deferred-group' && b?.nodeKind === 'deferred-group') return -1;
+      const scanNumberDifference = compareScanNumbers(a, b);
+      if (scanNumberDifference !== 0) return scanNumberDifference;
       const sa = getSitemapIndex(a);
       const sb = getSitemapIndex(b);
       if (sa !== undefined && sb !== undefined && sa !== sb) return sa - sb;
@@ -6315,10 +6357,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     (sum, group) => sum + group.deferredCount,
     0
   );
+  const totalDiscoveredPageCount = Math.max(
+    pageMap.size + repetitiveDeferredPageCount,
+    Number(discoveryManifest?.totalDiscoveredPageCount || 0) || 0
+  );
   const pageCountSummary = {
     capturedPageCount: pageMap.size,
     deferredPageCount: repetitiveDeferredPageCount,
-    totalDiscoveredPageCount: pageMap.size + repetitiveDeferredPageCount,
+    estimatedRemainingPageCount: Math.max(0, totalDiscoveredPageCount - pageMap.size),
+    totalDiscoveredPageCount,
   };
   const captureSummary = targetedGroupCapture
     ? (() => {
@@ -6989,6 +7036,8 @@ async function processJob(job) {
         lastScanned: 0,
         lastMapped: 0,
         lastProgress: null,
+        sequence: 0,
+        writePromise: Promise.resolve(),
       };
       const readJobStatus = createJobStatusReader(jobId);
       const authSessionStorageState = payload.options?.authSessionId
@@ -7002,21 +7051,27 @@ async function processJob(job) {
         throw new Error('Authenticated scan session expired before the scan started');
       }
       const progressCb = (progress) => {
-        progressState.lastProgress = progress;
+        const nextProgress = {
+          ...progress,
+          sequence: ++progressState.sequence,
+        };
+        progressState.lastProgress = nextProgress;
         const now = Date.now();
-        const scanned = Math.max(0, Number(progress.scanned || 0) || 0);
-        const mapped = Math.max(0, Number(progress.mapped || 0) || 0);
+        const scanned = Math.max(0, Number(nextProgress.scanned || 0) || 0);
+        const mapped = Math.max(0, Number(nextProgress.mapped || 0) || 0);
         const mappedChanged = mapped !== progressState.lastMapped;
-        const forceUpdate = progress?.final === true;
+        const forceUpdate = nextProgress?.final === true;
         if (!forceUpdate && scanned - progressState.lastScanned < 5 && !mappedChanged && now - progressState.lastUpdate < 500) {
           return;
         }
         progressState.lastUpdate = now;
         progressState.lastScanned = scanned;
         progressState.lastMapped = mapped;
-        updateJobProgress(jobId, progress).catch((err) => {
-          console.error('Job progress update error:', err);
-        });
+        progressState.writePromise = progressState.writePromise
+          .then(() => updateJobProgress(jobId, nextProgress))
+          .catch((err) => {
+            console.error('Job progress update error:', err);
+          });
       };
 
       const result = await crawlSite(
@@ -7034,6 +7089,7 @@ async function processJob(job) {
 
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
 
+      await progressState.writePromise;
       if (progressState.lastProgress) {
         await updateJobProgress(jobId, progressState.lastProgress);
       }

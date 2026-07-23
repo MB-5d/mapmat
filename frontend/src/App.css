@@ -4323,15 +4323,16 @@ body {
 .deferred-group-message {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
-  margin: auto 0;
+  margin: 0;
 }
 
 .deferred-group-number {
   color: var(--ui-color-text);
-  font-size: var(--type-title-lg-size);
-  line-height: var(--type-title-lg-line-height);
-  font-weight: var(--type-weight-bold);
+  font-size: var(--type-heading-lg-size);
+  line-height: var(--type-heading-lg-line-height);
+  font-weight: 800;
   letter-spacing: 0;
 }
 
@@ -4345,32 +4346,6 @@ body {
 .deferred-group-capture.ui-btn {
   width: 100%;
   margin-top: auto;
-}
-
-.scan-search-icon {
-  position: relative;
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-}
-
-.scan-search-icon-frame,
-.scan-search-icon-lens {
-  position: absolute;
-  stroke-width: 2;
-}
-
-.scan-search-icon-frame {
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.scan-search-icon-lens {
-  right: -1px;
-  bottom: -1px;
-  width: 62%;
-  height: 62%;
 }
 
 .import-structural-label {

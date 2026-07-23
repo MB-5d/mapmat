@@ -286,9 +286,22 @@ async function runCheck() {
   });
 
   await withFixture('access-denied', async (base) => {
-    const deniedJob = await scanExpectingFailure(`${base}/access-denied`);
-    assert.strictEqual(deniedJob.status, 'failed', 'blocked root should fail instead of creating a one-node map');
-    assert(/No map was created/.test(deniedJob.error || ''), 'blocked root failure should explain that no map was created');
+    const deniedResult = await scan(`${base}/access-denied`);
+    assert.strictEqual(
+      deniedResult.partialReason,
+      'root_discovery_failed',
+      'focused blocked pages should keep the limited-result reason'
+    );
+    assert.strictEqual(
+      deniedResult.scanDiagnostics?.rootClassification,
+      'scan_limited',
+      'focused blocked pages should preserve the challenge classification'
+    );
+    assert.strictEqual(
+      deniedResult.root?.nodeKind,
+      'focus-ghost',
+      'focused blocked pages should retain ghost ancestor context'
+    );
   });
   console.log('scan collapse fixture ok');
 }
