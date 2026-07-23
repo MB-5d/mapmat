@@ -201,7 +201,7 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-finding-dot--brokenLinks')?.className).toContain('ui-tone--red');
   });
 
-  test('uses fallback estimate buckets when total time is not known', () => {
+  test('does not invent an estimate before enough progress is known', () => {
     act(() => {
       root.render(
         <ScanProgressModal
@@ -213,7 +213,7 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('0:34');
-    expect(container.textContent).toContain('1:00');
+    expect(container.querySelector('.scan-time-total').textContent).toBe('0:34');
 
     act(() => {
       root.render(
@@ -226,7 +226,36 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('1:34');
-    expect(container.textContent).toContain('5:00');
+    expect(container.querySelector('.scan-time-total').textContent).toBe('1:34');
+  });
+
+  test('shows an unknown estimate until pages begin completing', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanElapsed={18}
+          scanProgress={{ scanned: 0, mapped: 0, queued: 1, discovered: 1 }}
+        />
+      );
+    });
+
+    expect(container.querySelector('.scan-time-total').textContent).toBe('--');
+    expect(container.querySelector('.scan-time-chart').getAttribute('aria-label')).toContain('still being estimated');
+  });
+
+  test('uses completed pages and remaining work for a real estimate', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanElapsed={20}
+          scanProgress={{ scanned: 4, mapped: 4, queued: 6, discovered: 10 }}
+        />
+      );
+    });
+
+    expect(container.querySelector('.scan-time-total').textContent).toBe('0:50');
   });
 
   test('shows the existing cancel confirmation flow', () => {

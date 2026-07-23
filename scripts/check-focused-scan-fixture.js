@@ -73,6 +73,25 @@ function createFixtureServer() {
       res.end('<html><head><title>Story comments</title></head><body><h1>Comments</h1></body></html>');
       return;
     }
+    if (url.pathname === '/browser-only' || url.pathname === '/browser-only/page') {
+      const isBasicScanner = String(req.headers['user-agent'] || '').includes('VellicBot');
+      if (isBasicScanner) {
+        res.writeHead(503, { 'content-type': 'text/html' });
+        res.end('<html><head><title>Unavailable</title></head><body>Unavailable</body></html>');
+        return;
+      }
+      const childLink = url.pathname === '/browser-only'
+        ? '<a href="/browser-only/page">Browser page</a>'
+        : '';
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Browser section</title></head><body><h1>Browser section</h1>${childLink}</body></html>`);
+      return;
+    }
+    if (url.pathname === '/blocked-focus') {
+      res.writeHead(403, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Access denied</title></head><body>Access denied</body></html>');
+      return;
+    }
     if (url.pathname === '/section/science/space') {
       const page = Math.max(1, Number(url.searchParams.get('page') || 1) || 1);
       const links = page === 1
@@ -293,6 +312,38 @@ async function main() {
       issueNodes.some((node) => node.url === `${fixtureOrigin}/archive/story/comments`),
       'descendants should remain in the focused result'
     );
+
+    const browserResult = await createScan({
+      url: `${fixtureOrigin}/browser-only`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const browserNodes = flattenTree(browserResult.root);
+    const browserTarget = browserNodes.find((node) => node.url === `${fixtureOrigin}/browser-only`);
+    assert.equal(browserTarget?.title, 'Browser section');
+    assert.equal(browserTarget?.httpStatus, 200);
+    assert.notEqual(browserTarget?.scanStatus, 'inactive');
+    assert.ok(
+      Number(browserResult.scanDiagnostics?.browserFetchPreferredCount || 0) > 0,
+      'focused scans should use the browser fetch path before labeling a page inactive'
+    );
+    assert.ok(
+      browserNodes.some((node) => node.url === `${fixtureOrigin}/browser-only/page`),
+      'browser-fetched focused pages should still discover child pages'
+    );
+
+    const blockedResult = await createScan({
+      url: `${fixtureOrigin}/blocked-focus`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const blockedNodes = flattenTree(blockedResult.root);
+    const blockedTarget = blockedNodes.find((node) => node.url === `${fixtureOrigin}/blocked-focus`);
+    assert.equal(blockedTarget?.httpStatus, 403);
+    assert.equal(blockedTarget?.scanStatus, 'scan_limited');
+    assert.equal(blockedResult.partialReason, 'root_discovery_failed');
+    assert.equal(blockedResult.scanDiagnostics?.sitemapSkippedForBlockedFocusedRoot, true);
+    assert.equal(blockedResult.scanDiagnostics?.sitemapUrlsFound, 0);
 
     const paginationResult = await createScan({
       url: `${fixtureOrigin}/section/science/space`,

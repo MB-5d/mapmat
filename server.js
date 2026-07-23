@@ -3874,10 +3874,10 @@ function extractThumbnailUrl(html, baseUrl) {
   }
 }
 
-async function fetchPage(url, extraHeaders = {}) {
+async function fetchPage(url, extraHeaders = {}, timeoutMs = 20000) {
   const startedAt = Date.now();
   const res = await axios.get(url, {
-    timeout: 20000,
+    timeout: timeoutMs,
     maxRedirects: 5,
     maxContentLength: SCAN_HTML_RESPONSE_MAX_BYTES,
     maxBodyLength: SCAN_HTML_RESPONSE_MAX_BYTES,
@@ -3930,6 +3930,27 @@ async function fetchPageWithBrowserContext(context, url) {
   } finally {
     if (page) await page.close().catch(() => {});
   }
+}
+
+async function fetchPageWithBrowserRequestContext(context, url) {
+  const startedAt = Date.now();
+  const response = await context.request.get(url, {
+    timeout: 10000,
+    maxRedirects: 5,
+  });
+  const html = await response.text();
+  if (Buffer.byteLength(String(html || ''), 'utf8') > SCAN_HTML_RESPONSE_MAX_BYTES) {
+    throw new Error('Scan page response too large');
+  }
+  const headers = response.headers();
+  return {
+    html,
+    status: response.status(),
+    contentType: headers['content-type'] || 'text/html',
+    headers,
+    finalUrl: normalizeUrl(response.url() || url),
+    responseTime: Date.now() - startedAt,
+  };
 }
 
 function isHtmlContentType(contentType) {
@@ -4409,6 +4430,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     sitemapUrlsQueued: 0,
     robotsSitemapUrlsFound: 0,
     robotsSitemapUrlsQueued: 0,
+    sitemapSkippedForBlockedFocusedRoot: false,
     sitemapFetchFailures: 0,
     robotsFetchFailed: false,
     discoveryErrors: [],
@@ -4430,6 +4452,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     cloudflareBrowserRetryCount: 0,
     cloudflareBrowserRetrySuccessCount: 0,
     cloudflareBrowserRetryFailedCount: 0,
+    browserFetchPreferredCount: 0,
+    browserFetchFallbackCount: 0,
+    browserFetchFallbackSuccessCount: 0,
+    browserFetchFallbackFailedCount: 0,
     failedFetches: 0,
     errorCount: 0,
     authCount: 0,
@@ -4593,6 +4619,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
   const filesByUrl = new Map();
   const crawlBrowserContextsByHost = new Map();
+  const browserPreferredHosts = new Set();
   const addFileArtifact = (url, sourceUrl = null, contentType = null, detectedInfo = null) => {
     const normalized = normalizeUrl(url);
     if (!normalized) return;
@@ -4641,6 +4668,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   }
   const sitemapOrder = new Map();
+  const sitemapNumberingOrder = new Map();
   let discoveryCounter = 0;
 
   // Common page paths to try (often not linked from main pages)
@@ -4696,6 +4724,77 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     )
   );
 
+  const fetchCrawlPage = async (url, source = 'crawl') => {
+    if (authContext) {
+      return {
+        ...(await fetchPageWithBrowserContext(authContext, url)),
+        usedBrowser: true,
+      };
+    }
+
+    const host = normalizeHost(new URL(url).hostname);
+    const focusedSeedBrowserFetch = scanScope.focused && url === seed;
+    const preferBrowser = browserPreferredHosts.has(host) || focusedSeedBrowserFetch;
+    let browserAttempted = false;
+
+    if (preferBrowser && source !== 'common_path') {
+      browserAttempted = true;
+      scanDiagnostics.browserFetchPreferredCount += 1;
+      try {
+        const context = await getCrawlBrowserContext(url);
+        const response = await fetchPageWithBrowserContext(context, url);
+        if (!focusedSeedBrowserFetch) browserPreferredHosts.add(host);
+        return { ...response, usedBrowser: true };
+      } catch (error) {
+        recordDiscoveryError({
+          source: 'browser_preferred_fetch',
+          url,
+          message: error?.message || 'browser fetch failed',
+        });
+        scanDiagnostics.browserFetchFallbackCount += 1;
+        try {
+          const context = await getCrawlBrowserContext(url);
+          const response = await fetchPageWithBrowserRequestContext(context, url);
+          browserPreferredHosts.add(host);
+          scanDiagnostics.browserFetchFallbackSuccessCount += 1;
+          return { ...response, usedBrowser: true };
+        } catch (requestError) {
+          scanDiagnostics.browserFetchFallbackFailedCount += 1;
+          recordDiscoveryError({
+            source: 'browser_request_fallback',
+            url,
+            message: requestError?.message || 'browser request fallback failed',
+          });
+        }
+      }
+    }
+
+    try {
+      return {
+        ...(await fetchPage(url, extraHeaders, scanScope.focused ? 6000 : 20000)),
+        usedBrowser: false,
+      };
+    } catch (error) {
+      if (source === 'common_path' || browserAttempted) throw error;
+      scanDiagnostics.browserFetchFallbackCount += 1;
+      try {
+        const context = await getCrawlBrowserContext(url);
+        const response = await fetchPageWithBrowserContext(context, url);
+        browserPreferredHosts.add(host);
+        scanDiagnostics.browserFetchFallbackSuccessCount += 1;
+        return { ...response, usedBrowser: true };
+      } catch (browserError) {
+        scanDiagnostics.browserFetchFallbackFailedCount += 1;
+        recordDiscoveryError({
+          source: 'browser_fetch_fallback',
+          url,
+          message: browserError?.message || 'browser fetch fallback failed',
+        });
+        throw error;
+      }
+    }
+  };
+
   const pollJobStatus = async () => {
     const status = await readJobStatus?.();
     if (status === JOB_STATUS.canceled) {
@@ -4737,6 +4836,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           const norm = normalizeUrl(u);
           if (!norm) continue;
           scanDiagnostics.sitemapUrlsFound += 1;
+          if (!sitemapNumberingOrder.has(norm)) sitemapNumberingOrder.set(norm, sitemapNumberingOrder.size);
           recordNumberingDiscovery(norm);
           if (isIgnoredCrawlUtilityUrl(norm)) {
             scanDiagnostics.ignoredUtilityUrls += 1;
@@ -4765,6 +4865,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const loc = $(el).text().trim();
         const norm = normalizeUrl(loc);
         if (norm) scanDiagnostics.sitemapUrlsFound += 1;
+        if (norm && !sitemapNumberingOrder.has(norm)) {
+          sitemapNumberingOrder.set(norm, sitemapNumberingOrder.size);
+        }
         if (norm) recordNumberingDiscovery(norm);
         if (norm && isIgnoredCrawlUtilityUrl(norm)) {
           scanDiagnostics.ignoredUtilityUrls += 1;
@@ -4846,14 +4949,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
-  if (!targetedGroupCapture) {
-    await processRobotsSitemaps();
-    await processSitemap(`${origin}/sitemap.xml`);
-    for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
-      if (stopRequested) break;
-      await processSitemap(`${origin}${altSitemap}`);
-    }
-  }
   reportDiscoveryProgress(true);
 
   // url -> { url, title, parentUrl }
@@ -4996,16 +5091,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     let finalUrl = url;
     let responseTime = null;
     let headers = {};
+    let usedBrowserFetch = false;
     try {
-      const res = authContext
-        ? await fetchPageWithBrowserContext(authContext, url)
-        : await fetchPage(url, extraHeaders);
+      const res = await fetchCrawlPage(url, source);
       html = res.html;
       status = res.status;
       contentType = res.contentType;
       headers = res.headers || {};
       finalUrl = res.finalUrl || url;
       responseTime = res.responseTime;
+      usedBrowserFetch = Boolean(res.usedBrowser);
       scanDiagnostics.fetchedPageCount += 1;
     } catch (e) {
       scanDiagnostics.failedFetches += 1;
@@ -5041,7 +5136,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanDiagnostics.cloudflareChallengeCount += 1;
     }
 
-    if (shouldRetryWithBrowser({ classification, status, headers, source })) {
+    if (!usedBrowserFetch && shouldRetryWithBrowser({ classification, status, headers, source })) {
       scanDiagnostics.cloudflareBrowserRetryCount += 1;
       try {
         const retryContext = await getCrawlBrowserContext(url);
@@ -5059,6 +5154,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         headers = retry.headers || {};
         finalUrl = retry.finalUrl || url;
         responseTime = retry.responseTime;
+        usedBrowserFetch = true;
+        browserPreferredHosts.add(normalizeHost(new URL(url).hostname));
         classification = retryClassification;
         if (retryClassification.isChallengePage || isCloudflareChallengeResponse(headers)) {
           scanDiagnostics.cloudflareChallengeCount += 1;
@@ -5245,6 +5342,33 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const runCrawlWorkers = async () => {
     await Promise.all(Array.from({ length: workerCount }, crawlWorker));
   };
+
+  if (!targetedGroupCapture) {
+    const seedItem = takeNextQueueItem();
+    if (seedItem) await processCrawlItem(seedItem);
+
+    const discoverSitemapPages = async () => {
+      if (stopRequested) return;
+      if (
+        scanScope.focused
+        && ['auth', 'inactive', 'scan_limited'].includes(scanDiagnostics.rootClassification)
+      ) {
+        scanDiagnostics.sitemapSkippedForBlockedFocusedRoot = true;
+        return;
+      }
+      await processRobotsSitemaps();
+      await processSitemap(`${origin}/sitemap.xml`);
+      for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
+        if (stopRequested) break;
+        await processSitemap(`${origin}${altSitemap}`);
+      }
+    };
+    await Promise.all([
+      runCrawlWorkers(),
+      discoverSitemapPages(),
+    ]);
+    reportDiscoveryProgress(true);
+  }
   await runCrawlWorkers();
 
   const validateRepetitiveGroups = async () => {
@@ -5345,16 +5469,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     let finalUrl = url;
     let responseTime = null;
     let headers = {};
+    let usedBrowserFetch = false;
     try {
-      const response = authContext
-        ? await fetchPageWithBrowserContext(authContext, url)
-        : await fetchPage(url, extraHeaders);
+      const response = await fetchCrawlPage(url, 'focus_ancestor');
       html = response.html;
       status = response.status;
       contentType = response.contentType;
       headers = response.headers || {};
       finalUrl = response.finalUrl || url;
       responseTime = response.responseTime;
+      usedBrowserFetch = Boolean(response.usedBrowser);
     } catch {
       return {
         url,
@@ -5372,7 +5496,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     let classification = classifyScanResponse({ html, status, url, finalUrl, headers });
-    if (shouldRetryWithBrowser({ classification, status, headers, source: 'focus_ancestor' })) {
+    if (!usedBrowserFetch && shouldRetryWithBrowser({ classification, status, headers, source: 'focus_ancestor' })) {
       try {
         const retryContext = await getCrawlBrowserContext(url);
         const retry = await fetchPageWithBrowserContext(retryContext, url);
@@ -5873,7 +5997,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const preservedNumberMap = scanScope.focused
     ? buildPreservedNumberMap(
-      Array.from(numberingDiscoveryOrder.entries()).map(([url, order]) => ({ url, order })),
+      Array.from(numberingDiscoveryOrder.entries()).map(([url, order]) => ({
+        url,
+        order: sitemapNumberingOrder.has(url)
+          ? sitemapNumberingOrder.get(url)
+          : sitemapNumberingOrder.size + order,
+      })),
       seed
     )
     : new Map();

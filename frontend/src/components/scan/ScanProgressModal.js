@@ -25,17 +25,15 @@ const formatDuration = (seconds) => {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 };
 
-const getFallbackEstimateSeconds = (elapsedSeconds) => {
-  if (elapsedSeconds < 60) return 60;
-  return Math.max(300, Math.ceil(elapsedSeconds / 300) * 300);
-};
-
-const getTimeEstimateSeconds = ({ elapsedSeconds, scannedCount, queuedCount }) => {
-  if (scannedCount > 2 && queuedCount > 0) {
-    const avgTimePerPage = elapsedSeconds / scannedCount;
-    return Math.max(elapsedSeconds, Math.ceil(elapsedSeconds + (avgTimePerPage * queuedCount)));
+const getTimeEstimateSeconds = ({ elapsedSeconds, completedCount, remainingCount }) => {
+  if (completedCount > 1 && remainingCount > 0) {
+    const avgTimePerPage = elapsedSeconds / completedCount;
+    return Math.max(elapsedSeconds, Math.ceil(elapsedSeconds + (avgTimePerPage * remainingCount)));
   }
-  return getFallbackEstimateSeconds(elapsedSeconds);
+  if (completedCount > 0 && remainingCount === 0) {
+    return elapsedSeconds;
+  }
+  return null;
 };
 
 const ScanProgressModal = ({
@@ -76,12 +74,18 @@ const ScanProgressModal = ({
   const elapsedSeconds = Math.max(0, Math.floor(Number(scanElapsed || 0) || 0));
   const estimatedTotalSeconds = getTimeEstimateSeconds({
     elapsedSeconds,
-    scannedCount,
-    queuedCount: remainingCount,
+    completedCount: primaryCount,
+    remainingCount,
   });
-  const timePercent = estimatedTotalSeconds > 0
+  const timePercent = estimatedTotalSeconds !== null && estimatedTotalSeconds > 0
     ? Math.min(100, Math.max(0, (elapsedSeconds / estimatedTotalSeconds) * 100))
     : 0;
+  const estimatedTotalLabel = estimatedTotalSeconds === null
+    ? '--'
+    : formatDuration(estimatedTotalSeconds);
+  const timeChartLabel = estimatedTotalSeconds === null
+    ? `Elapsed ${formatDuration(elapsedSeconds)}; total time is still being estimated`
+    : `Elapsed ${formatDuration(elapsedSeconds)} of estimated ${formatDuration(estimatedTotalSeconds)}`;
   const findingCounts = scanProgress.findings || {};
   const findingItems = FINDING_ITEMS
     .map((item) => ({
@@ -125,7 +129,7 @@ const ScanProgressModal = ({
           <div className="scan-message">{displayMessage}</div>
           <div className="scan-url">{urlInput}</div>
 
-          <div className="scan-time-chart" role="img" aria-label={`Elapsed ${formatDuration(elapsedSeconds)} of estimated ${formatDuration(estimatedTotalSeconds)}`}>
+          <div className="scan-time-chart" role="img" aria-label={timeChartLabel}>
             <div
               className="scan-time-donut"
               style={{ '--scan-time-progress': `${timePercent}%` }}
@@ -136,7 +140,7 @@ const ScanProgressModal = ({
               <span className="scan-time-label scan-time-label--elapsed">Elapsed</span>
               <span className="scan-time-separator" aria-hidden="true" />
               <span className="scan-time-label scan-time-label--estimate">Est. total</span>
-              <span className="scan-time-total">{formatDuration(estimatedTotalSeconds)}</span>
+              <span className="scan-time-total">{estimatedTotalLabel}</span>
             </div>
           </div>
 

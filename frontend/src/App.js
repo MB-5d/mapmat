@@ -12898,13 +12898,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const startScanTimers = () => {
+    stopScanTimers();
     setScanElapsed(0);
     setScanMessage('Starting scan...');
-    let elapsed = 0;
-
+    const startedAt = Date.now();
     scanTimerRef.current = setInterval(() => {
-      elapsed += 1;
-      setScanElapsed(elapsed);
+      setScanElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
     }, 1000);
   };
 
@@ -13105,20 +13104,50 @@ export default function App({ currentRoute, navigateToRoute }) {
       user: effectiveCurrentUser,
       isLoggedIn: effectiveIsLoggedIn,
     });
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
+    setIsStoppingScan(false);
+    setScanErrorMessage('');
+    setScanLimitProgressNote(getScanLimitProgressNote(fallbackScanEntitlementPreview));
+    setShowScanOptions(false);
+    setLastHistoryId(null);
+    setLastScanUrl('');
+    setLoading(true);
+    setScanProgress(createEmptyScanProgress());
+    startScanTimers();
+
+    const entitlementPreviewPromise = api.getScanEntitlementPreview({ maxPages: requestedPages });
+    const authPrecheckPromise = effectiveIsLoggedIn
+      && AUTHENTICATED_SCAN_ENABLED
+      && activeScanOptions.authenticatedPages
+      && !authFlow.skipAuthPrecheck
+      ? api.precheckScanAuth({
+        url,
+        options: activeScanOptions,
+      })
+      : Promise.resolve(null);
+    const [entitlementResult, authPrecheckResult] = await Promise.allSettled([
+      entitlementPreviewPromise,
+      authPrecheckPromise,
+    ]);
+
     let scanEntitlementPreview = fallbackScanEntitlementPreview;
-    try {
-      const previewResponse = await api.getScanEntitlementPreview({ maxPages: requestedPages });
+    if (entitlementResult.status === 'fulfilled') {
+      const previewResponse = entitlementResult.value;
       scanEntitlementPreview = normalizeScanEntitlementPreview(
         previewResponse?.entitlement,
         fallbackScanEntitlementPreview
       );
-    } catch (err) {
+    } else {
+      const err = entitlementResult.reason;
+      resetScanUi();
       if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) return;
       console.warn('Scan entitlement preview failed:', err);
       showToast('Could not verify your scan limit. Please try again.', 'error');
       return;
     }
     if (scanEntitlementPreview.blocked) {
+      resetScanUi();
       showEntitlementLock({
         title: scanEntitlementPreview.title || 'Scan locked',
         message: scanEntitlementPreview.message || 'Your current plan does not allow a new scan.',
@@ -13126,6 +13155,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
     if (effectiveIsLoggedIn && scanEntitlementPreview.capped && !authFlow.skipScanLimitPrompt) {
+      resetScanUi();
       setUrlInput(url);
       setScanLimitPrompt({
         url,
@@ -13140,40 +13170,26 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     const maxPagesForRequest = requestedPages;
 
-    if (effectiveIsLoggedIn && AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
-      try {
-        const precheck = await api.precheckScanAuth({
+    if (authPrecheckResult.status === 'fulfilled') {
+      const precheck = authPrecheckResult.value;
+      if (precheck?.authRequired) {
+        resetScanUi();
+        setScanAuthPrompt({
           url,
-          options: activeScanOptions,
+          preserveName,
+          authCount: precheck.authCount || 0,
+          sampleUrls: precheck.sampleUrls || [],
+          interactiveLoginSupported: precheck.interactiveLoginSupported === true,
+          loading: false,
+          error: '',
         });
-        if (precheck?.authRequired) {
-          setScanAuthPrompt({
-            url,
-            preserveName,
-            authCount: precheck.authCount || 0,
-            sampleUrls: precheck.sampleUrls || [],
-            interactiveLoginSupported: precheck.interactiveLoginSupported === true,
-            loading: false,
-            error: '',
-          });
-          return;
-        }
-      } catch (err) {
-        console.warn('Authenticated scan pre-check failed:', err);
+        return;
       }
+    } else {
+      console.warn('Authenticated scan pre-check failed:', authPrecheckResult.reason);
     }
 
-    setShowCancelConfirm(false);
-    setShowStopConfirm(false);
-    setIsStoppingScan(false);
-    setScanErrorMessage('');
     setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
-    setShowScanOptions(false);
-    setLastHistoryId(null);
-    setLastScanUrl('');
-    setLoading(true);
-    setScanProgress(createEmptyScanProgress());
-    startScanTimers();
     trackEvent('scan_started', {
       authenticated_pages: AUTHENTICATED_SCAN_ENABLED && scanOptions.authenticatedPages ? 'true' : 'false',
     });
@@ -13252,7 +13268,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     eventSourceRef.current = eventSource;
     let streamHandled = false;
     let streamErrorCount = 0;
-    const maxStreamErrorCount = 8;
+    let streamRecoveryInFlight = false;
+    const maxStreamErrorCount = 20;
 
     const handleCompletedJob = (job) => {
       if (streamHandled) return;
@@ -13488,11 +13505,23 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     const loadCompletedJobWithResult = async (job) => {
       if (job?.status !== 'complete' || job?.result) return job;
-      const response = await api.getScanJob(jobId, {
-        includeResult: true,
-        accessToken: jobAccessToken,
-      });
-      return response?.job || job;
+      const retryDelays = [0, 500, 1500, 3000];
+      let lastError = null;
+      for (const delay of retryDelays) {
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+        try {
+          const response = await api.getScanJob(jobId, {
+            includeResult: true,
+            accessToken: jobAccessToken,
+          });
+          if (response?.job?.result) return response.job;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error('Scan completed but results could not be loaded');
     };
 
     eventSource.addEventListener('update', (e) => {
@@ -13535,7 +13564,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           phase: 'complete',
           message: err?.message || 'Scan completed but results could not be loaded',
         });
-        showScanError(err?.message || 'Scan completed but results could not be loaded');
+        showScanError('Scan completed, but the results could not be loaded. Please try the scan again.');
       }
     });
 
@@ -13555,7 +13584,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
 
     eventSource.onerror = async () => {
-      if (streamHandled) return;
+      if (streamHandled || streamRecoveryInFlight) return;
+      streamRecoveryInFlight = true;
 
       try {
         const { job } = await api.getScanJob(jobId, {
@@ -13579,14 +13609,16 @@ export default function App({ currentRoute, navigateToRoute }) {
       } catch (err) {
         streamErrorCount += 1;
         if (streamErrorCount < maxStreamErrorCount) return;
-        const message = err?.message || 'Connection error';
+        const message = 'Lost connection while checking scan progress';
         streamHandled = true;
         trackEvent('scan_failed', {
           phase: 'stream',
           message,
         });
-        showScanError(message);
+        showScanError('Lost connection while checking scan progress. The scan may still be running.');
         return;
+      } finally {
+        streamRecoveryInFlight = false;
       }
 
       streamHandled = true;
