@@ -3,6 +3,7 @@ const assert = require('assert');
 
 const {
   countScanTreeNodes,
+  getInvalidScanResultReason,
   getRootOnlyCollapseReasons,
   hardenCollapsedScanResult,
 } = require('../utils/scanResultQuality');
@@ -199,6 +200,25 @@ assert.strictEqual(
   existingPartial.partialReason,
   'root_discovery_failed',
   'existing partial reason should be preserved'
+);
+
+const focusedDiscoveryFailure = {
+  ...makeRootOnlyResult(),
+  root: {
+    id: 'focus-home',
+    nodeKind: 'focus-ghost',
+    children: [makeRootOnlyResult().root],
+  },
+  partial: true,
+  partialReason: 'root_discovery_failed',
+  scanDiagnostics: {
+    capturedTreeNodeCount: 1,
+  },
+};
+assert.strictEqual(
+  getInvalidScanResultReason(focusedDiscoveryFailure),
+  'root_discovery_failed',
+  'focused ghost ancestors must not make a failed one-page scan look valid'
 );
 
 console.log('[scan-result-quality] Passed.');

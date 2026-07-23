@@ -84,7 +84,13 @@ function getChildren(node) {
   return Array.isArray(node?.children) ? node.children.filter(Boolean) : [];
 }
 
-const NON_PAGE_NODE_KINDS = new Set(['import-container', 'import-ghost', 'source-group']);
+const NON_PAGE_NODE_KINDS = new Set([
+  'import-container',
+  'import-ghost',
+  'source-group',
+  'focus-ghost',
+  'deferred-group',
+]);
 
 function isPageNode(node) {
   if (!node || NON_PAGE_NODE_KINDS.has(node.nodeKind)) return false;
@@ -99,7 +105,7 @@ function isPageNode(node) {
 function collectNodeAndDescendantIds(node, result = []) {
   if (!node || typeof node !== 'object') return result;
   const id = String(node.id || '').trim();
-  if (id) result.push(id);
+  if (id && !NON_PAGE_NODE_KINDS.has(node.nodeKind)) result.push(id);
   getChildren(node).forEach((child) => collectNodeAndDescendantIds(child, result));
   return result;
 }
@@ -310,6 +316,21 @@ function shouldStackChildren(children, depth) {
   return depth >= 1;
 }
 
+function getStackTotalCount(children = []) {
+  return children.reduce((total, child) => (
+    total + (child?.nodeKind === 'deferred-group'
+      ? Math.max(0, Number(child.remainingCount || 0) || 0)
+      : 1)
+  ), 0);
+}
+
+function getLastPageChildIndex(children = []) {
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    if (children[index]?.nodeKind !== 'deferred-group') return index;
+  }
+  return children.length - 1;
+}
+
 function normalizeExpandedStacks(input) {
   const expanded = {};
   const addId = (value) => {
@@ -371,7 +392,7 @@ function addNode(nodes, nodeById, node, x, y, depth, number, nodeHeight, extra =
     w: DEFAULT_LAYOUT.NODE_W,
     h: nodeHeight,
     depth,
-    number,
+    number: node?.nodeKind === 'deferred-group' ? '' : (node?.scanNumber || number),
     node,
     ...extra,
   };
@@ -426,7 +447,7 @@ function computeHorizontalLayout(root, orphans, showThumbnails, expandedStacks =
         child: children[0],
         stackInfo: {
           parentId: node.id,
-          totalCount: children.length,
+          totalCount: getStackTotalCount(children),
           collapsed: true,
           selectionIds,
         },
@@ -437,9 +458,9 @@ function computeHorizontalLayout(root, orphans, showThumbnails, expandedStacks =
         stackInfo: shouldStack
           ? {
             parentId: node.id,
-            totalCount: children.length,
+            totalCount: getStackTotalCount(children),
             expanded: true,
-            showCollapse: index === 0 || index === children.length - 1,
+            showCollapse: index === 0 || index === getLastPageChildIndex(children),
           }
           : null,
       }));
@@ -699,7 +720,7 @@ function computeVerticalLayout(root, orphans, showThumbnails, expandedStacks = {
         parentId: parentNode.id,
         stackInfo: {
           parentId: parentNode.id,
-          totalCount: children.length,
+          totalCount: getStackTotalCount(children),
           collapsed: true,
           selectionIds,
         },
@@ -732,9 +753,9 @@ function computeVerticalLayout(root, orphans, showThumbnails, expandedStacks = {
       const stackInfo = shouldStack
         ? {
           parentId: parentNode.id,
-          totalCount: children.length,
+          totalCount: getStackTotalCount(children),
           expanded: true,
-          showCollapse: index === 0 || index === children.length - 1,
+          showCollapse: index === 0 || index === getLastPageChildIndex(children),
         }
         : null;
       setNode(
@@ -1044,6 +1065,7 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     title: node.title || node.label || node.url || 'Untitled',
     url: node.url || '',
     nodeKind: node.nodeKind || '',
+    isFocusAncestor: !!node.isFocusAncestor,
     hideImportedPageNumber: !!node.hideImportedPageNumber,
     number: node.hideImportedPageNumber ? '' : (node.importNumber || layoutNode.number),
     depth: layoutNode.depth,
@@ -1083,6 +1105,18 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     orphanStyle: layoutNode.orphanStyle || null,
     orphanType: layoutNode.orphanType || node.orphanType || null,
     stackInfo,
+    deferredGroupId: node.deferredGroupId || '',
+    deferredGroupKey: node.deferredGroupKey || '',
+    remainingCount: Math.max(0, Number(node.remainingCount || 0) || 0),
+    capturedCount: Math.max(0, Number(node.capturedCount || 0) || 0),
+    totalCount: Math.max(0, Number(node.totalCount || 0) || 0),
+    deferredEntries: Array.isArray(node.deferredEntries)
+      ? node.deferredEntries.map((entry, index) => ({
+        url: String(entry?.url || '').slice(0, 2048),
+        scanNumber: String(entry?.scanNumber || '').slice(0, 80),
+        order: Math.max(0, Number(entry?.order ?? index) || index),
+      })).filter((entry) => entry.url)
+      : [],
   };
 }
 

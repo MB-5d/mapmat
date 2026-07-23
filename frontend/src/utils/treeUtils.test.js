@@ -72,4 +72,22 @@ describe('page node contract', () => {
     expect(isPageNode(root.children[0].children[0])).toBe(true);
     expect(countPageNodes(root)).toBe(1);
   });
+
+  test('excludes focused context and deferred placeholders from captured page counts', () => {
+    const root = makeNode('home', {
+      nodeKind: 'focus-ghost',
+      children: [
+        makeNode('target'),
+        makeNode('deferred', {
+          nodeKind: 'deferred-group',
+          url: '',
+          remainingCount: 50,
+        }),
+      ],
+    });
+
+    expect(isPageNode(root)).toBe(false);
+    expect(isPageNode(root.children[1])).toBe(false);
+    expect(countPageNodes(root)).toBe(1);
+  });
 });

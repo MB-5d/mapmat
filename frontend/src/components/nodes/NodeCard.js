@@ -9,11 +9,14 @@ import {
   Loader2,
   Lock,
   Maximize2,
+  Scan,
+  Search,
 } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import NodeActionBar from './NodeActionBar';
 import NodeBadge from './NodeBadge';
 import Badge from '../ui/Badge';
+import Button from '../ui/Button';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
@@ -29,6 +32,7 @@ const NODE_STATUS_BADGE_STYLE = {
 };
 
 const HIDDEN_NODE_FINDING_BADGES = new Set(['Orphan', 'Subdomain']);
+const FOCUS_GHOST_REVEAL_MODE = 'card';
 
 const NodeCard = ({
   node,
@@ -66,6 +70,8 @@ const NodeCard = ({
   onThumbnailError,
   stackInfo,
   onToggleStack,
+  onCaptureDeferredGroup,
+  deferredCaptureLoading = false,
   isGhosted = false,
   isSelected = false,
 }) => {
@@ -100,10 +106,13 @@ const NodeCard = ({
   const isEntitlementLocked = Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
   const isImportGhost = node?.nodeKind === 'import-ghost';
   const isSourceGroup = node?.nodeKind === 'source-group';
+  const isFocusGhost = node?.nodeKind === 'focus-ghost' || node?.isFocusAncestor;
+  const isDeferredGroup = node?.nodeKind === 'deferred-group';
   const isImportStructuralNode = isImportGhost || isSourceGroup;
-  const shouldGhost = isGhosted || isDeleted;
+  const isStructuralNode = isImportStructuralNode || isDeferredGroup;
+  const shouldGhost = isGhosted || isDeleted || isFocusGhost;
   const showActionBar = !isEntitlementLocked
-    && !isImportStructuralNode
+    && !isStructuralNode
     && (canEdit || showCommentAction || (showExternalLinkAction && !!node.url));
   const actionBarPermission = canEdit
     ? 'Owner / Editor'
@@ -292,6 +301,10 @@ const NodeCard = ({
   if (isEntitlementLocked) classNames.push('entitlement-locked');
   if (isImportGhost) classNames.push('import-ghost');
   if (isSourceGroup) classNames.push('source-group');
+  if (isFocusGhost) {
+    classNames.push('focus-ghost', `focus-ghost-reveal-${FOCUS_GHOST_REVEAL_MODE}`);
+  }
+  if (isDeferredGroup) classNames.push('deferred-group');
   if (showActionBar) classNames.push('has-action-bar');
   if (showCommentBadges && node.comments?.length > 0) classNames.push('has-comment-badge');
 
@@ -316,11 +329,11 @@ const NodeCard = ({
         ? 'Upgrade to see full map'
         : (isImportGhost ? 'Inferred from the URL path; this is not a page' : undefined)}
       aria-label={isImportGhost ? `${node.title}, inferred path, not a page` : undefined}
-      style={{ cursor: isImportStructuralNode ? 'default' : (isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab'))) }}
-      {...(isRoot || isImportStructuralNode ? {} : dragHandleProps)}
+      style={{ cursor: isStructuralNode ? 'default' : (isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab'))) }}
+      {...(isRoot || isStructuralNode ? {} : dragHandleProps)}
     >
       {/* Connection anchor points - show when connection tool is active */}
-      {connectionTool && !isImportStructuralNode && (
+      {connectionTool && !isStructuralNode && (
         <>
           <div
             className={`anchor-point anchor-top ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'top' ? 'snapped' : ''}`}
@@ -356,14 +369,14 @@ const NodeCard = ({
       </div>
 
       {/* Comment badge - show if node has comments and comments mode is active */}
-      {showCommentBadges && !isImportStructuralNode && node.comments?.length > 0 && (
+      {showCommentBadges && !isStructuralNode && node.comments?.length > 0 && (
         <CommentBadge
           count={node.comments.length}
           onClick={(e) => { e.stopPropagation(); onViewNotes?.(node); }}
         />
       )}
 
-      {showThumbnails && !isImportStructuralNode && (
+      {showThumbnails && !isStructuralNode && (
         <div className={`card-thumb${hasThumb && shouldLoadThumb && !thumbError ? ' card-thumb-with-image' : ''}`}>
           {thumbLoading && !thumbError && (
             <div className="thumb-loading">
@@ -429,6 +442,38 @@ const NodeCard = ({
         </div>
       )}
 
+      {isDeferredGroup ? (
+        <div className="deferred-group-content">
+          <div className="deferred-group-message">
+            <span className="deferred-group-number">
+              {Math.max(0, Number(node.remainingCount || 0) || 0).toLocaleString()}
+            </span>
+            <span className="deferred-group-count">more pages like this</span>
+          </div>
+          <Button
+            className="deferred-group-capture"
+            type="secondary"
+            htmlType="button"
+            size="md"
+            startIcon={(
+              <span className="scan-search-icon" aria-hidden="true">
+                <Scan className="scan-search-icon-frame" />
+                <Search className="scan-search-icon-lens" />
+              </span>
+            )}
+            loading={deferredCaptureLoading}
+            disabled={deferredCaptureLoading || !onCaptureDeferredGroup}
+            onClick={(event) => {
+              event.stopPropagation();
+              onCaptureDeferredGroup?.(node);
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {deferredCaptureLoading ? 'Capturing' : 'Capture now'}
+          </Button>
+        </div>
+      ) : (
       <div className="card-content">
         <div className="card-content-top">
           <div className="card-title" title={node.title}>
@@ -466,6 +511,7 @@ const NodeCard = ({
           ? <span className="page-number entitlement-ghost-number" aria-hidden="true" />
           : <span className="page-number">{node.importNumber || number}</span>)}
       </div>
+      )}
 
       {showActionBar && (
         <div className="card-actions">
@@ -549,6 +595,8 @@ const DraggableNodeCard = ({
   showAnnotations,
   stackInfo,
   onToggleStack,
+  onCaptureDeferredGroup,
+  deferredCaptureLoading,
   isGhosted,
   isSelected,
 }) => {
@@ -560,6 +608,8 @@ const DraggableNodeCard = ({
       || node.entitlementLocked
       || node.nodeKind === 'import-ghost'
       || node.nodeKind === 'source-group'
+      || node.nodeKind === 'focus-ghost'
+      || node.nodeKind === 'deferred-group'
       || !canEdit
       || connectionTool, // Disable dragging when connection tool active
   });
@@ -601,6 +651,8 @@ const DraggableNodeCard = ({
         onThumbnailError={onThumbnailError}
         stackInfo={stackInfo}
         onToggleStack={onToggleStack}
+        onCaptureDeferredGroup={onCaptureDeferredGroup}
+        deferredCaptureLoading={deferredCaptureLoading}
         isGhosted={isGhosted}
         isSelected={isSelected}
       />

@@ -91,6 +91,7 @@ export const getNodeStatusFlags = (node, nodeMeta) => {
 };
 
 export const isNodeGhostedByLayers = (node, nodeMeta, visibility) => {
+  if (node?.nodeKind === 'focus-ghost' || node?.isFocusAncestor) return true;
   if (!visibility) return false;
   if (isEntitlementLockedDisplayNode(node)) return false;
   const placement = getNodePlacement(nodeMeta);

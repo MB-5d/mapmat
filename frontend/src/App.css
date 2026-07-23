@@ -4270,6 +4270,109 @@ body {
   color: var(--ui-color-muted);
 }
 
+.node-card.focus-ghost {
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.node-card.focus-ghost.ghosted {
+  opacity: 1;
+  filter: none;
+  background: color-mix(in srgb, var(--ui-color-surface) 40%, transparent);
+  border-color: color-mix(in srgb, var(--ui-color-border) 40%, transparent);
+}
+
+.node-card.focus-ghost.ghosted > :not(.card-actions) {
+  opacity: 0.4;
+  filter: grayscale(0.2);
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+.node-card.focus-ghost.ghosted.focus-ghost-reveal-card:hover,
+.node-card.focus-ghost.ghosted.focus-ghost-reveal-card:focus-within {
+  background: var(--ui-color-surface);
+  border-color: var(--ui-color-border);
+}
+
+.node-card.focus-ghost.ghosted.focus-ghost-reveal-card:hover > :not(.card-actions),
+.node-card.focus-ghost.ghosted.focus-ghost-reveal-card:focus-within > :not(.card-actions) {
+  opacity: 1;
+  filter: none;
+}
+
+.node-card.deferred-group {
+  border-style: dashed;
+  border-color: var(--ui-color-border-strong);
+  background: var(--ui-color-surface-muted);
+  box-shadow: none;
+}
+
+.node-card.deferred-group .card-header {
+  background: var(--ui-color-border-strong) !important;
+}
+
+.deferred-group-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 24px;
+}
+
+.deferred-group-message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: auto 0;
+}
+
+.deferred-group-number {
+  color: var(--ui-color-text);
+  font-size: var(--type-title-lg-size);
+  line-height: var(--type-title-lg-line-height);
+  font-weight: var(--type-weight-bold);
+  letter-spacing: 0;
+}
+
+.deferred-group-count {
+  color: var(--ui-color-text);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+  font-weight: 600;
+}
+
+.deferred-group-capture.ui-btn {
+  width: 100%;
+  margin-top: auto;
+}
+
+.scan-search-icon {
+  position: relative;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+}
+
+.scan-search-icon-frame,
+.scan-search-icon-lens {
+  position: absolute;
+  stroke-width: 2;
+}
+
+.scan-search-icon-frame {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.scan-search-icon-lens {
+  right: -1px;
+  bottom: -1px;
+  width: 62%;
+  height: 62%;
+}
+
 .import-structural-label {
   color: var(--ui-color-input-placeholder);
   font-size: var(--type-caption-md-size);

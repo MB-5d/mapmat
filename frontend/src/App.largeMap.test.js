@@ -617,3 +617,57 @@ describe('large map viewport behavior', () => {
     })).toEqual({ x: -132, y: -84 });
   });
 });
+
+describe('deferred page capture', () => {
+  test('replaces only the selected group placeholder with captured pages', () => {
+    const placeholder = {
+      id: 'placeholder-blog',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'blog-group',
+      capturedCount: 10,
+      remainingCount: 2,
+      deferredEntries: [
+        { url: 'https://example.com/blog/post-11', scanNumber: '2.11', order: 10 },
+        { url: 'https://example.com/blog/post-12', scanNumber: '2.12', order: 11 },
+      ],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [{
+        id: 'blog',
+        url: 'https://example.com/blog',
+        children: [placeholder],
+      }],
+    };
+    const captureResult = {
+      root: {
+        id: 'capture-root',
+        url: 'https://example.com/',
+        children: [{
+          id: 'post-11',
+          url: 'https://example.com/blog/post-11',
+          title: 'Post 11',
+          children: [],
+        }],
+      },
+      captureSummary: {
+        successfulEntries: [{ url: 'https://example.com/blog/post-11' }],
+      },
+    };
+
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      captureResult,
+      placeholderNode: placeholder,
+    });
+    const blogChildren = applied.root.children[0].children;
+    expect(applied.capturedCount).toBe(1);
+    expect(applied.remainingCount).toBe(1);
+    expect(blogChildren[0].url).toBe('https://example.com/blog/post-11');
+    expect(blogChildren[0].scanNumber).toBe('2.11');
+    expect(blogChildren[1].remainingCount).toBe(1);
+    expect(blogChildren[1].deferredEntries[0].url).toBe('https://example.com/blog/post-12');
+  });
+});

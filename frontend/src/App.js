@@ -463,6 +463,10 @@ function isEntitlementLockedNode(node) {
   return Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
 }
 
+function isNonInteractiveScanNode(node) {
+  return ['import-ghost', 'source-group', 'focus-ghost', 'deferred-group'].includes(node?.nodeKind);
+}
+
 function cloneScanNode(node) {
   if (!node) return node;
   return {
@@ -1797,14 +1801,38 @@ const normalizePersistedDiscoveryManifest = (manifest = null) => {
 
 const normalizePersistedScanMeta = (scanMeta = null) => {
   const entitlement = scanMeta?.entitlement || null;
-  if (!shouldShowScanLimitPreview(entitlement)) return null;
+  const hasEntitlementPreview = shouldShowScanLimitPreview(entitlement);
+  const scanScope = scanMeta?.scanScope && typeof scanMeta.scanScope === 'object'
+    ? scanMeta.scanScope
+    : null;
+  const pageCountSummary = scanMeta?.pageCountSummary && typeof scanMeta.pageCountSummary === 'object'
+    ? {
+      capturedPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.capturedPageCount || 0) || 0)),
+      deferredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.deferredPageCount || 0) || 0)),
+      totalDiscoveredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.totalDiscoveredPageCount || 0) || 0)),
+    }
+    : null;
+  const repetitiveGroups = (Array.isArray(scanMeta?.repetitiveGroups) ? scanMeta.repetitiveGroups : [])
+    .map((group) => ({
+      id: String(group?.id || '').slice(0, 120),
+      parentUrl: trimPersistedUrl(group?.parentUrl),
+      shape: String(group?.shape || '').slice(0, 40),
+      capturedCount: Math.max(0, Math.floor(Number(group?.capturedCount || 0) || 0)),
+      deferredCount: Math.max(0, Math.floor(Number(group?.deferredCount || 0) || 0)),
+      totalCount: Math.max(0, Math.floor(Number(group?.totalCount || 0) || 0)),
+    }))
+    .filter((group) => group.id);
+  if (!hasEntitlementPreview && !scanScope?.focused && !pageCountSummary && repetitiveGroups.length === 0) return null;
   return {
     brokenLinks: Array.isArray(scanMeta?.brokenLinks) ? scanMeta.brokenLinks : [],
-    partial: scanMeta?.partial !== false,
-    partialReason: scanMeta?.partialReason || 'entitlement_cap',
+    partial: Boolean(scanMeta?.partial),
+    partialReason: scanMeta?.partialReason || null,
     scanDiagnostics: scanMeta?.scanDiagnostics || null,
-    entitlement,
+    entitlement: hasEntitlementPreview ? entitlement : null,
     discoveryManifest: normalizePersistedDiscoveryManifest(scanMeta?.discoveryManifest),
+    scanScope,
+    pageCountSummary,
+    repetitiveGroups,
   };
 };
 
@@ -1836,7 +1864,9 @@ const hydratePersistedScanLimitMap = (rootNode = null, orphanNodes = []) => {
       scanMeta: { brokenLinks: [] },
     };
   }
-  const display = addScanLimitGhosts(rootNode, orphanNodes, scanMeta.entitlement);
+  const display = scanMeta.entitlement
+    ? addScanLimitGhosts(rootNode, orphanNodes, scanMeta.entitlement)
+    : { root: rootNode, orphans: Array.isArray(orphanNodes) ? orphanNodes : [] };
   return {
     root: display.root,
     orphans: display.orphans,
@@ -2032,6 +2062,8 @@ const SitemapTree = ({
   onThumbnailError,
   expandedStacks,
   onToggleStack,
+  onCaptureDeferredGroup,
+  capturingDeferredGroupIds,
   layout: layoutOverride,
   orientation = MAP_ORIENTATIONS.VERTICAL,
   viewportBounds = null,
@@ -2189,6 +2221,8 @@ const SitemapTree = ({
                 toggleStack(stackToggleParentId);
               }
             }}
+            onCaptureDeferredGroup={onCaptureDeferredGroup}
+            deferredCaptureLoading={capturingDeferredGroupIds?.has(nodeData.node.deferredGroupId)}
             isSelected={isSelected}
           />
         );
@@ -2313,7 +2347,7 @@ const getImageCaptureStats = ({
 
 const collectNodeAndDescendantIds = (node, result = []) => {
   if (!node?.id) return result;
-  result.push(node.id);
+  if (!isNonInteractiveScanNode(node)) result.push(node.id);
   node.children?.forEach((child) => collectNodeAndDescendantIds(child, result));
   return result;
 };
@@ -2530,6 +2564,8 @@ const buildScanScope = (rootNode, scanResult = {}) => {
       rootDomain,
       allowSubdomains: Boolean(scanResult.scanScope?.allowSubdomains),
       exactOnly: Boolean(scanResult.scanScope?.exactOnly) || isLocalOrIpHost(baseHost),
+      focused: Boolean(scanResult.scanScope?.focused),
+      focusPath: scanResult.scanScope?.focusPath || '/',
     };
   } catch {
     return null;
@@ -2540,7 +2576,12 @@ const isUrlInScanScope = (url, scanScope) => {
   if (!scanScope || !url) return true;
   try {
     const host = normalizeScanHost(new URL(url).hostname);
-    if (host === scanScope.baseHost) return true;
+    if (host === scanScope.baseHost) {
+      if (!scanScope.focused) return true;
+      const pathname = new URL(url).pathname.replace(/\/+$/, '') || '/';
+      const focusPath = String(scanScope.focusPath || '/').replace(/\/+$/, '') || '/';
+      return pathname === focusPath || pathname.startsWith(`${focusPath}/`);
+    }
     return Boolean(
       scanScope.allowSubdomains
         && !scanScope.exactOnly
@@ -3061,6 +3102,88 @@ const mergeRescanResults = ({
   };
 };
 
+const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNode }) => {
+  if (!existingRoot || !captureResult?.root || !placeholderNode?.deferredGroupId) {
+    return { root: existingRoot, capturedCount: 0, remainingCount: placeholderNode?.remainingCount || 0 };
+  }
+  const successfulEntries = Array.isArray(captureResult.captureSummary?.successfulEntries)
+    ? captureResult.captureSummary.successfulEntries
+    : [];
+  const successfulUrls = new Set(successfulEntries.map((entry) => normalizeUrlForCompare(entry?.url)).filter(Boolean));
+  if (successfulUrls.size === 0) {
+    return { root: existingRoot, capturedCount: 0, remainingCount: placeholderNode?.remainingCount || 0 };
+  }
+
+  const capturedNodesByUrl = new Map();
+  collectNodesDeep(captureResult.root, captureResult.orphans || []).forEach((node) => {
+    const normalized = normalizeUrlForCompare(node?.url);
+    if (!normalized || !successfulUrls.has(normalized)) return;
+    capturedNodesByUrl.set(normalized, {
+      ...node,
+      children: [],
+      repetitiveGroupId: placeholderNode.deferredGroupId,
+    });
+  });
+
+  const nextRoot = cloneNodeTree(existingRoot);
+  const existingUrls = new Set(
+    collectNodesDeep(nextRoot).map((node) => normalizeUrlForCompare(node?.url)).filter(Boolean)
+  );
+  let capturedCount = 0;
+  let remainingCount = Math.max(0, Number(placeholderNode.remainingCount || 0) || 0);
+
+  const updateParent = (parent) => {
+    if (!Array.isArray(parent?.children)) return false;
+    const placeholderIndex = parent.children.findIndex((child) => (
+      child?.nodeKind === 'deferred-group'
+      && child?.deferredGroupId === placeholderNode.deferredGroupId
+    ));
+    if (placeholderIndex >= 0) {
+      const currentPlaceholder = parent.children[placeholderIndex];
+      const originalEntries = Array.isArray(currentPlaceholder.deferredEntries)
+        ? currentPlaceholder.deferredEntries
+        : [];
+      const capturedNodes = [];
+      originalEntries.forEach((entry) => {
+        const normalized = normalizeUrlForCompare(entry?.url);
+        if (!successfulUrls.has(normalized) || existingUrls.has(normalized)) return;
+        const capturedNode = capturedNodesByUrl.get(normalized);
+        if (!capturedNode) return;
+        capturedNodes.push({
+          ...capturedNode,
+          scanNumber: entry.scanNumber || capturedNode.scanNumber,
+        });
+        existingUrls.add(normalized);
+        capturedCount += 1;
+      });
+      const remainingEntries = originalEntries.filter((entry) => (
+        !successfulUrls.has(normalizeUrlForCompare(entry?.url))
+      ));
+      remainingCount = remainingEntries.length;
+      const nextChildren = [
+        ...parent.children.slice(0, placeholderIndex),
+        ...capturedNodes,
+      ];
+      if (remainingEntries.length > 0) {
+        nextChildren.push({
+          ...currentPlaceholder,
+          title: `${remainingEntries.length} more pages like this`,
+          capturedCount: Math.max(0, Number(currentPlaceholder.capturedCount || 0) || 0) + capturedCount,
+          remainingCount: remainingEntries.length,
+          deferredEntries: remainingEntries,
+        });
+      }
+      nextChildren.push(...parent.children.slice(placeholderIndex + 1));
+      parent.children = nextChildren;
+      return true;
+    }
+    return parent.children.some(updateParent);
+  };
+
+  updateParent(nextRoot);
+  return { root: nextRoot, capturedCount, remainingCount };
+};
+
 export const __testing = {
   normalizeScanConfig,
   normalizeScanEntitlementPreview,
@@ -3080,6 +3203,7 @@ export const __testing = {
   getDisplayScanLayerAvailability,
   applyScanArtifacts,
   mergeRescanResults,
+  applyDeferredCaptureResult,
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
   getPersistedScanMetaFromRoot,
@@ -3131,6 +3255,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanMeta, setScanMeta] = useState({
     brokenLinks: [],
   });
+  const [capturingDeferredGroupIds, setCapturingDeferredGroupIds] = useState(() => new Set());
   const scanMetaRef = useRef(scanMeta);
   const [scanLayerAvailability, setScanLayerAvailability] = useState({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
   const [scanLayerVisibility, setScanLayerVisibility] = useState({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
@@ -13203,6 +13328,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           scanDiagnostics: data.scanDiagnostics || null,
           entitlement: data.entitlement || null,
           discoveryManifest: data.discoveryManifest || null,
+          scanScope: data.scanScope || null,
+          pageCountSummary: data.pageCountSummary || null,
+          repetitiveGroups: data.repetitiveGroups || [],
         });
         trackEvent('scan_completed', {
           hostname,
@@ -13230,6 +13358,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           scanDiagnostics: data.scanDiagnostics || null,
           entitlement: data.entitlement || null,
           discoveryManifest: data.discoveryManifest || null,
+          scanScope: data.scanScope || null,
+          pageCountSummary: data.pageCountSummary || null,
+          repetitiveGroups: data.repetitiveGroups || [],
         });
         trackEvent('scan_failed', {
           phase: 'quality_gate',
@@ -13288,6 +13419,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanDiagnostics: data.scanDiagnostics || null,
         entitlement: data.entitlement || null,
         discoveryManifest: data.discoveryManifest || null,
+        scanScope: data.scanScope || null,
+        pageCountSummary: data.pageCountSummary || null,
+        repetitiveGroups: data.repetitiveGroups || [],
       });
       setScanLayerAvailability(displayScanLayerAvailability);
       setScanLayerVisibility(displayScanLayerAvailability);
@@ -13318,7 +13452,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           setMapName('Untitled Map');
         }
       }
-      const pageCount = realPageCount;
+      const pageCount = Math.max(
+        realPageCount,
+        Math.max(0, Number(data.pageCountSummary?.totalDiscoveredPageCount || 0) || 0)
+      );
       addToHistory(url, displayMerged.root, pageCount, scanConfig, {
         orphans: displayMerged.orphans,
         connections: nextConnections,
@@ -13465,6 +13602,119 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   };
   scanRef.current = scan;
+
+  const captureDeferredGroup = async (placeholderNode) => {
+    const groupId = String(placeholderNode?.deferredGroupId || '').trim();
+    const entries = Array.isArray(placeholderNode?.deferredEntries)
+      ? placeholderNode.deferredEntries.filter((entry) => entry?.url)
+      : [];
+    if (!groupId || entries.length === 0 || capturingDeferredGroupIds.has(groupId)) return;
+
+    const scanScope = scanMetaRef.current?.scanScope || {};
+    const seedUrl = scanScope.seed || rootRef.current?.url;
+    if (!seedUrl) {
+      showToast('This page group cannot be captured because its scan URL is missing.', 'error');
+      return;
+    }
+
+    setCapturingDeferredGroupIds((current) => new Set([...current, groupId]));
+    try {
+      const jobResponse = await api.createScanJob({
+        url: seedUrl,
+        maxPages: entries.length,
+        options: {
+          ...scanOptions,
+          subdomains: Boolean(scanScope.allowSubdomains),
+          repetitiveCapture: {
+            groupId,
+            entries,
+          },
+        },
+      });
+      const jobId = jobResponse?.jobId;
+      const accessToken = jobResponse?.jobAccessToken || null;
+      if (!jobId) throw new Error('Failed to start page capture');
+
+      let completedJob = null;
+      for (let attempt = 0; attempt < 1800; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const response = await api.getScanJob(jobId, { includeResult: true, accessToken });
+        const job = response?.job;
+        if (job?.status === 'failed') throw new Error(job.error || 'Page capture failed');
+        if (job?.status === 'canceled') throw new Error('Page capture was cancelled');
+        if (job?.status === 'complete') {
+          completedJob = job;
+          break;
+        }
+      }
+      if (!completedJob?.result) throw new Error('Page capture timed out');
+
+      const applied = applyDeferredCaptureResult({
+        existingRoot: rootRef.current,
+        captureResult: completedJob.result,
+        placeholderNode,
+      });
+      if (applied.capturedCount <= 0) {
+        showToast('No additional pages could be captured. You can retry this group.', 'warning');
+        return;
+      }
+
+      rootRef.current = applied.root;
+      setRoot(applied.root);
+      setScanMeta((current) => {
+        const currentSummary = current?.pageCountSummary || {};
+        const repetitiveGroups = (current?.repetitiveGroups || []).map((group) => (
+          group?.id === groupId
+            ? {
+              ...group,
+              capturedCount: Math.max(0, Number(group.capturedCount || 0) || 0) + applied.capturedCount,
+              deferredCount: applied.remainingCount,
+              totalCount: Math.max(0, Number(group.totalCount || 0) || 0),
+            }
+            : group
+        ));
+        return {
+          ...current,
+          repetitiveGroups,
+          pageCountSummary: {
+            capturedPageCount: Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0) + applied.capturedCount,
+            deferredPageCount: Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0) - applied.capturedCount,
+            totalDiscoveredPageCount: Math.max(
+              Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0),
+              Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
+                + Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
+            ),
+          },
+        };
+      });
+      setDraftVersionFromSnapshot({
+        root: applied.root,
+        orphans: orphansRef.current,
+        connections,
+        colors,
+        connectionColors,
+      }, 'Captured');
+      setLastScanAt(new Date().toISOString());
+      setLargeMapSceneRefreshKey((value) => value + 1);
+      showToast(
+        applied.remainingCount > 0
+          ? `Captured ${applied.capturedCount.toLocaleString()} pages. ${applied.remainingCount.toLocaleString()} can be retried.`
+          : `Captured ${applied.capturedCount.toLocaleString()} pages.`,
+        applied.remainingCount > 0 ? 'warning' : 'success'
+      );
+      refreshCurrentUser();
+    } catch (error) {
+      if (!handleEntitlementError(error, 'Your plan has no active pages remaining.')) {
+        showToast(error.message || 'Failed to capture this page group', 'error');
+      }
+    } finally {
+      setCapturingDeferredGroupIds((current) => {
+        const next = new Set(current);
+        next.delete(groupId);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     if (authLoading || loading) return;
@@ -16083,7 +16333,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const openNodeMenu = (nodeId, event) => {
     if (!nodeId || !event) return;
     const menuNode = findNodeInCurrentMap(nodeId);
-    if (menuNode?.nodeKind === 'import-ghost' || menuNode?.nodeKind === 'source-group') return;
+    if (isNonInteractiveScanNode(menuNode)) return;
     if (!canEdit()) return;
     if (!contentRef.current) return;
     event.preventDefault();
@@ -16122,7 +16372,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleNodeClick = (node, event) => {
     if (!node) return;
-    if (node.nodeKind === 'import-ghost' || node.nodeKind === 'source-group') return;
+    if (isNonInteractiveScanNode(node)) return;
     if (suppressNodeClickRef.current) {
       suppressNodeClickRef.current = false;
       return;
@@ -16168,7 +16418,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!nodeId || !event) return;
     const menuNode = largeMapNodeCacheRef.current.get(String(nodeId))
       || largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, nodeId));
-    if (menuNode?.nodeKind === 'import-ghost' || menuNode?.nodeKind === 'source-group') return;
+    if (isNonInteractiveScanNode(menuNode)) return;
     if (!canEdit()) return;
     if (!contentRef.current) return;
     event.preventDefault();
@@ -16199,7 +16449,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleLargeMapNodeDoubleClick = (nodeData) => {
     if (!nodeData || !canvasRef.current) return;
     const node = nodeData.node || nodeData;
-    if (node.nodeKind === 'import-ghost' || node.nodeKind === 'source-group') return;
+    if (isNonInteractiveScanNode(node)) return;
     if (isEntitlementLockedNode(nodeData.node || nodeData)) {
       openPlansModal('locked-node');
       return;
@@ -16215,6 +16465,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleLargeMapNodeExpand = async (sceneNode) => {
     if (!sceneNode?.id || !currentMap?.id) return;
+    if (isNonInteractiveScanNode(sceneNode.node || sceneNode)) return;
     if (isEntitlementLockedNode(sceneNode.node || sceneNode)) {
       openPlansModal('locked-node');
       return;
@@ -19692,6 +19943,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                     activeBranchNodeIds={activeBranchNodeIds}
                     expandedStacks={expandedStacks}
                     onToggleStack={toggleExpandedStack}
+                    onCaptureDeferredGroup={captureDeferredGroup}
+                    capturingDeferredGroupIds={capturingDeferredGroupIds}
                   />
                 ) : (
                 <SitemapTree
@@ -19754,6 +20007,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                   viewportBounds={canvasViewportBounds}
                   activeBranchNodeIds={activeBranchNodeIds}
                   onToggleStack={toggleExpandedStack}
+                  onCaptureDeferredGroup={captureDeferredGroup}
+                  capturingDeferredGroupIds={capturingDeferredGroupIds}
                   selectedNodeIds={selectedNodeIds}
                 >
                   {/* SVG Connections Layer */}

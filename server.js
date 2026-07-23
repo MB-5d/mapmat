@@ -68,6 +68,16 @@ const {
   hardenCollapsedScanResult,
 } = require('./utils/scanResultQuality');
 const {
+  REPETITIVE_GROUP_CAPTURE_LIMIT,
+  REPETITIVE_GROUP_THRESHOLD,
+  buildPreservedNumberMap,
+  createFocusedScanDescriptor,
+  getFocusedAncestorUrls,
+  getRepetitiveGroupDescriptor,
+  isUrlWithinFocusedPath,
+  sampleSignalsAreCompatible,
+} = require('./utils/scanOptimization');
+const {
   IMAGE_CAPTURE_SCALE_TIERS,
   collectImageCaptureRecords,
   buildImageCapturePhases,
@@ -1496,6 +1506,9 @@ const markJobComplete = async (id, result) => {
 };
 
 function countScanResultPages(result) {
+  if (result?.captureSummary) {
+    return Math.max(0, Number(result.captureSummary.capturedCount || 0) || 0);
+  }
   const seen = new Set();
   const stack = [];
   if (result?.root) stack.push(result.root);
@@ -1507,7 +1520,13 @@ function countScanResultPages(result) {
     const key = String(node.id || node.url || `${seen.size}:${stack.length}`);
     if (seen.has(key)) continue;
     seen.add(key);
-    if (!node.isVirtualMissing && !node.isEntitlementLocked && !node.entitlementLocked) {
+    if (
+      !node.isVirtualMissing
+      && !node.isEntitlementLocked
+      && !node.entitlementLocked
+      && node.nodeKind !== 'focus-ghost'
+      && node.nodeKind !== 'deferred-group'
+    ) {
       count += 1;
     }
     if (Array.isArray(node.children)) stack.push(...node.children);
@@ -3194,13 +3213,18 @@ function createScanScope(startUrl, allowSubdomains = false) {
   const parsed = new URL(normalized);
   const baseHost = normalizeHost(parsed.hostname);
   const rootDomain = getRootDomain(baseHost);
+  const focus = createFocusedScanDescriptor(normalized);
   return {
     seed: normalized,
     origin: parsed.origin,
     baseHost,
     rootDomain,
-    allowSubdomains: Boolean(allowSubdomains),
+    allowSubdomains: focus.focused ? false : Boolean(allowSubdomains),
     exactOnly: isLocalOrIpHost(baseHost) || !rootDomain,
+    focused: focus.focused,
+    focusPath: focus.focusPath,
+    focusDepth: focus.focusDepth,
+    siteRootUrl: focus.siteRootUrl,
   };
 }
 
@@ -4275,6 +4299,52 @@ function countScanTreeNodes(node) {
   return 1 + (node.children || []).reduce((sum, child) => sum + countScanTreeNodes(child), 0);
 }
 
+function extractRepetitivePageSignal(html, seoMetadata = {}) {
+  const openGraphType = String(seoMetadata?.openGraph?.type || '').trim().toLowerCase();
+  if (openGraphType) return `og:${openGraphType}`;
+  const source = String(html || '');
+  const schemaTypes = ['JobPosting', 'NewsArticle', 'BlogPosting', 'Article', 'Product', 'Event'];
+  const schemaType = schemaTypes.find((type) => new RegExp(`"@type"\\s*:\\s*"${type}"`, 'i').test(source));
+  if (schemaType) return `schema:${schemaType.toLowerCase()}`;
+  try {
+    const $ = cheerio.load(source);
+    if ($('article').length > 0) return 'element:article';
+    if ($('[data-job-id], [class*="job-detail"], [class*="job-posting"]').length > 0) return 'element:job';
+    if ($('[itemtype*="Product"], [class*="product-detail"]').length > 0) return 'element:product';
+  } catch {
+    return 'page';
+  }
+  return 'page';
+}
+
+function normalizeRepetitiveCaptureRequest(options = {}, scanScope = null, pageAllowance = null) {
+  const request = options?.repetitiveCapture;
+  if (!request || typeof request !== 'object') return null;
+  const groupId = String(request.groupId || '').trim().slice(0, 120);
+  const seen = new Set();
+  const entries = [];
+  (Array.isArray(request.entries) ? request.entries : []).forEach((entry, index) => {
+    if (pageAllowance !== null && entries.length >= pageAllowance) return;
+    const url = normalizeUrl(typeof entry === 'string' ? entry : entry?.url);
+    if (!url || seen.has(url)) return;
+    if (scanScope?.focused && !isUrlWithinFocusedPath(url, scanScope)) return;
+    if (scanScope && !scanScope.focused && !getPlacementForUrl(url, scanScope)) return;
+    seen.add(url);
+    entries.push({
+      url,
+      scanNumber: typeof entry === 'object' ? String(entry?.scanNumber || '').slice(0, 80) : '',
+      order: Math.max(0, Math.floor(Number(typeof entry === 'object' ? entry?.order : index) || index)),
+    });
+  });
+  if (!groupId || entries.length === 0) return null;
+  return { groupId, entries };
+}
+
+function isSuccessfulCapturedPageMeta(meta) {
+  const status = Number(meta?.httpStatus || 0);
+  return Boolean(meta && status >= 200 && status < 400 && meta.metadataAvailable !== false);
+}
+
 function normalizeScanOptions(options = {}) {
   return {
     thumbnails: Boolean(options.thumbnails),
@@ -4295,7 +4365,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const entitlementCappedScan = Boolean(options.entitlementCappedScan || options._entitlementCappedScan);
   const scanScope = createScanScope(startUrl, scanOptions.subdomains);
   const seed = scanScope.seed;
-  const pageLimit = normalizeMaxPagesLimit(maxPages);
+  const requestedPageLimit = normalizeMaxPagesLimit(maxPages);
+  const repetitiveCapture = normalizeRepetitiveCaptureRequest(options, scanScope, requestedPageLimit);
+  const captureUrlSet = new Set((repetitiveCapture?.entries || []).map((entry) => entry.url));
+  const captureEntryByUrl = new Map((repetitiveCapture?.entries || []).map((entry) => [entry.url, entry]));
+  const targetedGroupCapture = captureUrlSet.size > 0;
+  const pageLimit = requestedPageLimit === null
+    ? null
+    : requestedPageLimit + (targetedGroupCapture ? 1 : 0);
   const depthLimit = normalizeScanDepthLimit(maxDepth);
   const authStorageState = normalizePlaywrightStorageState(options.authSessionStorageState);
   const authContext = authStorageState
@@ -4304,9 +4381,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const origin = scanScope.origin;
   const baseHost = scanScope.baseHost;
-  const allowSubdomains = scanOptions.subdomains;
+  const allowSubdomains = scanScope.allowSubdomains;
   const scanDiagnostics = {
     seedUrl: seed,
+    focused: scanScope.focused,
+    focusPath: scanScope.focusPath,
     finalUrl: null,
     rootStatus: null,
     rootContentType: null,
@@ -4332,6 +4411,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     commonPathQueued: 0,
     commonPathActive: 0,
     commonPathSkippedForEntitlementCap: false,
+    commonPathSkippedForFocusedScope: false,
+    commonPathSkippedForTargetedCapture: false,
     renderedDiscoveryTried: false,
     renderedLinksFound: 0,
     renderedLinksQueued: 0,
@@ -4350,6 +4431,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     authCount: 0,
     inactiveCount: 0,
     collapseReason: null,
+    repetitiveGroups: 0,
+    repetitiveDeferredPages: 0,
+    focusedAncestorInspectedCount: 0,
   };
   const allowUrl = (candidate) => {
     const normalized = normalizeUrl(candidate);
@@ -4357,7 +4441,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const placement = getPlacementForUrl(normalized, scanScope);
     if (!placement) return false;
     if (!allowSubdomains) {
-      return placement === 'Primary' && sameOrigin(normalized, origin);
+      if (!(placement === 'Primary' && sameOrigin(normalized, origin))) return false;
+      return isUrlWithinFocusedPath(normalized, scanScope);
     }
     return true;
   };
@@ -4366,16 +4451,96 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!normalized) return false;
     if (normalized === seed) return true;
     if (depthLimit === null) return true;
+    if (scanScope.focused) {
+      return getUrlDepth(normalized) - scanScope.focusDepth <= depthLimit;
+    }
     return getUrlDepth(normalized) <= depthLimit;
   };
 
   const discoverySourceByUrl = new Map();
+  const numberingDiscoveryOrder = new Map();
+  const scopedDiscoveredUrls = new Set([seed]);
+  const repetitiveGroupsByKey = new Map();
+  const repetitiveGroupsById = new Map();
+  const deferredUrlToGroup = new Map();
+  let numberingCounter = 0;
   const linksInCounts = new Map();
   const linkEdgeSet = new Set();
+
+  const recordNumberingDiscovery = (url, order = null) => {
+    if (!scanScope.focused) return;
+    const normalized = normalizeUrl(url);
+    if (!normalized || !sameOrigin(normalized, origin) || isScanFileUrl(normalized)) return;
+    if (numberingDiscoveryOrder.has(normalized)) return;
+    numberingDiscoveryOrder.set(
+      normalized,
+      Number.isFinite(order) ? order : numberingCounter++
+    );
+  };
+
+  const activateRepetitiveGroup = (group) => {
+    if (!group || group.active || group.disabled || targetedGroupCapture) return;
+    if (group.members.length < REPETITIVE_GROUP_THRESHOLD) return;
+    group.active = true;
+    repetitiveGroupsById.set(group.groupId, group);
+    group.members.forEach((entry, index) => {
+      if (index < REPETITIVE_GROUP_CAPTURE_LIMIT) {
+        group.captureUrls.add(entry.url);
+      } else {
+        group.deferredEntries.push(entry);
+        deferredUrlToGroup.set(entry.url, group.groupId);
+      }
+    });
+  };
+
+  const trackRepetitiveDiscovery = (url, source) => {
+    if (targetedGroupCapture || source === 'common_path') return;
+    const normalized = normalizeUrl(url);
+    if (!normalized || !allowUrl(normalized) || isScanFileUrl(normalized)) return;
+    const descriptor = getRepetitiveGroupDescriptor(normalized);
+    if (!descriptor) return;
+    let group = repetitiveGroupsByKey.get(descriptor.key);
+    if (!group) {
+      group = {
+        ...descriptor,
+        active: false,
+        disabled: false,
+        validated: false,
+        members: [],
+        memberUrls: new Set(),
+        captureUrls: new Set(),
+        deferredEntries: [],
+      };
+      repetitiveGroupsByKey.set(descriptor.key, group);
+    }
+    if (group.memberUrls.has(normalized)) return;
+    const entry = {
+      url: normalized,
+      source: String(source || 'crawl').slice(0, 80),
+      order: numberingDiscoveryOrder.get(normalized) ?? numberingCounter,
+    };
+    group.memberUrls.add(normalized);
+    group.members.push(entry);
+    if (group.active) {
+      if (group.captureUrls.size < REPETITIVE_GROUP_CAPTURE_LIMIT) {
+        group.captureUrls.add(normalized);
+      } else {
+        group.deferredEntries.push(entry);
+        deferredUrlToGroup.set(normalized, group.groupId);
+      }
+      return;
+    }
+    activateRepetitiveGroup(group);
+  };
 
   const recordDiscovery = (url, source) => {
     const normalized = normalizeUrl(url);
     if (!normalized) return;
+    if (allowUrl(normalized) && source !== 'common_path') scopedDiscoveredUrls.add(normalized);
+    if (!(scanScope.focused && normalized === seed && numberingDiscoveryOrder.size === 0)) {
+      recordNumberingDiscovery(normalized);
+    }
+    trackRepetitiveDiscovery(normalized, source);
     const existing = discoverySourceByUrl.get(normalized);
     if (existing === 'crawl') return;
     if (source === 'crawl' || !existing) {
@@ -4426,6 +4591,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const allowPageUrl = (candidate) => allowUrl(candidate) && !isIgnoredCrawlUtilityUrl(candidate) && !isScanFileUrl(candidate);
   const enqueue = (url, depth, source = 'crawl') => {
     if (!url) return;
+    if (targetedGroupCapture && url !== seed && !captureUrlSet.has(url)) return;
+    if (deferredUrlToGroup.has(url)) return;
     if (isIgnoredCrawlUtilityUrl(url)) {
       scanDiagnostics.ignoredUtilityUrls += 1;
       return;
@@ -4447,6 +4614,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
   enqueue(seed, 0);
   recordDiscovery(seed, 'crawl');
+  if (targetedGroupCapture) {
+    repetitiveCapture.entries.forEach((entry) => {
+      recordDiscovery(entry.url, 'deferred_group');
+      enqueue(entry.url, Math.max(1, getUrlDepth(entry.url) - scanScope.focusDepth), 'deferred_group');
+    });
+  }
   const sitemapOrder = new Map();
   let discoveryCounter = 0;
 
@@ -4464,8 +4637,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   ];
 
   // Capped scans should spend their limited crawl budget on links discovered from the site first.
-  if (entitlementCappedScan) {
-    scanDiagnostics.commonPathSkippedForEntitlementCap = true;
+  if (entitlementCappedScan || scanScope.focused || targetedGroupCapture) {
+    scanDiagnostics.commonPathSkippedForEntitlementCap = entitlementCappedScan;
+    scanDiagnostics.commonPathSkippedForFocusedScope = scanScope.focused;
+    scanDiagnostics.commonPathSkippedForTargetedCapture = targetedGroupCapture;
   } else {
     for (const path of commonPaths) {
       const commonUrl = normalizeUrl(`${origin}${path}`);
@@ -4542,6 +4717,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           const norm = normalizeUrl(u);
           if (!norm) continue;
           scanDiagnostics.sitemapUrlsFound += 1;
+          recordNumberingDiscovery(norm);
           if (isIgnoredCrawlUtilityUrl(norm)) {
             scanDiagnostics.ignoredUtilityUrls += 1;
             continue;
@@ -4569,6 +4745,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const loc = $(el).text().trim();
         const norm = normalizeUrl(loc);
         if (norm) scanDiagnostics.sitemapUrlsFound += 1;
+        if (norm) recordNumberingDiscovery(norm);
         if (norm && isIgnoredCrawlUtilityUrl(norm)) {
           scanDiagnostics.ignoredUtilityUrls += 1;
           return;
@@ -4649,15 +4826,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
-  await processRobotsSitemaps();
-  await processSitemap(`${origin}/sitemap.xml`);
-  for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
-    if (stopRequested) break;
-    await processSitemap(`${origin}${altSitemap}`);
+  if (!targetedGroupCapture) {
+    await processRobotsSitemaps();
+    await processSitemap(`${origin}/sitemap.xml`);
+    for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
+      if (stopRequested) break;
+      await processSitemap(`${origin}${altSitemap}`);
+    }
   }
 
   // url -> { url, title, parentUrl }
   const pageMap = new Map();
+  const focusedAncestorMetaByUrl = new Map();
   const errors = [];
   const inactivePages = [];
   const brokenLinks = [];
@@ -4758,6 +4938,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     while (queueIndex < queue.length && (pageLimit === null || visited.size < pageLimit)) {
       const item = queue[queueIndex++];
       if (!item?.url || visited.has(item.url)) continue;
+      if (deferredUrlToGroup.has(item.url)) continue;
       visited.add(item.url);
       return item;
     }
@@ -4955,6 +5136,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       isBlocked: classification.isBlockedStatus,
       scanStatus: classification.scanStatus,
       metadataAvailable: classification.metadataAvailable,
+      repetitivePageSignal: extractRepetitivePageSignal(html, seoMetadata),
     });
     reportScanProgress();
     if (source === 'common_path' && status >= 200 && status < 400) {
@@ -4973,6 +5155,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     for (const link of links) {
       if (await pollJobStatus()) break;
+      recordNumberingDiscovery(link);
       if (isIgnoredCrawlUtilityUrl(link)) {
         scanDiagnostics.ignoredUtilityUrls += 1;
         continue;
@@ -5037,6 +5220,37 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
   await runCrawlWorkers();
 
+  const validateRepetitiveGroups = async () => {
+    let releasedDeferredGroupUrls = false;
+    repetitiveGroupsById.forEach((group) => {
+      if (!group.active || group.disabled || group.validated) return;
+      const signals = Array.from(group.captureUrls)
+        .map((url) => pageMap.get(url)?.repetitivePageSignal)
+        .filter(Boolean);
+      if (sampleSignalsAreCompatible(signals)) {
+        group.validated = true;
+        return;
+      }
+      group.active = false;
+      group.disabled = true;
+      group.deferredEntries.forEach((entry) => {
+        deferredUrlToGroup.delete(entry.url);
+        queued.delete(entry.url);
+        enqueue(
+          entry.url,
+          Math.max(1, getUrlDepth(entry.url) - (scanScope.focused ? scanScope.focusDepth : 0)),
+          entry.source || 'crawl'
+        );
+        releasedDeferredGroupUrls = true;
+      });
+      group.deferredEntries = [];
+    });
+    if (releasedDeferredGroupUrls && !stopRequested && (pageLimit === null || visited.size < pageLimit)) {
+      await runCrawlWorkers();
+    }
+  };
+  await validateRepetitiveGroups();
+
   const shouldTryRenderedDiscovery = () => {
     if (stopRequested) return false;
     if (scanDiagnostics.renderedDiscoveryTried) return false;
@@ -5066,6 +5280,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     scanDiagnostics.rootAllowedLinks = Math.max(scanDiagnostics.rootAllowedLinks, allowedRenderedLinks.length);
     for (const link of normalizedRenderedLinks) {
       if (await pollJobStatus()) break;
+      recordNumberingDiscovery(link);
       if (isIgnoredCrawlUtilityUrl(link)) {
         scanDiagnostics.ignoredUtilityUrls += 1;
         continue;
@@ -5093,6 +5308,131 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   if (shouldTryRenderedDiscovery()) {
     await runRenderedDiscoveryFallback();
+  }
+  await validateRepetitiveGroups();
+
+  const inspectFocusedAncestor = async (url) => {
+    let html = '';
+    let status = 0;
+    let contentType = '';
+    let finalUrl = url;
+    let responseTime = null;
+    let headers = {};
+    try {
+      const response = authContext
+        ? await fetchPageWithBrowserContext(authContext, url)
+        : await fetchPage(url, extraHeaders);
+      html = response.html;
+      status = response.status;
+      contentType = response.contentType;
+      headers = response.headers || {};
+      finalUrl = response.finalUrl || url;
+      responseTime = response.responseTime;
+    } catch {
+      return {
+        url,
+        finalUrl: url,
+        title: getUrlFallbackTitle(url),
+        httpStatus: 0,
+        statusCode: 0,
+        responseTime,
+        titleSource: 'url_fallback',
+        blockedReason: 'fetch_failed',
+        scanStatus: 'inactive',
+        isInactive: true,
+        metadataAvailable: false,
+      };
+    }
+
+    let classification = classifyScanResponse({ html, status, url, finalUrl, headers });
+    if (shouldRetryWithBrowser({ classification, status, headers, source: 'focus_ancestor' })) {
+      try {
+        const retryContext = await getCrawlBrowserContext(url);
+        const retry = await fetchPageWithBrowserContext(retryContext, url);
+        html = retry.html;
+        status = retry.status;
+        contentType = retry.contentType;
+        headers = retry.headers || {};
+        finalUrl = retry.finalUrl || url;
+        responseTime = retry.responseTime;
+        classification = classifyScanResponse({
+          html,
+          status,
+          url,
+          finalUrl,
+          headers,
+        });
+      } catch {
+        // Keep the original response when the browser retry is unavailable.
+      }
+    }
+
+    const fileInfo = getScanFileInfo(finalUrl || url, contentType);
+    if (fileInfo.isFile || !isHtmlContentType(contentType)) {
+      return {
+        url,
+        finalUrl,
+        title: getUrlFallbackTitle(finalUrl || url),
+        httpStatus: status,
+        statusCode: status,
+        responseTime,
+        isFile: true,
+        fileType: fileInfo.fileType || 'File',
+        contentType: fileInfo.contentType || normalizeContentType(contentType) || null,
+        metadataAvailable: false,
+      };
+    }
+
+    const seoMetadata = classification.shouldExtractMetadata
+      ? extractSeoMetadata(html, finalUrl || url)
+      : {};
+    const title = classification.shouldExtractMetadata
+      ? extractTitle(html, finalUrl || url)
+      : (classification.isErrorStatus
+        ? (classification.title || classification.fallbackTitle)
+        : classification.fallbackTitle);
+    const canonicalUrl = classification.shouldExtractMetadata
+      ? (normalizeUrl(seoMetadata.canonicalUrl) || extractCanonicalUrl(html, finalUrl || url))
+      : null;
+
+    return {
+      url,
+      finalUrl,
+      canonicalUrl,
+      title,
+      description: getPrimaryDescription(seoMetadata),
+      metaTags: getPrimaryMetaTags(seoMetadata),
+      seoMetadata,
+      authRequired: classification.isAuthStatus,
+      httpStatus: status,
+      statusCode: status,
+      errorStatus: classification.isErrorStatus ? status : null,
+      isError: classification.isErrorStatus,
+      isInactive: classification.isInactiveStatus,
+      httpErrorType: classification.isErrorStatus ? getHttpErrorType(status) : null,
+      httpErrorLabel: classification.isErrorStatus ? getHttpErrorLabel(status) : null,
+      isViewableError: classification.isViewableError,
+      wasRedirect: normalizeUrl(finalUrl || url) !== normalizeUrl(url),
+      redirectTarget: normalizeUrl(finalUrl || url) !== normalizeUrl(url) ? finalUrl : null,
+      responseTime,
+      titleSource: classification.titleSource,
+      blockedReason: classification.blockedReason,
+      isChallengePage: classification.isChallengePage,
+      isBlocked: classification.isBlockedStatus,
+      scanStatus: classification.scanStatus,
+      metadataAvailable: classification.metadataAvailable,
+    };
+  };
+
+  if (scanScope.focused && !targetedGroupCapture && !stopRequested) {
+    const ancestorUrls = getFocusedAncestorUrls(seed)
+      .map((url) => normalizeUrl(url))
+      .filter((url) => url && url !== seed);
+    const inspectedAncestors = await Promise.all(
+      ancestorUrls.map(async (url) => [url, await inspectFocusedAncestor(url)])
+    );
+    inspectedAncestors.forEach(([url, meta]) => focusedAncestorMetaByUrl.set(url, meta));
+    scanDiagnostics.focusedAncestorInspectedCount = inspectedAncestors.length;
   }
 
   if (scanOptions.brokenLinks && brokenLinkCandidates.length && !stopRequested) {
@@ -5148,7 +5488,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       finalUrl: meta.finalUrl || url,
       canonicalUrl: meta.canonicalUrl || null,
       title: meta.title || url,
-      pageType: url === seed ? PAGE_TYPE_HOME : PAGE_TYPE_PAGE,
+      pageType: url === seed && !scanScope.focused ? PAGE_TYPE_HOME : PAGE_TYPE_PAGE,
       description: meta.description || '',
       metaTags: meta.metaTags || '',
       seoMetadata: meta.seoMetadata || {},
@@ -5179,6 +5519,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       isBlocked: Boolean(meta.isBlocked),
       scanStatus: meta.scanStatus || null,
       metadataAvailable: meta.metadataAvailable !== false,
+      repetitiveGroupId: captureUrlSet.has(url) ? repetitiveCapture?.groupId || null : null,
+      scanNumber: captureEntryByUrl.get(url)?.scanNumber || undefined,
       isVirtualMissing: false,
       children: [],
     });
@@ -5194,6 +5536,20 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const rootUrl = seed;
   const rootHost = new URL(rootUrl).hostname;
   const rootHostNormalized = normalizeHost(rootHost);
+  const focusedContextAncestorUrls = new Set(
+    scanScope.focused
+      ? getFocusedAncestorUrls(seed)
+        .map((url) => normalizeUrl(url))
+        .filter((url) => url && url !== rootUrl)
+      : []
+  );
+  focusedContextAncestorUrls.forEach((url) => {
+    const existing = nodes.get(url);
+    if (existing && !focusedAncestorMetaByUrl.has(url)) {
+      focusedAncestorMetaByUrl.set(url, existing);
+    }
+    nodes.delete(url);
+  });
 
   const canonicalKeyFor = (node) => getCanonicalKey(node.canonicalUrl || node.finalUrl || node.url);
   const shouldInferPathParents = (node) => {
@@ -5216,6 +5572,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const ensureParentChain = (url) => {
     let parentUrl = getParentUrl(url);
     while (parentUrl && !nodes.has(parentUrl)) {
+      if (focusedContextAncestorUrls.has(parentUrl)) break;
+      if (scanScope.focused && !allowUrl(parentUrl)) break;
       const canonicalMatch = canonicalToUrl.get(getCanonicalKey(parentUrl));
       if (canonicalMatch) return;
       nodes.set(parentUrl, {
@@ -5371,7 +5729,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const pushUniqueChild = (parent, child) => {
     if (!parent._childUrls) parent._childUrls = new Set();
-    const key = normalizeUrl(child.url);
+    const key = normalizeUrl(child.url) || child.id;
+    if (!key) return;
     if (parent._childUrls.has(key)) return;
     parent._childUrls.add(key);
     parent.children.push(child);
@@ -5483,6 +5842,77 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   });
 
+  const preservedNumberMap = scanScope.focused
+    ? buildPreservedNumberMap(
+      Array.from(numberingDiscoveryOrder.entries()).map(([url, order]) => ({ url, order })),
+      seed
+    )
+    : new Map();
+  if (scanScope.focused) {
+    nodes.forEach((node) => {
+      const scanNumber = preservedNumberMap.get(normalizeUrl(node.url));
+      if (scanNumber) node.scanNumber = scanNumber;
+    });
+  }
+
+  const repetitiveGroups = [];
+  if (!targetedGroupCapture) {
+    repetitiveGroupsById.forEach((group) => {
+      if (!group.active || !group.validated || group.disabled) return;
+      const retryableSampleEntries = Array.from(group.captureUrls)
+        .filter((url) => {
+          const meta = pageMap.get(url);
+          return !isSuccessfulCapturedPageMeta(meta) && Number(meta?.httpStatus || 0) === 0;
+        })
+        .map((url) => ({
+          url,
+          source: discoverySourceByUrl.get(url) || 'crawl',
+          order: numberingDiscoveryOrder.get(url) ?? 0,
+        }));
+      const deferredEntries = [...group.deferredEntries, ...retryableSampleEntries]
+        .filter((entry, index, entries) => entries.findIndex((candidate) => candidate.url === entry.url) === index)
+        .filter((entry) => {
+          const meta = pageMap.get(entry.url);
+          return !meta || Number(meta.httpStatus || 0) === 0;
+        })
+        .map((entry, index) => ({
+          url: entry.url,
+          source: entry.source,
+          order: entry.order ?? index,
+          scanNumber: preservedNumberMap.get(entry.url) || '',
+        }));
+      if (deferredEntries.length === 0) return;
+      const capturedCount = group.members.filter((entry) => isSuccessfulCapturedPageMeta(pageMap.get(entry.url))).length;
+      const summary = {
+        id: group.groupId,
+        key: group.key,
+        parentUrl: group.parentUrl,
+        shape: group.shape,
+        capturedCount,
+        deferredCount: deferredEntries.length,
+        totalCount: capturedCount + deferredEntries.length,
+        entries: deferredEntries,
+      };
+      repetitiveGroups.push(summary);
+      const parentNode = nodes.get(group.parentUrl) || nodes.get(seed);
+      if (!parentNode) return;
+      pushUniqueChild(parentNode, {
+        id: `placeholder_${group.groupId}`,
+        url: '',
+        title: `${deferredEntries.length} more pages like this`,
+        nodeKind: 'deferred-group',
+        deferredGroupId: group.groupId,
+        deferredGroupKey: group.key,
+        parentUrl: group.parentUrl,
+        capturedCount,
+        remainingCount: deferredEntries.length,
+        totalCount: capturedCount + deferredEntries.length,
+        deferredEntries,
+        children: [],
+      });
+    });
+  }
+
   const getSitemapIndex = (node) => {
     const direct = sitemapOrder.get(node.finalUrl || node.url);
     if (direct !== undefined) return direct;
@@ -5521,6 +5951,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const sortTree = (node, depth = 0) => {
     if (!node?.children?.length) return;
     node.children.sort((a, b) => {
+      if (a?.nodeKind === 'deferred-group' && b?.nodeKind !== 'deferred-group') return 1;
+      if (a?.nodeKind !== 'deferred-group' && b?.nodeKind === 'deferred-group') return -1;
       const sa = getSitemapIndex(a);
       const sb = getSitemapIndex(b);
       if (sa !== undefined && sb !== undefined && sa !== sb) return sa - sb;
@@ -5531,7 +5963,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     node.children.forEach((child) => sortTree(child, depth + 1));
   };
 
-  const root = nodes.get(rootUrl);
+  let root = nodes.get(rootUrl);
   if (root && (!root.children || root.children.length === 0) && pageMap.size > 1) {
     let repairedCount = 0;
     nodes.forEach((node) => {
@@ -5598,6 +6030,58 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   prunedOrphanNodes.forEach(clearMissingIfKnown);
   subdomainNodes.forEach(clearMissingIfKnown);
 
+  const capturedTreeNodeCount = countScanTreeNodes(root);
+  if (scanScope.focused && root) {
+    const ancestorUrls = getFocusedAncestorUrls(seed)
+      .filter((url) => normalizeUrl(url) !== seed);
+    let focusedTree = root;
+    for (let index = ancestorUrls.length - 1; index >= 0; index -= 1) {
+      const ancestorUrl = normalizeUrl(ancestorUrls[index]);
+      if (!ancestorUrl) continue;
+      const isSiteRoot = ancestorUrl === scanScope.siteRootUrl;
+      const inspectedMeta = focusedAncestorMetaByUrl.get(ancestorUrl) || {};
+      focusedTree = {
+        id: safeIdFromUrl(`focus:${ancestorUrl}`),
+        url: ancestorUrl,
+        finalUrl: inspectedMeta.finalUrl || ancestorUrl,
+        canonicalUrl: inspectedMeta.canonicalUrl || null,
+        title: inspectedMeta.title || (isSiteRoot ? new URL(ancestorUrl).hostname : getTitleFromUrl(ancestorUrl)),
+        pageType: isSiteRoot ? PAGE_TYPE_HOME : PAGE_TYPE_PAGE,
+        description: inspectedMeta.description || '',
+        metaTags: inspectedMeta.metaTags || '',
+        seoMetadata: inspectedMeta.seoMetadata || {},
+        nodeKind: 'focus-ghost',
+        isFocusAncestor: true,
+        scanNumber: preservedNumberMap.get(ancestorUrl) || (isSiteRoot ? '0' : ''),
+        parentUrl: getParentUrl(ancestorUrl),
+        authRequired: Boolean(inspectedMeta.authRequired),
+        httpStatus: inspectedMeta.httpStatus ?? null,
+        statusCode: inspectedMeta.statusCode ?? inspectedMeta.httpStatus ?? null,
+        errorStatus: inspectedMeta.errorStatus ?? null,
+        isError: Boolean(inspectedMeta.isError),
+        isInactive: Boolean(inspectedMeta.isInactive),
+        isFile: Boolean(inspectedMeta.isFile),
+        fileType: inspectedMeta.fileType || null,
+        httpErrorType: inspectedMeta.httpErrorType || null,
+        httpErrorLabel: inspectedMeta.httpErrorLabel || null,
+        isViewableError: Boolean(inspectedMeta.isViewableError),
+        wasRedirect: Boolean(inspectedMeta.wasRedirect),
+        redirectTarget: inspectedMeta.redirectTarget || null,
+        responseTime: inspectedMeta.responseTime ?? null,
+        titleSource: inspectedMeta.titleSource || 'url_fallback',
+        blockedReason: inspectedMeta.blockedReason || null,
+        isChallengePage: Boolean(inspectedMeta.isChallengePage),
+        isBlocked: Boolean(inspectedMeta.isBlocked),
+        isMissing: false,
+        isVirtualMissing: false,
+        scanStatus: inspectedMeta.scanStatus || null,
+        metadataAvailable: inspectedMeta.metadataAvailable !== false,
+        children: [focusedTree],
+      };
+    }
+    root = focusedTree;
+  }
+
   const stripInternalFields = (node) => {
     if (!node) return;
     delete node._childUrls;
@@ -5618,6 +6102,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   scanDiagnostics.queueRemaining = Math.max(0, queue.length - queueIndex);
   scanDiagnostics.rootChildCount = root?.children?.length || 0;
   scanDiagnostics.treeNodeCount = countScanTreeNodes(root);
+  scanDiagnostics.capturedTreeNodeCount = capturedTreeNodeCount;
+  scanDiagnostics.numberingDiscoveredPageCount = numberingDiscoveryOrder.size;
+  scanDiagnostics.scopedDiscoveredPageCount = scopedDiscoveredUrls.size;
+  scanDiagnostics.repetitiveGroups = repetitiveGroups.length;
+  scanDiagnostics.repetitiveDeferredPages = repetitiveGroups.reduce(
+    (sum, group) => sum + group.deferredCount,
+    0
+  );
 
   const buildDiscoveryManifest = () => {
     const hiddenEntries = [];
@@ -5684,7 +6176,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     || scanDiagnostics.renderedLinksQueued > 0
     || scanDiagnostics.queueRemaining > 0
     || pageMap.size > 1;
-  if (canOverrideRootOnlyPartialReason(partialReason) && scanDiagnostics.treeNodeCount <= 1 && hasRootOnlyCollapseSignal) {
+  if (!targetedGroupCapture && canOverrideRootOnlyPartialReason(partialReason) && capturedTreeNodeCount <= 1 && hasRootOnlyCollapseSignal) {
     const previousPartialReason = partialReason;
     partialReason = 'scan_collapsed';
     const reasons = [];
@@ -5716,10 +6208,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (scanDiagnostics.fetchedPageCount === 0 && scanDiagnostics.failedFetches > 0) return 'fetch_failed';
     return null;
   };
-  const rootOnlyFailureReason = scanDiagnostics.treeNodeCount <= 1
+  const rootOnlyFailureReason = capturedTreeNodeCount <= 1
     ? getRootOnlyFailureReason()
     : null;
-  if (canOverrideRootOnlyPartialReason(partialReason) && rootOnlyFailureReason) {
+  if (!targetedGroupCapture && canOverrideRootOnlyPartialReason(partialReason) && rootOnlyFailureReason) {
     const previousPartialReason = partialReason;
     partialReason = 'root_discovery_failed';
     scanDiagnostics.collapseReason = rootOnlyFailureReason;
@@ -5746,7 +6238,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       || scanDiagnostics.robotsSitemapUrlsFound > 0
     )
   );
-  if (canOverrideRootOnlyPartialReason(partialReason) && scanDiagnostics.treeNodeCount <= 1 && hasDiscoveryFailureSignal) {
+  if (!targetedGroupCapture && canOverrideRootOnlyPartialReason(partialReason) && capturedTreeNodeCount <= 1 && hasDiscoveryFailureSignal) {
     const previousPartialReason = partialReason;
     partialReason = 'root_discovery_failed';
     scanDiagnostics.collapseReason = [
@@ -5819,6 +6311,30 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   reportScanProgress({ final: true });
 
   const includePartialOrphans = Boolean(partialReason);
+  const repetitiveDeferredPageCount = repetitiveGroups.reduce(
+    (sum, group) => sum + group.deferredCount,
+    0
+  );
+  const pageCountSummary = {
+    capturedPageCount: pageMap.size,
+    deferredPageCount: repetitiveDeferredPageCount,
+    totalDiscoveredPageCount: pageMap.size + repetitiveDeferredPageCount,
+  };
+  const captureSummary = targetedGroupCapture
+    ? (() => {
+      const successfulEntries = repetitiveCapture.entries.filter((entry) => {
+        return isSuccessfulCapturedPageMeta(pageMap.get(entry.url));
+      });
+      const successfulUrlSet = new Set(successfulEntries.map((entry) => entry.url));
+      return {
+        groupId: repetitiveCapture.groupId,
+        requestedCount: repetitiveCapture.entries.length,
+        capturedCount: successfulEntries.length,
+        successfulEntries,
+        remainingEntries: repetitiveCapture.entries.filter((entry) => !successfulUrlSet.has(entry.url)),
+      };
+    })()
+    : null;
 
   const result = {
     root,
@@ -5834,15 +6350,26 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       rootDomain: scanScope.rootDomain,
       allowSubdomains: scanScope.allowSubdomains,
       exactOnly: scanScope.exactOnly,
+      focused: scanScope.focused,
+      focusPath: scanScope.focusPath,
+      focusDepth: scanScope.focusDepth,
+      siteRootUrl: scanScope.siteRootUrl,
     },
     scanDiagnostics,
     discoveryManifest,
+    pageCountSummary,
+    repetitiveGroups,
+    ...(captureSummary ? { captureSummary } : {}),
     crosslinks,
   };
 
   if (partialReason) {
     result.partial = true;
     result.partialReason = partialReason;
+  }
+  if (captureSummary?.remainingEntries?.length) {
+    result.partial = true;
+    result.partialReason = 'deferred_capture_incomplete';
   }
 
   if (authContext) {
@@ -6510,12 +7037,14 @@ async function processJob(job) {
       if (progressState.lastProgress) {
         await updateJobProgress(jobId, progressState.lastProgress);
       }
-      hardenCollapsedScanResult(result, {
-        progress: progressState.lastProgress,
-        entitlementCapped: Boolean(payload.entitlement?.capped),
-      });
+      if (!result.captureSummary) {
+        hardenCollapsedScanResult(result, {
+          progress: progressState.lastProgress,
+          entitlementCapped: Boolean(payload.entitlement?.capped),
+        });
+      }
       applyScanEntitlementMetadata(result, payload.entitlement || null);
-      const failureError = getScanResultFailureError(result);
+      const failureError = result.captureSummary ? null : getScanResultFailureError(result);
       logScanOutcome({
         jobId,
         result,

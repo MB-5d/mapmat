@@ -1,6 +1,19 @@
 import { LAYOUT } from '../utils/constants';
 import { shouldStackChildren } from '../utils/treeUtils';
 
+const getStackTotalCount = (children = []) => children.reduce((total, child) => (
+  total + (child?.nodeKind === 'deferred-group'
+    ? Math.max(0, Number(child.remainingCount || 0) || 0)
+    : 1)
+), 0);
+
+const getLastPageChildIndex = (children = []) => {
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    if (children[index]?.nodeKind !== 'deferred-group') return index;
+  }
+  return children.length - 1;
+};
+
 // Get node height based on display mode
 export const getNodeH = (showThumbnails) => showThumbnails ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED;
 
@@ -58,7 +71,7 @@ export const computeLayout = (
       w: NODE_W,
       h: NODE_H,
       depth,
-      number,
+      number: node?.nodeKind === 'deferred-group' ? '' : (node?.scanNumber || number),
       node,
       ...extra,
     });
@@ -104,7 +117,7 @@ export const computeLayout = (
         child,
         stackInfo: {
           parentId: node.id,
-          totalCount: children.length,
+          totalCount: getStackTotalCount(children),
           collapsed: true,
         },
       }];
@@ -117,9 +130,9 @@ export const computeLayout = (
       stackInfo: shouldStack
         ? {
             parentId: node.id,
-            totalCount: children.length,
+            totalCount: getStackTotalCount(children),
             expanded: true,
-            showCollapse: idx === 0 || idx === children.length - 1,
+            showCollapse: idx === 0 || idx === getLastPageChildIndex(children),
         }
         : null,
     }));
@@ -361,7 +374,7 @@ export const computeLayout = (
         ...context,
         stackInfo: {
           parentId: parentNode.id,
-          totalCount: parentNode.children.length,
+          totalCount: getStackTotalCount(parentNode.children),
           collapsed: true,
         },
       });
@@ -395,9 +408,9 @@ export const computeLayout = (
       const stackInfo = shouldStack
         ? {
             parentId: parentNode.id,
-            totalCount: parentNode.children.length,
+            totalCount: getStackTotalCount(parentNode.children),
             expanded: true,
-            showCollapse: idx === 0 || idx === parentNode.children.length - 1,
+            showCollapse: idx === 0 || idx === getLastPageChildIndex(parentNode.children),
           }
         : null;
       setNode(child, childX, cursorY, parentDepth + 1, childNumber, stackInfo ? { ...context, stackInfo } : { ...context });

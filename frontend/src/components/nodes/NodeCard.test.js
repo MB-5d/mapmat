@@ -161,6 +161,68 @@ describe('NodeCard', () => {
     expect(container.querySelector('.anchor-point')).toBeNull();
   });
 
+  test('shows focused ancestors as interactive ghosted context with their preserved number and findings', () => {
+    act(() => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'focus-1',
+            title: 'Blog',
+            url: 'https://example.com/blog',
+            nodeKind: 'focus-ghost',
+            isFocusAncestor: true,
+            httpStatus: 404,
+            statusCode: 404,
+            isError: true,
+          }}
+          number="3"
+          color="#0ea5e9"
+          showThumbnails={false}
+          showPageNumbers
+          canEdit
+          badges={['404']}
+        />
+      );
+    });
+
+    expect(container.querySelector('.node-card.focus-ghost.ghosted.focus-ghost-reveal-card')).not.toBeNull();
+    expect(container.querySelector('.page-number')?.textContent).toBe('3');
+    expect(container.querySelector('.card-actions')).not.toBeNull();
+    expect(container.textContent).toContain('404');
+  });
+
+  test('renders a group-only capture action for deferred pages', () => {
+    const onCaptureDeferredGroup = jest.fn();
+    act(() => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'more-posts',
+            nodeKind: 'deferred-group',
+            deferredGroupId: 'blog-posts',
+            remainingCount: 368,
+          }}
+          number=""
+          color="#0ea5e9"
+          showThumbnails={false}
+          showPageNumbers
+          canEdit
+          onCaptureDeferredGroup={onCaptureDeferredGroup}
+        />
+      );
+    });
+
+    const button = container.querySelector('.deferred-group-capture');
+    expect(button?.textContent).toContain('Capture now');
+    expect(container.querySelector('.deferred-group-number')?.textContent).toBe('368');
+    expect(container.querySelector('.deferred-group-count')?.textContent).toBe('more pages like this');
+    expect(button?.classList.contains('ui-btn--type-secondary')).toBe(true);
+    expect(button?.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('.page-number')).toBeNull();
+    act(() => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(onCaptureDeferredGroup).toHaveBeenCalledTimes(1);
+  });
+
   test('stack toggle handles click without starting card drag', () => {
     const onToggleStack = jest.fn();
     const onCardPointerDown = jest.fn();
