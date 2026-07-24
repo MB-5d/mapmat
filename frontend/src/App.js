@@ -129,6 +129,7 @@ import {
   buildReportStats,
   buildReportEntries,
   comparePageNumbers,
+  getReportEntitlementVisibleLimit,
 } from './utils/reportUtils';
 import {
   buildExportMetadata,
@@ -3247,6 +3248,10 @@ const reconcileDeferredCaptureScanMeta = ({
   const normalizedCapturedCount = Math.max(0, Number(capturedCount || 0) || 0);
   const normalizedRemainingCount = Math.max(0, Number(remainingCount || 0) || 0);
   const normalizedVisiblePageCount = Math.max(0, Number(visiblePageCount || 0) || 0);
+  const entitlementVisibleLimit = getReportEntitlementVisibleLimit(current);
+  const reconciledVisiblePageCount = entitlementVisibleLimit
+    ? Math.min(normalizedVisiblePageCount, entitlementVisibleLimit)
+    : normalizedVisiblePageCount;
   const repetitiveGroups = (current?.repetitiveGroups || []).map((group) => (
     group?.id === groupId
       ? {
@@ -3264,7 +3269,7 @@ const reconcileDeferredCaptureScanMeta = ({
     entitlement: current?.entitlement
       ? {
         ...current.entitlement,
-        visiblePageCount: normalizedVisiblePageCount,
+        visiblePageCount: reconciledVisiblePageCount,
       }
       : current?.entitlement,
     pageCountSummary: {

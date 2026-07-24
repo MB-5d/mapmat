@@ -644,7 +644,7 @@ describe('deferred page capture', () => {
       groupId: 'blog-group',
       capturedCount: 23,
       remainingCount: 386,
-      visiblePageCount: 25,
+      visiblePageCount: 26,
     });
 
     expect(reconciled.entitlement).toMatchObject({
