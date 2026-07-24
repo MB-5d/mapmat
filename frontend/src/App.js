@@ -3236,6 +3236,57 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
   return { root: rootWithCapturedAncestors, capturedCount, remainingCount };
 };
 
+const reconcileDeferredCaptureScanMeta = ({
+  current,
+  groupId,
+  capturedCount,
+  remainingCount,
+  visiblePageCount,
+}) => {
+  const currentSummary = current?.pageCountSummary || {};
+  const normalizedCapturedCount = Math.max(0, Number(capturedCount || 0) || 0);
+  const normalizedRemainingCount = Math.max(0, Number(remainingCount || 0) || 0);
+  const normalizedVisiblePageCount = Math.max(0, Number(visiblePageCount || 0) || 0);
+  const repetitiveGroups = (current?.repetitiveGroups || []).map((group) => (
+    group?.id === groupId
+      ? {
+        ...group,
+        capturedCount: Math.max(0, Number(group.capturedCount || 0) || 0) + normalizedCapturedCount,
+        deferredCount: normalizedRemainingCount,
+        totalCount: Math.max(0, Number(group.totalCount || 0) || 0),
+      }
+      : group
+  ));
+
+  return {
+    ...current,
+    repetitiveGroups,
+    entitlement: current?.entitlement
+      ? {
+        ...current.entitlement,
+        visiblePageCount: normalizedVisiblePageCount,
+      }
+      : current?.entitlement,
+    pageCountSummary: {
+      capturedPageCount: Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
+        + normalizedCapturedCount,
+      deferredPageCount: Math.max(
+        0,
+        Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0) - normalizedCapturedCount
+      ),
+      estimatedRemainingPageCount: Math.max(
+        0,
+        Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0) - normalizedCapturedCount
+      ),
+      totalDiscoveredPageCount: Math.max(
+        Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0),
+        Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
+          + Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
+      ),
+    },
+  };
+};
+
 export const __testing = {
   normalizeScanConfig,
   normalizeScanEntitlementPreview,
@@ -3256,6 +3307,7 @@ export const __testing = {
   applyScanArtifacts,
   mergeRescanResults,
   applyDeferredCaptureResult,
+  reconcileDeferredCaptureScanMeta,
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
   getPersistedScanMetaFromRoot,
@@ -13837,36 +13889,15 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       rootRef.current = applied.root;
       setRoot(applied.root);
-      setScanMeta((current) => {
-        const currentSummary = current?.pageCountSummary || {};
-        const repetitiveGroups = (current?.repetitiveGroups || []).map((group) => (
-          group?.id === groupId
-            ? {
-              ...group,
-              capturedCount: Math.max(0, Number(group.capturedCount || 0) || 0) + applied.capturedCount,
-              deferredCount: applied.remainingCount,
-              totalCount: Math.max(0, Number(group.totalCount || 0) || 0),
-            }
-            : group
-        ));
-        return {
-          ...current,
-          repetitiveGroups,
-          pageCountSummary: {
-            capturedPageCount: Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0) + applied.capturedCount,
-            deferredPageCount: Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0) - applied.capturedCount,
-            estimatedRemainingPageCount: Math.max(
-              0,
-              Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0) - applied.capturedCount
-            ),
-            totalDiscoveredPageCount: Math.max(
-              Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0),
-              Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
-                + Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
-            ),
-          },
-        };
-      });
+      const visiblePageCount = countPageNodes(applied.root)
+        + orphansRef.current.reduce((total, orphan) => total + countPageNodes(orphan), 0);
+      setScanMeta((current) => reconcileDeferredCaptureScanMeta({
+        current,
+        groupId,
+        capturedCount: applied.capturedCount,
+        remainingCount: applied.remainingCount,
+        visiblePageCount,
+      }));
       setDraftVersionFromSnapshot({
         root: applied.root,
         orphans: orphansRef.current,

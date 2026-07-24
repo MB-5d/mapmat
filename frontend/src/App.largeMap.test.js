@@ -619,6 +619,52 @@ describe('large map viewport behavior', () => {
 });
 
 describe('deferred page capture', () => {
+  test('reconciles report entitlement counts after a partial group capture', () => {
+    const reconciled = __testing.reconcileDeferredCaptureScanMeta({
+      current: {
+        entitlement: {
+          capped: true,
+          allowedPages: 25,
+          visiblePageCount: 1,
+          lockedPageEstimate: 10,
+        },
+        repetitiveGroups: [{
+          id: 'blog-group',
+          capturedCount: 10,
+          deferredCount: 409,
+          totalCount: 419,
+        }],
+        pageCountSummary: {
+          capturedPageCount: 13,
+          deferredPageCount: 409,
+          estimatedRemainingPageCount: 409,
+          totalDiscoveredPageCount: 422,
+        },
+      },
+      groupId: 'blog-group',
+      capturedCount: 23,
+      remainingCount: 386,
+      visiblePageCount: 25,
+    });
+
+    expect(reconciled.entitlement).toMatchObject({
+      allowedPages: 25,
+      visiblePageCount: 25,
+      lockedPageEstimate: 10,
+    });
+    expect(reconciled.repetitiveGroups[0]).toMatchObject({
+      capturedCount: 33,
+      deferredCount: 386,
+      totalCount: 419,
+    });
+    expect(reconciled.pageCountSummary).toEqual({
+      capturedPageCount: 36,
+      deferredPageCount: 386,
+      estimatedRemainingPageCount: 386,
+      totalDiscoveredPageCount: 422,
+    });
+  });
+
   test('replaces only the selected group placeholder with captured pages', () => {
     const placeholder = {
       id: 'placeholder-blog',
