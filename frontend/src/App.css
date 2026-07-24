@@ -4300,24 +4300,13 @@ body {
   filter: none;
 }
 
-.node-card.deferred-group {
-  border-style: dashed;
-  border-color: var(--ui-color-border-strong);
-  background: var(--ui-color-surface-muted);
-  box-shadow: none;
-}
-
-.node-card.deferred-group .card-header {
-  background: var(--ui-color-border-strong) !important;
-}
-
 .deferred-group-content {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 24px;
+  padding: 14px 14px 12px;
 }
 
 .deferred-group-message {

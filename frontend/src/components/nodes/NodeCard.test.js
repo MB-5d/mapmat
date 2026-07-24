@@ -219,6 +219,7 @@ describe('NodeCard', () => {
     expect(button?.classList.contains('ui-btn--type-secondary')).toBe(true);
     expect(button?.querySelector('svg[data-icon="scan"]')).not.toBeNull();
     expect(container.querySelector('.page-number')).toBeNull();
+    expect(container.querySelector('.node-card.deferred-group .card-header')).toBeNull();
     act(() => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(onCaptureDeferredGroup).toHaveBeenCalledTimes(1);
   });

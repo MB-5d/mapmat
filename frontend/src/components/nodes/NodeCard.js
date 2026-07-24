@@ -361,11 +361,13 @@ const NodeCard = ({
         </>
       )}
 
-      <div
-        className="card-header"
-        style={{ backgroundColor: color }}
-      >
-      </div>
+      {!isDeferredGroup && (
+        <div
+          className="card-header"
+          style={{ backgroundColor: color }}
+        >
+        </div>
+      )}
 
       {/* Comment badge - show if node has comments and comments mode is active */}
       {showCommentBadges && !isStructuralNode && node.comments?.length > 0 && (

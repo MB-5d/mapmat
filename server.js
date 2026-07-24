@@ -4275,6 +4275,39 @@ function extractLinks(html, baseUrl) {
   return Array.from(links);
 }
 
+function extractFocusedContentLinks(html, baseUrl) {
+  const $ = cheerio.load(html);
+  const links = new Set();
+  const contentSelector = [
+    'article a[href]',
+    'h1 a[href]',
+    'h2 a[href]',
+    'h3 a[href]',
+    'h4 a[href]',
+    '[class*="card"] a[href]',
+    '[class*="Card"] a[href]',
+    '[class*="tile"] a[href]',
+    '[class*="Tile"] a[href]',
+    '[class*="teaser"] a[href]',
+    '[class*="Teaser"] a[href]',
+  ].join(', ');
+
+  $(contentSelector).each((_, el) => {
+    const $link = $(el);
+    if ($link.closest('header, nav, footer, aside, [role="navigation"]').length > 0) return;
+    const href = ($link.attr('href') || '').trim();
+    if (!href || /^(mailto:|tel:|javascript:)/i.test(href)) return;
+    try {
+      const normalized = normalizeUrl(new URL(href, baseUrl).toString());
+      if (normalized) links.add(normalized);
+    } catch {
+      // Ignore malformed content links.
+    }
+  });
+
+  return Array.from(links);
+}
+
 async function extractRenderedLinks(url, context = null) {
   let page = null;
   let ownedContext = null;
@@ -4291,13 +4324,34 @@ async function extractRenderedLinks(url, context = null) {
       timeout: 12000,
     });
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
-    const links = await page.$$eval('a[href]', (anchors) => (
-      anchors
+    const renderedLinks = await page.evaluate(() => {
+      const selectors = [
+        'article a[href]',
+        'h1 a[href]',
+        'h2 a[href]',
+        'h3 a[href]',
+        'h4 a[href]',
+        '[class*="card"] a[href]',
+        '[class*="Card"] a[href]',
+        '[class*="tile"] a[href]',
+        '[class*="Tile"] a[href]',
+        '[class*="teaser"] a[href]',
+        '[class*="Teaser"] a[href]',
+      ].join(', ');
+      const contentLinks = Array.from(document.querySelectorAll(selectors))
+        .filter((anchor) => !anchor.closest('header, nav, footer, aside, [role="navigation"]'))
         .map((anchor) => anchor.href)
-        .filter(Boolean)
-    ));
+        .filter(Boolean);
+      return {
+        links: Array.from(document.querySelectorAll('a[href]'))
+          .map((anchor) => anchor.href)
+          .filter(Boolean),
+        contentLinks,
+      };
+    });
     return {
-      links: Array.from(new Set(links)),
+      links: Array.from(new Set(renderedLinks.links)),
+      contentLinks: Array.from(new Set(renderedLinks.contentLinks)),
       status: response?.status?.() || null,
       finalUrl: response?.url?.() || url,
       error: null,
@@ -4305,6 +4359,7 @@ async function extractRenderedLinks(url, context = null) {
   } catch (error) {
     return {
       links: [],
+      contentLinks: [],
       status: null,
       finalUrl: url,
       error: error?.message || 'rendered discovery failed',
@@ -4407,6 +4462,22 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const origin = scanScope.origin;
   const baseHost = scanScope.baseHost;
   const allowSubdomains = scanScope.allowSubdomains;
+  const focusedContentUrls = new Set();
+  const focusedListingUrls = new Set();
+  const focusedPathAliases = new Set();
+  const focusedAncestorUrlSet = new Set(
+    scanScope.focused ? getFocusedAncestorUrls(seed).map((url) => normalizeUrl(url)).filter(Boolean) : []
+  );
+  const isWithinFocusedPathAlias = (candidate) => {
+    if (!scanScope.focused) return true;
+    const normalized = normalizeUrl(candidate);
+    if (!normalized || !sameOrigin(normalized, origin)) return false;
+    if (isUrlWithinFocusedPath(normalized, scanScope)) return true;
+    const parsed = new URL(normalized);
+    return Array.from(focusedPathAliases).some((path) => (
+      parsed.pathname === path || parsed.pathname.startsWith(`${path}/`)
+    ));
+  };
   const scanDiagnostics = {
     seedUrl: seed,
     focused: scanScope.focused,
@@ -4464,6 +4535,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     repetitiveGroups: 0,
     repetitiveDeferredPages: 0,
     focusedAncestorInspectedCount: 0,
+    focusedContentDiscoveredCount: 0,
+    focusedRedirectAliasCount: 0,
+    promotedDeferredAncestorCount: 0,
+    focusedParentProbeCount: 0,
+    focusedParentProbeSuccessCount: 0,
+    focusedNumberingEntryCount: 0,
   };
   const allowUrl = (candidate) => {
     const normalized = normalizeUrl(candidate);
@@ -4472,7 +4549,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!placement) return false;
     if (!allowSubdomains) {
       if (!(placement === 'Primary' && sameOrigin(normalized, origin))) return false;
-      return isUrlWithinFocusedPath(normalized, scanScope);
+      return isWithinFocusedPathAlias(normalized) || focusedContentUrls.has(normalized);
     }
     return true;
   };
@@ -4482,7 +4559,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (normalized === seed) return true;
     if (depthLimit === null) return true;
     if (scanScope.focused) {
-      return getUrlDepth(normalized) - scanScope.focusDepth <= depthLimit;
+      if (focusedContentUrls.has(normalized)) return true;
+      const matchingDepths = [scanScope.focusPath, ...Array.from(focusedPathAliases)]
+        .filter((path) => {
+          const pathname = new URL(normalized).pathname;
+          return pathname === path || pathname.startsWith(`${path}/`);
+        })
+        .map((path) => path.split('/').filter(Boolean).length);
+      const baseDepth = matchingDepths.length ? Math.max(...matchingDepths) : scanScope.focusDepth;
+      return getUrlDepth(normalized) - baseDepth <= depthLimit;
     }
     return getUrlDepth(normalized) <= depthLimit;
   };
@@ -4508,6 +4593,33 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     );
   };
 
+  const recordFocusedSitemapNumbering = (url, order) => {
+    const normalized = normalizeUrl(url);
+    if (!scanScope.focused || !normalized || !sameOrigin(normalized, origin) || isScanFileUrl(normalized)) return;
+    const candidateSegments = new URL(normalized).pathname.split('/').filter(Boolean);
+    const focusSegments = scanScope.focusPath.split('/').filter(Boolean);
+    const prefixes = new Set();
+    if (candidateSegments.length > 0) {
+      prefixes.add(normalizeUrl(`${origin}/${candidateSegments[0]}`));
+    }
+    for (let level = 1; level <= focusSegments.length; level += 1) {
+      const sharesAncestor = candidateSegments
+        .slice(0, level)
+        .every((segment, index) => segment === focusSegments[index]);
+      if (!sharesAncestor || candidateSegments.length <= level) break;
+      prefixes.add(normalizeUrl(`${origin}/${candidateSegments.slice(0, level + 1).join('/')}`));
+    }
+    if (isWithinFocusedPathAlias(normalized)) prefixes.add(normalized);
+    prefixes.forEach((prefix) => {
+      if (!prefix) return;
+      const existingOrder = sitemapNumberingOrder.get(prefix);
+      if (!Number.isFinite(existingOrder) || order < existingOrder) {
+        sitemapNumberingOrder.set(prefix, order);
+      }
+      recordNumberingDiscovery(prefix, order);
+    });
+  };
+
   const activateRepetitiveGroup = (group) => {
     if (!group || group.active || group.disabled || targetedGroupCapture) return;
     if (group.members.length < REPETITIVE_GROUP_THRESHOLD) return;
@@ -4527,7 +4639,26 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (targetedGroupCapture || source === 'common_path') return;
     const normalized = normalizeUrl(url);
     if (!normalized || !allowUrl(normalized) || isScanFileUrl(normalized)) return;
-    const descriptor = getRepetitiveGroupDescriptor(normalized);
+    const focusedContentReferrer = source === 'focused_content'
+      ? (referrerMap.get(normalized) || seed)
+      : null;
+    const focusedContentParent = focusedContentReferrer
+      ? (() => {
+        const parsed = new URL(focusedContentReferrer);
+        parsed.search = '';
+        return normalizeUrl(parsed.toString()) || seed;
+      })()
+      : null;
+    const descriptor = focusedContentParent
+      ? {
+        groupId: `deferred_${Buffer.from(`${focusedContentParent}|focused-content`).toString('base64url').slice(0, 40)}`,
+        key: `${focusedContentParent}|focused-content`,
+        parentUrl: focusedContentParent,
+        shape: 'focused-content',
+        routeTemplate: 'focused-content',
+        extension: null,
+      }
+      : getRepetitiveGroupDescriptor(normalized);
     if (!descriptor) return;
     let group = repetitiveGroupsByKey.get(descriptor.key);
     if (!group) {
@@ -4578,6 +4709,30 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
+  const registerFocusedContentLink = (candidate, sourceUrl) => {
+    if (!scanScope.focused) return false;
+    const normalized = normalizeUrl(candidate);
+    if (!normalized || !sameOrigin(normalized, origin)) return false;
+    const normalizedSource = normalizeUrl(sourceUrl);
+    if (
+      !normalizedSource
+      || normalized === normalizedSource
+      || focusedAncestorUrlSet.has(normalized)
+      || new URL(normalized).pathname === scanScope.focusPath
+    ) {
+      return false;
+    }
+    focusedListingUrls.add(normalized);
+    if (!isWithinFocusedPathAlias(normalized) && !focusedContentUrls.has(normalized)) {
+      focusedContentUrls.add(normalized);
+      scanDiagnostics.focusedContentDiscoveredCount += 1;
+    }
+    if (normalizedSource && normalizedSource !== normalized && !referrerMap.has(normalized)) {
+      referrerMap.set(normalized, normalizedSource);
+    }
+    return true;
+  };
+
   const recordDiscoveryError = ({ source, url, status = null, message = '' }) => {
     scanDiagnostics.discoveryErrors.push({
       source,
@@ -4602,6 +4757,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const queue = [];
   const queued = new Set();
   let queueIndex = 0;
+  const focusedParentReserve = (
+    scanScope.focused
+    && !targetedGroupCapture
+    && Number.isFinite(pageLimit)
+    && pageLimit >= REPETITIVE_GROUP_THRESHOLD
+  )
+    ? Math.min(20, Math.max(4, Math.floor(pageLimit * 0.2)))
+    : 0;
+  let activePageLimit = pageLimit === null
+    ? null
+    : Math.max(1, pageLimit - focusedParentReserve);
   let lastDiscoveryProgressAt = 0;
   const reportDiscoveryProgress = (force = false) => {
     if (!onProgress) return;
@@ -4669,6 +4835,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   }
   const sitemapOrder = new Map();
   const sitemapNumberingOrder = new Map();
+  let sitemapDocumentCounter = 0;
   let discoveryCounter = 0;
 
   // Common page paths to try (often not linked from main pages)
@@ -4711,6 +4878,30 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     return context;
   };
 
+  const fetchWithBrowserFallbackContext = async (url) => {
+    const context = await getCrawlBrowserContext(url);
+    try {
+      const requestResponse = await fetchPageWithBrowserRequestContext(context, url);
+      const requestClassification = classifyScanResponse({
+        html: requestResponse.html,
+        status: requestResponse.status,
+        url,
+        finalUrl: requestResponse.finalUrl || url,
+        headers: requestResponse.headers || {},
+      });
+      if (
+        !requestClassification.isBlockedStatus
+        && !requestClassification.isChallengePage
+        && !isCloudflareChallengeResponse(requestResponse.headers)
+      ) {
+        return requestResponse;
+      }
+    } catch {
+      // Fall through to a rendered browser page.
+    }
+    return fetchPageWithBrowserContext(context, url);
+  };
+
   const shouldRetryWithBrowser = ({ classification, status, headers, source }) => (
     !authContext
     && source !== 'common_path'
@@ -4721,6 +4912,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       || isCloudflareChallengeResponse(headers)
       || status === 403
       || status === 429
+      || (scanScope.focused && status >= 500)
     )
   );
 
@@ -4733,8 +4925,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     const host = normalizeHost(new URL(url).hostname);
-    const focusedSeedBrowserFetch = scanScope.focused && url === seed;
-    const preferBrowser = browserPreferredHosts.has(host) || focusedSeedBrowserFetch;
+    const preferBrowser = browserPreferredHosts.has(host) && !scanScope.focused;
     let browserAttempted = false;
 
     if (preferBrowser && source !== 'common_path') {
@@ -4743,7 +4934,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       try {
         const context = await getCrawlBrowserContext(url);
         const response = await fetchPageWithBrowserContext(context, url);
-        if (!focusedSeedBrowserFetch) browserPreferredHosts.add(host);
+        browserPreferredHosts.add(host);
         return { ...response, usedBrowser: true };
       } catch (error) {
         recordDiscoveryError({
@@ -4776,10 +4967,19 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       };
     } catch (error) {
       if (source === 'common_path' || browserAttempted) throw error;
+      if (scanScope.focused && url === seed) {
+        try {
+          return {
+            ...(await fetchPage(url, extraHeaders, 8000)),
+            usedBrowser: false,
+          };
+        } catch {
+          // Continue to the browser fallback for a transient focused-root failure.
+        }
+      }
       scanDiagnostics.browserFetchFallbackCount += 1;
       try {
-        const context = await getCrawlBrowserContext(url);
-        const response = await fetchPageWithBrowserContext(context, url);
+        const response = await fetchWithBrowserFallbackContext(url);
         browserPreferredHosts.add(host);
         scanDiagnostics.browserFetchFallbackSuccessCount += 1;
         return { ...response, usedBrowser: true };
@@ -4822,6 +5022,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!placement) return;
 
     processedSitemaps.add(normalizedSitemap);
+    const sitemapDocumentIndex = sitemapDocumentCounter++;
 
     try {
       const sitemapRes = await axios.get(sitemapUrl, {
@@ -4832,12 +5033,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
       if (sitemapUrl.endsWith('.txt')) {
         const urls = sitemapRes.data.split('\n').map((u) => u.trim()).filter(Boolean);
-        for (const u of urls) {
+        for (let index = 0; index < urls.length; index += 1) {
+          const u = urls[index];
           const norm = normalizeUrl(u);
           if (!norm) continue;
           scanDiagnostics.sitemapUrlsFound += 1;
-          if (!sitemapNumberingOrder.has(norm)) sitemapNumberingOrder.set(norm, sitemapNumberingOrder.size);
-          recordNumberingDiscovery(norm);
+          recordFocusedSitemapNumbering(norm, sitemapDocumentIndex * 1000000 + index);
           if (isIgnoredCrawlUtilityUrl(norm)) {
             scanDiagnostics.ignoredUtilityUrls += 1;
             continue;
@@ -4850,7 +5051,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
             }
             recordDiscovery(norm, source);
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-            enqueue(norm, 1, source);
+            enqueue(
+              norm,
+              scanScope.focused
+                ? Math.max(1, getUrlDepth(norm) - scanScope.focusDepth)
+                : 1,
+              source
+            );
           } else if (norm && !allowUrl(norm)) {
             scanDiagnostics.rejectedByScope += 1;
           }
@@ -4861,14 +5068,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       const $ = cheerio.load(sitemapRes.data, { xmlMode: true });
       const subSitemaps = [];
 
-      $('url > loc').each((_, el) => {
+      $('url > loc').each((index, el) => {
         const loc = $(el).text().trim();
         const norm = normalizeUrl(loc);
         if (norm) scanDiagnostics.sitemapUrlsFound += 1;
-        if (norm && !sitemapNumberingOrder.has(norm)) {
-          sitemapNumberingOrder.set(norm, sitemapNumberingOrder.size);
-        }
-        if (norm) recordNumberingDiscovery(norm);
+        if (norm) recordFocusedSitemapNumbering(norm, sitemapDocumentIndex * 1000000 + index);
         if (norm && isIgnoredCrawlUtilityUrl(norm)) {
           scanDiagnostics.ignoredUtilityUrls += 1;
           return;
@@ -4881,7 +5085,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           }
           recordDiscovery(norm, source);
           if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-          enqueue(norm, 1, source);
+          enqueue(
+            norm,
+            scanScope.focused
+              ? Math.max(1, getUrlDepth(norm) - scanScope.focusDepth)
+              : 1,
+            source
+          );
         } else if (norm && !allowUrl(norm)) {
           scanDiagnostics.rejectedByScope += 1;
         }
@@ -4892,11 +5102,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         if (loc) subSitemaps.push(loc);
       });
 
-      for (const loc of subSitemaps) {
-        if (await pollJobStatus()) return;
+      await runWithConcurrency(subSitemaps, 4, async (loc) => {
+        if (await pollJobStatus() || stopRequested) return;
         await processSitemap(loc, source);
-        if (stopRequested) return;
-      }
+      });
     } catch (error) {
       const status = error?.response?.status || null;
       if (status === 404 && source !== 'robots_sitemap') return;
@@ -5057,7 +5266,34 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 
   const takeNextQueueItem = () => {
-    while (queueIndex < queue.length && (pageLimit === null || visited.size < pageLimit)) {
+    while (queueIndex < queue.length && (activePageLimit === null || visited.size < activePageLimit)) {
+      if (scanScope.focused) {
+        let preferredIndex = queueIndex;
+        let preferredDepth = Number(queue[preferredIndex]?.depth ?? Number.MAX_SAFE_INTEGER);
+        let preferredSource = ['crawl', 'focused_content', 'rendered'].includes(queue[preferredIndex]?.source)
+          ? 0
+          : 1;
+        for (let index = queueIndex + 1; index < queue.length; index += 1) {
+          const candidate = queue[index];
+          if (!candidate?.url || visited.has(candidate.url)) continue;
+          if (deferredUrlToGroup.has(candidate.url)) continue;
+          const candidateDepth = Number(candidate.depth ?? Number.MAX_SAFE_INTEGER);
+          const candidateSource = ['crawl', 'focused_content', 'rendered'].includes(candidate.source)
+            ? 0
+            : 1;
+          if (
+            candidateDepth < preferredDepth
+            || (candidateDepth === preferredDepth && candidateSource < preferredSource)
+          ) {
+            preferredIndex = index;
+            preferredDepth = candidateDepth;
+            preferredSource = candidateSource;
+          }
+        }
+        if (preferredIndex !== queueIndex) {
+          [queue[queueIndex], queue[preferredIndex]] = [queue[preferredIndex], queue[queueIndex]];
+        }
+      }
       const item = queue[queueIndex++];
       if (!item?.url || visited.has(item.url)) continue;
       if (deferredUrlToGroup.has(item.url)) continue;
@@ -5109,7 +5345,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         scanDiagnostics.rootClassification = 'inactive';
         scanDiagnostics.rootBlockedReason = 'fetch_failed';
       }
-      if (source === 'common_path') return;
+      if (source === 'common_path' || source === 'parent_probe') return;
       // Still store node with fallback title so tree doesn't break
       if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
       if (scanOptions.inactivePages) inactivePages.push({ url, status: 0, reason: 'fetch_failed' });
@@ -5139,8 +5375,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!usedBrowserFetch && shouldRetryWithBrowser({ classification, status, headers, source })) {
       scanDiagnostics.cloudflareBrowserRetryCount += 1;
       try {
-        const retryContext = await getCrawlBrowserContext(url);
-        const retry = await fetchPageWithBrowserContext(retryContext, url);
+        const retry = await fetchWithBrowserFallbackContext(url);
         const retryClassification = classifyScanResponse({
           html: retry.html,
           status: retry.status,
@@ -5184,6 +5419,20 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     if (url === seed) {
+      const normalizedFinalUrl = normalizeUrl(finalUrl || url);
+      if (
+        scanScope.focused
+        && normalizedFinalUrl
+        && normalizedFinalUrl !== seed
+        && sameOrigin(normalizedFinalUrl, origin)
+        && !isUrlWithinFocusedPath(normalizedFinalUrl, scanScope)
+      ) {
+        const redirectPath = new URL(normalizedFinalUrl).pathname.replace(/\/+$/, '') || '/';
+        if (!focusedPathAliases.has(redirectPath)) {
+          focusedPathAliases.add(redirectPath);
+          scanDiagnostics.focusedRedirectAliasCount += 1;
+        }
+      }
       scanDiagnostics.finalUrl = finalUrl || url;
       scanDiagnostics.rootStatus = status;
       scanDiagnostics.rootContentType = normalizeContentType(contentType);
@@ -5269,7 +5518,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (classification.isAuthStatus) scanDiagnostics.authCount += 1;
     if (classification.isInactiveStatus) scanDiagnostics.inactiveCount += 1;
 
-    const links = classification.shouldExtractLinks ? extractLinks(html, finalUrl || url) : [];
+    const isFocusedContentLeaf = focusedContentUrls.has(url) && !isWithinFocusedPathAlias(url);
+    const suppressLinkDiscovery = isFocusedContentLeaf || source === 'parent_probe';
+    const links = classification.shouldExtractLinks && !suppressLinkDiscovery
+      ? extractLinks(html, finalUrl || url)
+      : [];
+    if (scanScope.focused && !suppressLinkDiscovery && classification.shouldExtractLinks) {
+      extractFocusedContentLinks(html, finalUrl || url).forEach((link) => {
+        registerFocusedContentLink(link, url);
+        if (!links.includes(link)) links.push(link);
+      });
+    }
     const allowedLinks = links.filter((link) => allowPageUrl(link));
     linksByUrl.set(url, allowedLinks);
     if (url === seed) {
@@ -5296,8 +5555,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         continue;
       }
 
+      const linkSource = focusedListingUrls.has(link)
+        ? 'focused_content'
+        : 'crawl';
       recordLinkEdge(url, link);
-      recordDiscovery(link, 'crawl');
+      recordDiscovery(link, linkSource);
 
       const d = depth + 1;
       if ((depthLimit !== null && d > depthLimit) || !isWithinScanDepth(link)) {
@@ -5310,7 +5572,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         referrerMap.set(link, normalizedReferrer);
       }
       if (visited.has(link)) continue;
-      enqueue(link, d);
+      enqueue(link, d, linkSource);
     }
 
     if (stopRequested) return;
@@ -5343,6 +5605,63 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     await Promise.all(Array.from({ length: workerCount }, crawlWorker));
   };
 
+  const isSegmentDescendantUrl = (candidate, ancestor) => {
+    const normalizedCandidate = normalizeUrl(candidate);
+    const normalizedAncestor = normalizeUrl(ancestor);
+    if (
+      !normalizedCandidate
+      || !normalizedAncestor
+      || normalizedCandidate === normalizedAncestor
+      || !sameOrigin(normalizedCandidate, normalizedAncestor)
+    ) {
+      return false;
+    }
+    const candidatePath = new URL(normalizedCandidate).pathname;
+    const ancestorPath = new URL(normalizedAncestor).pathname.replace(/\/+$/, '') || '/';
+    return ancestorPath === '/'
+      ? candidatePath !== '/'
+      : candidatePath.startsWith(`${ancestorPath}/`);
+  };
+
+  const promoteRequiredDeferredAncestors = async () => {
+    for (let pass = 0; pass < 3 && !stopRequested; pass += 1) {
+      const capturedUrls = Array.from(pageMap.keys());
+      const promotedEntries = [];
+      let remainingAllowance = pageLimit === null
+        ? Number.MAX_SAFE_INTEGER
+        : Math.max(0, pageLimit - visited.size);
+      repetitiveGroupsById.forEach((group) => {
+        if (!group.active || group.disabled || group.deferredEntries.length === 0) return;
+        const retainedEntries = [];
+        group.deferredEntries.forEach((entry) => {
+          const requiredAsParent = capturedUrls.some((url) => isSegmentDescendantUrl(url, entry.url));
+          if (!requiredAsParent || remainingAllowance <= 0) {
+            retainedEntries.push(entry);
+            return;
+          }
+          remainingAllowance -= 1;
+          deferredUrlToGroup.delete(entry.url);
+          group.captureUrls.add(entry.url);
+          promotedEntries.push(entry);
+        });
+        group.deferredEntries = retainedEntries;
+      });
+      if (promotedEntries.length === 0) return;
+      scanDiagnostics.promotedDeferredAncestorCount += promotedEntries.length;
+      promotedEntries.forEach((entry) => {
+        queued.delete(entry.url);
+      });
+      await runWithConcurrency(promotedEntries, 4, async (entry) => {
+        if (await pollJobStatus() || pageMap.has(entry.url)) return;
+        await processCrawlItem({
+          url: entry.url,
+          depth: Math.max(1, getUrlDepth(entry.url) - (scanScope.focused ? scanScope.focusDepth : 0)),
+          source: 'required_parent',
+        });
+      });
+    }
+  };
+
   if (!targetedGroupCapture) {
     const seedItem = takeNextQueueItem();
     if (seedItem) await processCrawlItem(seedItem);
@@ -5370,11 +5689,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     reportDiscoveryProgress(true);
   }
   await runCrawlWorkers();
+  await promoteRequiredDeferredAncestors();
 
   const validateRepetitiveGroups = async () => {
     let releasedDeferredGroupUrls = false;
     repetitiveGroupsById.forEach((group) => {
       if (!group.active || group.disabled || group.validated) return;
+      if (group.shape !== 'slug') {
+        group.validated = true;
+        return;
+      }
       const signals = Array.from(group.captureUrls)
         .map((url) => pageMap.get(url)?.repetitivePageSignal)
         .filter(Boolean);
@@ -5425,6 +5749,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const normalizedRenderedLinks = rendered.links
       .map((link) => normalizeUrl(link))
       .filter(Boolean);
+    rendered.contentLinks
+      .map((link) => normalizeUrl(link))
+      .filter(Boolean)
+      .forEach((link) => {
+        registerFocusedContentLink(link, seed);
+        if (!normalizedRenderedLinks.includes(link)) normalizedRenderedLinks.push(link);
+      });
     const allowedRenderedLinks = normalizedRenderedLinks.filter((link) => allowPageUrl(link));
     linksByUrl.set(seed, allowedRenderedLinks);
     scanDiagnostics.rootExtractedLinks = Math.max(scanDiagnostics.rootExtractedLinks, normalizedRenderedLinks.length);
@@ -5445,12 +5776,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         addFileArtifact(link, seed);
         continue;
       }
+      const linkSource = focusedListingUrls.has(link)
+        ? 'focused_content'
+        : 'rendered';
       recordLinkEdge(seed, link);
-      recordDiscovery(link, 'rendered');
+      recordDiscovery(link, linkSource);
       if (!referrerMap.has(link) && link !== seed) {
         referrerMap.set(link, seed);
       }
-      enqueue(link, 1, 'rendered');
+      enqueue(link, 1, linkSource);
     }
     if (!stopRequested && queueIndex < queue.length) {
       await runCrawlWorkers();
@@ -5460,7 +5794,51 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   if (shouldTryRenderedDiscovery()) {
     await runRenderedDiscoveryFallback();
   }
+  await promoteRequiredDeferredAncestors();
   await validateRepetitiveGroups();
+
+  const probeFocusedPathParents = async () => {
+    if (!scanScope.focused || targetedGroupCapture || stopRequested) return;
+    const candidates = new Set();
+    pageMap.forEach((_, url) => {
+      if (focusedContentUrls.has(url) || !isUrlWithinFocusedPath(url, scanScope)) return;
+      const parentUrl = getParentUrl(url);
+      if (
+        !parentUrl
+        || parentUrl === seed
+        || pageMap.has(parentUrl)
+        || focusedAncestorUrlSet.has(parentUrl)
+        || deferredUrlToGroup.has(parentUrl)
+        || !allowUrl(parentUrl)
+      ) {
+        return;
+      }
+      const leaf = decodeURIComponent(new URL(parentUrl).pathname.split('/').filter(Boolean).at(-1) || '');
+      if (!/[a-z]/i.test(leaf) || leaf.length < 3) return;
+      candidates.add(parentUrl);
+    });
+    const remainingAllowance = pageLimit === null
+      ? 20
+      : Math.max(0, pageLimit - pageMap.size);
+    const probeUrls = Array.from(candidates).slice(0, Math.min(20, remainingAllowance));
+    scanDiagnostics.focusedParentProbeCount = probeUrls.length;
+    await runWithConcurrency(probeUrls, 4, async (url) => {
+      if (await pollJobStatus() || pageMap.has(url)) return;
+      await processCrawlItem({
+        url,
+        depth: Math.max(1, getUrlDepth(url) - scanScope.focusDepth),
+        source: 'parent_probe',
+      });
+      if (isSuccessfulCapturedPageMeta(pageMap.get(url))) {
+        scanDiagnostics.focusedParentProbeSuccessCount += 1;
+      }
+    });
+  };
+  await probeFocusedPathParents();
+  if (focusedParentReserve > 0 && !stopRequested) {
+    activePageLimit = pageLimit;
+    await runCrawlWorkers();
+  }
 
   const inspectFocusedAncestor = async (url) => {
     let html = '';
@@ -5705,8 +6083,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   });
 
   const canonicalKeyFor = (node) => getCanonicalKey(node.canonicalUrl || node.finalUrl || node.url);
+  const isFocusedExternalNodeUrl = (url) => (
+    scanScope.focused
+    && Boolean(url)
+    && (
+      focusedContentUrls.has(normalizeUrl(url))
+      || !isUrlWithinFocusedPath(url, scanScope)
+    )
+  );
   const shouldInferPathParents = (node) => {
     if (!node?.url || node.url === rootUrl) return false;
+    if (isFocusedExternalNodeUrl(node.url)) return false;
     try {
       const parsed = new URL(node.url);
       const pathDepth = parsed.pathname.split('/').filter(Boolean).length;
@@ -5891,7 +6278,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const attachVisibleNodeToTree = (node) => {
     if (!node || node.url === rootUrl) return false;
-    const parentUrl = node.parentUrl;
+    const parentUrl = isFocusedExternalNodeUrl(node.url)
+      ? node.referrerUrl
+      : node.parentUrl;
     if (parentUrl && nodes.has(parentUrl) && visiblePrimaryUrls.has(parentUrl)) {
       pushUniqueChild(nodes.get(parentUrl), node);
     } else {
@@ -6052,7 +6441,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         entries: deferredEntries,
       };
       repetitiveGroups.push(summary);
-      const parentNode = nodes.get(group.parentUrl) || nodes.get(seed);
+      const placeholderParentUrl = group.parentUrl;
+      const parentNode = (
+        nodes.has(placeholderParentUrl)
+        && visiblePrimaryUrls.has(placeholderParentUrl)
+        && !nodes.get(placeholderParentUrl)?.isDuplicate
+      )
+        ? nodes.get(placeholderParentUrl)
+        : nodes.get(seed);
       if (!parentNode) return;
       pushUniqueChild(parentNode, {
         id: `placeholder_${group.groupId}`,
@@ -6061,7 +6457,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         nodeKind: 'deferred-group',
         deferredGroupId: group.groupId,
         deferredGroupKey: group.key,
-        parentUrl: group.parentUrl,
+        parentUrl: parentNode.url,
         capturedCount,
         remainingCount: deferredEntries.length,
         totalCount: capturedCount + deferredEntries.length,
@@ -6275,6 +6671,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   scanDiagnostics.treeNodeCount = countScanTreeNodes(root);
   scanDiagnostics.capturedTreeNodeCount = capturedTreeNodeCount;
   scanDiagnostics.numberingDiscoveredPageCount = numberingDiscoveryOrder.size;
+  scanDiagnostics.focusedNumberingEntryCount = scanScope.focused
+    ? numberingDiscoveryOrder.size
+    : 0;
   scanDiagnostics.scopedDiscoveredPageCount = scopedDiscoveredUrls.size;
   scanDiagnostics.repetitiveGroups = repetitiveGroups.length;
   scanDiagnostics.repetitiveDeferredPages = repetitiveGroups.reduce(

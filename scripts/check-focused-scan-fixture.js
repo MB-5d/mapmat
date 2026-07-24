@@ -35,6 +35,9 @@ function createFixtureServer() {
         `${origin}/section/science`,
         `${origin}/section/science/space`,
         ...Array.from({ length: 20 }, (_, index) => `${origin}/section/science/space?page=${index + 1}`),
+        `${origin}/section/catalog`,
+        ...Array.from({ length: 20 }, (_, index) => `${origin}/section/catalog/category-${index + 1}`),
+        `${origin}/section/catalog/category-20/detail`,
       ];
       res.writeHead(200, { 'content-type': 'application/xml' });
       res.end(`<urlset>${urls.map((entry) => `<url><loc>${entry}</loc></url>`).join('')}</urlset>`);
@@ -109,7 +112,53 @@ function createFixtureServer() {
       res.end('<html><head><title>Science</title></head><body><h1>Science</h1></body></html>');
       return;
     }
-    if (url.pathname === '/' || url.pathname === '/about' || url.pathname === '/blogger') {
+    if (url.pathname === '/section/editorial') {
+      const articleLinks = Array.from({ length: 25 }, (_, index) => (
+        `<article><h2><a href="/stories/article-${index + 1}">Article ${index + 1}</a></h2></article>`
+      )).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Editorial</title></head><body><nav><a href="/pricing">Pricing</a></nav><main>${articleLinks}</main></body></html>`);
+      return;
+    }
+    if (/^\/stories\/article-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.slice(9)}</title><meta property="og:type" content="article"></head><body><article><h1>Article</h1><a href="/pricing">Pricing</a></article></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/catalog') {
+      const categoryLinks = Array.from({ length: 20 }, (_, index) => (
+        `<a href="/section/catalog/category-${index + 1}">Category ${index + 1}</a>`
+      )).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Catalog</title></head><body><h1>Catalog</h1>${categoryLinks}</body></html>`);
+      return;
+    }
+    if (/^\/section\/catalog\/category-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body><h1>Category</h1></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/catalog/category-20/detail') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Category 20 detail</title></head><body><h1>Detail</h1></body></html>');
+      return;
+    }
+    if (url.pathname === '/jobs-old') {
+      res.writeHead(302, { location: '/content/jobs' });
+      res.end();
+      return;
+    }
+    if (url.pathname === '/content/jobs') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Jobs</title></head><body><h1>Jobs</h1><a href="/content/jobs/role-1">Role</a></body></html>');
+      return;
+    }
+    if (url.pathname === '/content/jobs/role-1') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Role 1</title></head><body><h1>Role 1</h1></body></html>');
+      return;
+    }
+    if (url.pathname === '/' || url.pathname === '/about' || url.pathname === '/blogger' || url.pathname === '/pricing') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname === '/' ? 'Home' : url.pathname.slice(1)}</title></head><body><h1>Page</h1></body></html>`);
       return;
@@ -324,8 +373,8 @@ async function main() {
     assert.equal(browserTarget?.httpStatus, 200);
     assert.notEqual(browserTarget?.scanStatus, 'inactive');
     assert.ok(
-      Number(browserResult.scanDiagnostics?.browserFetchPreferredCount || 0) > 0,
-      'focused scans should use the browser fetch path before labeling a page inactive'
+      Number(browserResult.scanDiagnostics?.cloudflareBrowserRetrySuccessCount || 0) > 0,
+      'focused scans should retry a limited response in the browser before labeling a page inactive'
     );
     assert.ok(
       browserNodes.some((node) => node.url === `${fixtureOrigin}/browser-only/page`),
@@ -380,6 +429,65 @@ async function main() {
       21,
       'focused pagination should retain captured and deferred page totals'
     );
+
+    const editorialResult = await createScan({
+      url: `${fixtureOrigin}/section/editorial`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const editorialNodes = flattenTree(editorialResult.root);
+    const editorialTarget = editorialNodes.find((node) => node.url === `${fixtureOrigin}/section/editorial`);
+    const editorialPlaceholder = editorialNodes.find((node) => node.nodeKind === 'deferred-group');
+    assert.ok(editorialTarget, 'editorial target should be present');
+    assert.equal(
+      editorialNodes.some((node) => node.url === `${fixtureOrigin}/pricing`),
+      false,
+      'global navigation links outside the focused path should remain excluded'
+    );
+    assert.equal(
+      editorialNodes.filter((node) => node.url?.startsWith(`${fixtureOrigin}/stories/article-`)).length,
+      10,
+      'content cards may be captured as focused leaf pages even when their URLs live outside the section path'
+    );
+    assert.equal(editorialPlaceholder?.remainingCount, 15);
+    assert.equal(editorialPlaceholder?.capturedCount, 10);
+    assert.equal(editorialPlaceholder?.parentUrl, editorialTarget.url);
+    assert.equal(editorialResult.pageCountSummary.totalDiscoveredPageCount, 26);
+
+    const catalogResult = await createScan({
+      url: `${fixtureOrigin}/section/catalog`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const catalogNodes = flattenTree(catalogResult.root);
+    const categoryTwenty = catalogNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/catalog/category-20`
+    );
+    const catalogPlaceholder = catalogNodes.find((node) => node.nodeKind === 'deferred-group');
+    assert.equal(categoryTwenty?.httpStatus, 200);
+    assert.equal(categoryTwenty?.isMissing, false);
+    assert.equal(categoryTwenty?.isVirtualMissing, false);
+    assert.ok(
+      categoryTwenty?.children?.some(
+        (node) => node.url === `${fixtureOrigin}/section/catalog/category-20/detail`
+      ),
+      'a deferred page required by a captured descendant should be promoted and scanned as its real parent'
+    );
+    assert.equal(catalogPlaceholder?.capturedCount, 11);
+    assert.equal(catalogPlaceholder?.remainingCount, 9);
+    assert.equal(catalogResult.scanDiagnostics?.promotedDeferredAncestorCount, 1);
+
+    const redirectedResult = await createScan({
+      url: `${fixtureOrigin}/jobs-old`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const redirectedNodes = flattenTree(redirectedResult.root);
+    assert.ok(
+      redirectedNodes.some((node) => node.url === `${fixtureOrigin}/content/jobs/role-1`),
+      'same-origin redirected section paths should continue scanning below the final URL'
+    );
+    assert.equal(redirectedResult.scanDiagnostics?.focusedRedirectAliasCount, 1);
     console.log('[focused-scan-fixture] Passed.');
   } finally {
     if (fixture) await new Promise((resolve) => fixture.close(resolve));
