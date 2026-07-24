@@ -4651,8 +4651,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (group.members.length <= REPETITIVE_GROUP_THRESHOLD) return;
     group.active = true;
     repetitiveGroupsById.set(group.groupId, group);
-    group.members.forEach((entry, index) => {
-      if (index < REPETITIVE_GROUP_CAPTURE_LIMIT) {
+    group.members.forEach((entry) => {
+      if (visited.has(entry.url) || group.captureUrls.size < REPETITIVE_GROUP_CAPTURE_LIMIT) {
         group.captureUrls.add(entry.url);
       } else {
         group.deferredEntries.push(entry);
@@ -4691,7 +4691,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     group.memberUrls.add(normalized);
     group.members.push(entry);
     if (group.active) {
-      if (group.captureUrls.size < REPETITIVE_GROUP_CAPTURE_LIMIT) {
+      if (visited.has(normalized) || group.captureUrls.size < REPETITIVE_GROUP_CAPTURE_LIMIT) {
         group.captureUrls.add(normalized);
       } else {
         group.deferredEntries.push(entry);

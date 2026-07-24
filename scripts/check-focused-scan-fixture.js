@@ -248,6 +248,12 @@ async function waitForJob(jobId, accessToken, authToken) {
             + Number(response.job.progress?.deferred || 0),
         'captured and deferred outcomes should be disjoint'
       );
+      assert.ok(
+        Number(response.job.progress?.processed || 0)
+          >= Number(response.job.result?.pageCountSummary?.capturedPageCount || 0)
+            + Number(response.job.result?.pageCountSummary?.deferredPageCount || 0),
+        'result page counts should not overlap'
+      );
       return response.job.result;
     }
     if (response.job?.status === 'failed') throw new Error(response.job.error || 'Scan failed');

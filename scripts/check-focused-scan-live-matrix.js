@@ -8,7 +8,7 @@ const POLL_MS = Math.max(500, Number(process.env.SCAN_MATRIX_POLL_MS || 2000) ||
 const TIMEOUT_MS = Math.max(60000, Number(process.env.SCAN_MATRIX_TIMEOUT_MS || 20 * 60 * 1000) || 20 * 60 * 1000);
 const RUN_LABEL = String(process.env.SCAN_MATRIX_RUN_LABEL || 'focused-live').slice(0, 40);
 
-const URLS = [
+const ALL_URLS = [
   'https://www.nytimes.com/section/science',
   'https://www.npr.org/sections/culture',
   'https://www.apple.com/newsroom/',
@@ -20,6 +20,10 @@ const URLS = [
   'https://www.apple.com/newsroom/apple-stories/',
   'https://www.ey.com/en_gl/industries/private-equity',
 ];
+const urlFilter = String(process.env.SCAN_MATRIX_URL_CONTAINS || '').trim().toLowerCase();
+const URLS = urlFilter
+  ? ALL_URLS.filter((url) => url.toLowerCase().includes(urlFilter))
+  : ALL_URLS;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
