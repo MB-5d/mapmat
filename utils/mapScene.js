@@ -102,6 +102,13 @@ function isPageNode(node) {
   }
 }
 
+function isCapturedPageNode(node) {
+  return isPageNode(node)
+    && !node.isVirtualMissing
+    && !node.isEntitlementLocked
+    && !node.entitlementLocked;
+}
+
 function collectNodeAndDescendantIds(node, result = []) {
   if (!node || typeof node !== 'object') return result;
   const id = String(node.id || '').trim();
@@ -118,7 +125,7 @@ function countMapNodes(root, orphans = []) {
     const id = String(node.id || '');
     if (id && seen.has(id)) return;
     if (id) seen.add(id);
-    if (isPageNode(node)) count += 1;
+    if (isCapturedPageNode(node)) count += 1;
     getChildren(node).forEach(visit);
   };
   visit(root);
@@ -325,9 +332,6 @@ function getStackTotalCount(children = []) {
 }
 
 function getLastPageChildIndex(children = []) {
-  for (let index = children.length - 1; index >= 0; index -= 1) {
-    if (children[index]?.nodeKind !== 'deferred-group') return index;
-  }
   return children.length - 1;
 }
 

@@ -55,26 +55,31 @@ const ScanProgressModal = ({
   onDismissScanError,
 }) => {
   if (!loading && !scanErrorMessage) return null;
-  const scannedCount = Math.max(0, Number(scanProgress.scanned || 0) || 0);
-  const mappedCount = Number.isFinite(Number(scanProgress.mapped))
-    ? Math.max(0, Number(scanProgress.mapped || 0) || 0)
-    : null;
+  const processedCount = Math.max(
+    0,
+    Number(scanProgress.processed ?? scanProgress.scanned ?? 0) || 0
+  );
+  const capturedCount = Math.max(
+    0,
+    Number(scanProgress.captured ?? scanProgress.mapped ?? 0) || 0
+  );
+  const deferredCount = Math.max(0, Number(scanProgress.deferred || 0) || 0);
+  const blockedCount = Math.max(0, Number(scanProgress.blocked || 0) || 0);
+  const failedCount = Math.max(0, Number(scanProgress.failed || 0) || 0);
   const queuedCount = Math.max(0, Number(scanProgress.queued || 0) || 0);
-  const primaryCount = mappedCount === null ? scannedCount : mappedCount;
-  const primaryLabel = mappedCount === null ? 'Scanned' : 'Captured';
   const discoveredCount = Math.max(0, Number(scanProgress.discovered || 0) || 0);
   const pageTotal = Math.max(
-    primaryCount,
-    primaryCount + queuedCount,
+    processedCount,
+    processedCount + queuedCount,
     discoveredCount
   );
-  const remainingCount = Math.max(0, pageTotal - primaryCount);
+  const remainingCount = Math.max(0, pageTotal - processedCount);
   const hasRemaining = remainingCount > 0;
-  const pagePercent = pageTotal > 0 ? Math.min(100, Math.round((primaryCount / pageTotal) * 100)) : 0;
+  const pagePercent = pageTotal > 0 ? Math.min(100, Math.round((processedCount / pageTotal) * 100)) : 0;
   const elapsedSeconds = Math.max(0, Math.floor(Number(scanElapsed || 0) || 0));
   const estimatedTotalSeconds = getTimeEstimateSeconds({
     elapsedSeconds,
-    completedCount: primaryCount,
+    completedCount: processedCount,
     remainingCount,
   });
   const timePercent = estimatedTotalSeconds !== null && estimatedTotalSeconds > 0
@@ -146,15 +151,15 @@ const ScanProgressModal = ({
 
           <div className="scan-chart-section scan-chart-section--pages">
             <div className="scan-chart-heading">
-              <span>Pages {primaryLabel.toLowerCase()}</span>
+              <span>Pages processed</span>
               <span>
-                <strong>{formatCount(primaryCount)} of {formatCount(pageTotal)}</strong>
+                <strong>{formatCount(processedCount)} of {formatCount(pageTotal)}</strong>
                 {pageTotal > 0 ? (
                   <span className="scan-inline-note">({pagePercent}%)</span>
                 ) : null}
               </span>
             </div>
-            <div className="scan-progress-track" role="img" aria-label={`${formatCount(primaryCount)} of ${formatCount(pageTotal)} pages ${primaryLabel.toLowerCase()}`}>
+            <div className="scan-progress-track" role="img" aria-label={`${formatCount(processedCount)} of ${formatCount(pageTotal)} pages processed`}>
               <span
                 className="scan-progress-fill"
                 style={{ width: `${pagePercent}%` }}
@@ -166,6 +171,12 @@ const ScanProgressModal = ({
                 <span>remaining</span>
               </div>
             ) : null}
+            <div className="scan-outcome-note">
+              <span>Captured {formatCount(capturedCount)}</span>
+              {deferredCount > 0 ? <span>Deferred {formatCount(deferredCount)}</span> : null}
+              {blockedCount > 0 ? <span>Blocked {formatCount(blockedCount)}</span> : null}
+              {failedCount > 0 ? <span>Failed {formatCount(failedCount)}</span> : null}
+            </div>
           </div>
 
           <div className="scan-chart-section scan-chart-section--findings">

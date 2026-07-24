@@ -4337,6 +4337,10 @@ body {
   margin-top: auto;
 }
 
+.node-card.deferred-group.has-stack-toggle .deferred-group-content {
+  padding-bottom: 42px;
+}
+
 .import-structural-label {
   color: var(--ui-color-input-placeholder);
   font-size: var(--type-caption-md-size);
@@ -14132,6 +14136,16 @@ body {
 .scan-queue-note span:first-child {
   color: var(--color-text-primary);
   font-weight: 700;
+}
+
+.scan-outcome-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .scan-limit-note {

@@ -82,18 +82,26 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-limit-note')).not.toBeNull();
   });
 
-  test('shows captured page count when scan progress includes mapped pages', () => {
+  test('calculates progress from processed outcomes and shows the outcome split', () => {
     act(() => {
       root.render(
         <ScanProgressModal
           {...baseProps}
-          scanProgress={{ scanned: 1357, mapped: 384, queued: 23 }}
+          scanProgress={{
+            processed: 384,
+            captured: 350,
+            deferred: 30,
+            blocked: 2,
+            failed: 2,
+            queued: 23,
+            discovered: 407,
+          }}
         />
       );
     });
 
     expect(container.textContent).toContain('384');
-    expect(container.textContent).toContain('Pages captured');
+    expect(container.textContent).toContain('Pages processed');
     expect(container.textContent).toContain('384 of 407');
     const pagesSection = container.querySelector('.scan-chart-section--pages');
     const findingsSection = container.querySelector('.scan-chart-section--findings');
@@ -102,7 +110,10 @@ describe('ScanProgressModal', () => {
     expect(findingsSection.querySelector('.scan-findings-bar')).not.toBeNull();
     expect(findingsSection.querySelector('.scan-findings-empty').textContent).toBe('No findings yet');
     expect(pagesSection.querySelector('.scan-inline-note').textContent).toBe('(94%)');
-    expect(container.textContent).not.toContain('1357Scanned');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Captured 350');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Deferred 30');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Blocked 2');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Failed 2');
   });
 
   test('uses the discovered total when it is larger than the active queue', () => {

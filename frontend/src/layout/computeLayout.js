@@ -8,9 +8,6 @@ const getStackTotalCount = (children = []) => children.reduce((total, child) => 
 ), 0);
 
 const getLastPageChildIndex = (children = []) => {
-  for (let index = children.length - 1; index >= 0; index -= 1) {
-    if (children[index]?.nodeKind !== 'deferred-group') return index;
-  }
   return children.length - 1;
 };
 

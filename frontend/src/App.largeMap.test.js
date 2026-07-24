@@ -670,4 +670,73 @@ describe('deferred page capture', () => {
     expect(blogChildren[1].remainingCount).toBe(1);
     expect(blogChildren[1].deferredEntries[0].url).toBe('https://example.com/blog/post-12');
   });
+
+  test('replaces a matching virtual Missing ancestor and stays idempotent on retry', () => {
+    const placeholder = {
+      id: 'placeholder-blog',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'blog-group',
+      capturedCount: 10,
+      remainingCount: 1,
+      deferredEntries: [
+        { url: 'https://example.com/blog/2026', scanNumber: '2.X', order: 10 },
+      ],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [{
+        id: 'blog',
+        url: 'https://example.com/blog',
+        children: [{
+          id: 'virtual-year',
+          url: 'https://example.com/blog/2026',
+          isMissing: true,
+          isVirtualMissing: true,
+          scanStatus: 'missing',
+          children: [{
+            id: 'story',
+            url: 'https://example.com/blog/2026/story',
+            children: [],
+          }],
+        }, placeholder],
+      }],
+    };
+    const captureResult = {
+      root: {
+        id: 'capture-root',
+        url: 'https://example.com/',
+        children: [{
+          id: 'captured-year',
+          url: 'https://example.com/blog/2026',
+          title: '2026 archive',
+          httpStatus: 200,
+          children: [],
+        }],
+      },
+      captureSummary: {
+        successfulEntries: [{ url: 'https://example.com/blog/2026', scanNumber: '2.X' }],
+      },
+    };
+
+    const first = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      captureResult,
+      placeholderNode: placeholder,
+    });
+    const replaced = first.root.children[0].children[0];
+    expect(first.capturedCount).toBe(1);
+    expect(replaced.title).toBe('2026 archive');
+    expect(replaced.isVirtualMissing).toBe(false);
+    expect(replaced.children[0].id).toBe('story');
+
+    const retry = __testing.applyDeferredCaptureResult({
+      existingRoot: first.root,
+      captureResult,
+      placeholderNode: placeholder,
+    });
+    expect(retry.capturedCount).toBe(0);
+    expect(retry.root.children[0].children.filter((node) => node.url === replaced.url)).toHaveLength(1);
+  });
 });

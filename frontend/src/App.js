@@ -119,6 +119,7 @@ import {
   countPageNodes,
   findNodeById,
   findParent,
+  isCapturedPageNode,
   isPageNode,
   isDescendantOf,
   shouldStackChildren,
@@ -138,6 +139,7 @@ import {
   buildSitemapExportRows,
   buildSitemapJsonPayload,
   buildSitemapXml,
+  countCapturedExportRows,
   getSitemapExportFilenameBase,
 } from './utils/fileExports';
 import {
@@ -1823,7 +1825,20 @@ const normalizePersistedScanMeta = (scanMeta = null) => {
       totalCount: Math.max(0, Math.floor(Number(group?.totalCount || 0) || 0)),
     }))
     .filter((group) => group.id);
-  if (!hasEntitlementPreview && !scanScope?.focused && !pageCountSummary && repetitiveGroups.length === 0) return null;
+  const blockedSections = (Array.isArray(scanMeta?.blockedSections) ? scanMeta.blockedSections : [])
+    .map((section) => ({
+      url: trimPersistedUrl(section?.url),
+      status: Math.max(0, Math.floor(Number(section?.status || 0) || 0)) || null,
+      reason: String(section?.reason || 'blocked').slice(0, 120),
+    }))
+    .filter((section) => section.url);
+  if (
+    !hasEntitlementPreview
+    && !scanScope?.focused
+    && !pageCountSummary
+    && repetitiveGroups.length === 0
+    && blockedSections.length === 0
+  ) return null;
   return {
     brokenLinks: Array.isArray(scanMeta?.brokenLinks) ? scanMeta.brokenLinks : [],
     partial: Boolean(scanMeta?.partial),
@@ -1834,6 +1849,7 @@ const normalizePersistedScanMeta = (scanMeta = null) => {
     scanScope,
     pageCountSummary,
     repetitiveGroups,
+    blockedSections,
   };
 };
 
@@ -3116,6 +3132,11 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
   }
 
   const capturedNodesByUrl = new Map();
+  const successfulEntryByUrl = new Map(
+    successfulEntries
+      .map((entry) => [normalizeUrlForCompare(entry?.url), entry])
+      .filter(([url]) => url)
+  );
   collectNodesDeep(captureResult.root, captureResult.orphans || []).forEach((node) => {
     const normalized = normalizeUrlForCompare(node?.url);
     if (!normalized || !successfulUrls.has(normalized)) return;
@@ -3127,10 +3148,40 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
   });
 
   const nextRoot = cloneNodeTree(existingRoot);
-  const existingUrls = new Set(
-    collectNodesDeep(nextRoot).map((node) => normalizeUrlForCompare(node?.url)).filter(Boolean)
-  );
   let capturedCount = 0;
+  const replaceCapturedVirtualNodes = (node) => {
+    if (!node) return node;
+    const normalized = normalizeUrlForCompare(node.url);
+    const capturedNode = capturedNodesByUrl.get(normalized);
+    if (
+      capturedNode
+      && successfulUrls.has(normalized)
+      && (node.isVirtualMissing || node.isMissing)
+    ) {
+      capturedCount += 1;
+      return {
+        ...capturedNode,
+        parentUrl: node.parentUrl || capturedNode.parentUrl,
+        scanNumber: successfulEntryByUrl.get(normalized)?.scanNumber
+          || node.scanNumber
+          || capturedNode.scanNumber,
+        children: (node.children || []).map(replaceCapturedVirtualNodes),
+        isMissing: false,
+        isVirtualMissing: false,
+      };
+    }
+    return {
+      ...node,
+      children: (node.children || []).map(replaceCapturedVirtualNodes),
+    };
+  };
+  const rootWithCapturedAncestors = replaceCapturedVirtualNodes(nextRoot);
+  const existingUrls = new Set(
+    collectNodesDeep(rootWithCapturedAncestors)
+      .filter((node) => !(node?.isVirtualMissing || node?.isMissing))
+      .map((node) => normalizeUrlForCompare(node?.url))
+      .filter(Boolean)
+  );
   let remainingCount = Math.max(0, Number(placeholderNode.remainingCount || 0) || 0);
 
   const updateParent = (parent) => {
@@ -3181,8 +3232,8 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
     return parent.children.some(updateParent);
   };
 
-  updateParent(nextRoot);
-  return { root: nextRoot, capturedCount, remainingCount };
+  updateParent(rootWithCapturedAncestors);
+  return { root: rootWithCapturedAncestors, capturedCount, remainingCount };
 };
 
 export const __testing = {
@@ -13342,6 +13393,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           scanScope: data.scanScope || null,
           pageCountSummary: data.pageCountSummary || null,
           repetitiveGroups: data.repetitiveGroups || [],
+          blockedSections: data.blockedSections || [],
         });
         trackEvent('scan_completed', {
           hostname,
@@ -13372,6 +13424,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           scanScope: data.scanScope || null,
           pageCountSummary: data.pageCountSummary || null,
           repetitiveGroups: data.repetitiveGroups || [],
+          blockedSections: data.blockedSections || [],
         });
         trackEvent('scan_failed', {
           phase: 'quality_gate',
@@ -13433,6 +13486,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanScope: data.scanScope || null,
         pageCountSummary: data.pageCountSummary || null,
         repetitiveGroups: data.repetitiveGroups || [],
+        blockedSections: data.blockedSections || [],
       });
       setScanLayerAvailability(displayScanLayerAvailability);
       setScanLayerVisibility(displayScanLayerAvailability);
@@ -13483,6 +13537,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
       } else if (normalizedPartialReason === 'scan_collapsed') {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (data.blockedSections?.length) {
+        const blockedUrl = data.blockedSections[0]?.url || hostname;
+        showToast(`Scan complete. A section was blocked at ${blockedUrl}.`, 'warning');
       } else if (isPartialResult) {
         showToast(`Scan complete with partial data${hostname ? `: ${hostname}` : ''}`, 'warning');
       } else {
@@ -13646,36 +13703,127 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     setCapturingDeferredGroupIds((current) => new Set([...current, groupId]));
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
+    setIsStoppingScan(false);
+    setScanErrorMessage('');
+    setScanProgress(createEmptyScanProgress());
+    setScanLimitProgressNote('');
+    setUrlInput(seedUrl);
+    setLoading(true);
+    startScanTimers();
+    setScanMessage('Capturing remaining pages...');
     try {
-      const jobResponse = await api.createScanJob({
-        url: seedUrl,
-        maxPages: entries.length,
-        options: {
-          ...scanOptions,
-          subdomains: Boolean(scanScope.allowSubdomains),
-          repetitiveCapture: {
-            groupId,
-            entries,
+      const jobResponse = await api.createScanJob(
+        {
+          url: seedUrl,
+          maxPages: entries.length,
+          options: {
+            ...scanOptions,
+            subdomains: Boolean(scanScope.allowSubdomains),
+            repetitiveCapture: {
+              groupId,
+              entries,
+            },
           },
         },
-      });
+        {
+          idempotencyKey: [
+            'repetitive-capture',
+            groupId,
+            Math.max(0, Number(placeholderNode.capturedCount || 0) || 0),
+            entries.length,
+          ].join(':'),
+        }
+      );
       const jobId = jobResponse?.jobId;
       const accessToken = jobResponse?.jobAccessToken || null;
       if (!jobId) throw new Error('Failed to start page capture');
+      scanJobIdRef.current = jobId;
+      scanJobAccessTokenRef.current = accessToken;
 
-      let completedJob = null;
-      for (let attempt = 0; attempt < 1800; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const response = await api.getScanJob(jobId, { includeResult: true, accessToken });
-        const job = response?.job;
-        if (job?.status === 'failed') throw new Error(job.error || 'Page capture failed');
-        if (job?.status === 'canceled') throw new Error('Page capture was cancelled');
-        if (job?.status === 'complete') {
-          completedJob = job;
-          break;
-        }
-      }
-      if (!completedJob?.result) throw new Error('Page capture timed out');
+      const completedJob = await new Promise((resolve, reject) => {
+        const eventSource = new EventSource(
+          api.getScanJobStreamUrl(jobId, { accessToken }),
+          { withCredentials: true }
+        );
+        eventSourceRef.current = eventSource;
+        let settled = false;
+        const timeoutId = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          eventSource.close();
+          reject(new Error('Page capture timed out'));
+        }, 30 * 60 * 1000);
+        const finish = (callback, value) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeoutId);
+          eventSource.close();
+          if (eventSourceRef.current === eventSource) eventSourceRef.current = null;
+          callback(value);
+        };
+        const handleTerminalJob = async (job) => {
+          if (!job) return false;
+          if (job.progress) {
+            setScanProgress((current) => reconcileScanProgress(current, job.progress));
+          }
+          if (job.status === 'failed') {
+            finish(reject, new Error(job.error || 'Page capture failed'));
+            return true;
+          }
+          if (job.status === 'canceled') {
+            finish(reject, new Error('Page capture was cancelled'));
+            return true;
+          }
+          if (job.status !== 'complete') return false;
+          try {
+            let completeJob = job;
+            if (!completeJob.result) {
+              const response = await api.getScanJob(jobId, { includeResult: true, accessToken });
+              completeJob = response?.job || completeJob;
+            }
+            if (!completeJob.result) throw new Error('Page capture completed without results');
+            finish(resolve, completeJob);
+          } catch (error) {
+            finish(reject, error);
+          }
+          return true;
+        };
+
+        eventSource.addEventListener('update', (event) => {
+          try {
+            const job = JSON.parse(event.data);
+            if (job?.progress) {
+              setScanProgress((current) => reconcileScanProgress(current, job.progress));
+            }
+            if (job?.status === 'stopping') setIsStoppingScan(true);
+          } catch {}
+        });
+        eventSource.addEventListener('complete', (event) => {
+          try {
+            handleTerminalJob(JSON.parse(event.data));
+          } catch (error) {
+            finish(reject, error);
+          }
+        });
+        eventSource.addEventListener('job-error', (event) => {
+          let message = 'Page capture failed';
+          try {
+            message = JSON.parse(event.data)?.error || message;
+          } catch {}
+          finish(reject, new Error(message));
+        });
+        eventSource.onerror = async () => {
+          if (settled) return;
+          try {
+            const response = await api.getScanJob(jobId, { includeResult: true, accessToken });
+            await handleTerminalJob(response?.job);
+          } catch {
+            // EventSource reconnects automatically; keep the shared stream open.
+          }
+        };
+      });
 
       const applied = applyDeferredCaptureResult({
         existingRoot: rootRef.current,
@@ -13740,6 +13888,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast(error.message || 'Failed to capture this page group', 'error');
       }
     } finally {
+      resetScanUi();
       setCapturingDeferredGroupIds((current) => {
         const next = new Set(current);
         next.delete(groupId);
@@ -14833,7 +14982,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const getUsagePageCount = useCallback(() => {
     if (!root) return 0;
     return collectAllNodesWithOrphans(root, orphans)
-      .filter((node) => !isEntitlementLockedNode(node) && isPageNode(node))
+      .filter(isCapturedPageNode)
       .length;
   }, [orphans, root]);
 
@@ -14902,7 +15051,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: 'json',
       });
       const content = JSON.stringify(buildSitemapJsonPayload({
@@ -14917,7 +15066,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!await reserveDownloadUsage('export_json', {
         format: 'json',
         bytes: new Blob([content]).size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.json`, content);
       showToast('Downloaded JSON', 'success');
@@ -14999,14 +15148,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: 'xml',
       });
       const content = buildSitemapXml(rows, metadata);
       if (!await reserveDownloadUsage('export_xml', {
         format: 'xml',
         bytes: new Blob([content]).size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.xml`, content);
       showToast('Downloaded XML', 'success');
@@ -15025,7 +15174,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: 'ai-site-brief',
       });
       const mode = root.url ? 'Improve Existing Site' : 'Build New Site';
@@ -15091,7 +15240,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!await reserveDownloadUsage('export_ai_site_brief', {
         format: 'zip',
         bytes: zipBlob.size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
         packageFiles: 8,
       })) return;
       downloadBlob(`${baseFilename}.zip`, zipBlob);
@@ -15110,14 +15259,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: 'csv',
       });
       const content = buildSitemapCsv(rows, metadata);
       if (!await reserveDownloadUsage('export_csv', {
         format: 'csv',
         bytes: new Blob([content]).size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.csv`, content);
       showToast('Downloaded CSV', 'success');
@@ -15662,7 +15811,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: `site-index-${normalizedFormat}`,
       });
       const content = formatConfig.build({
@@ -15675,7 +15824,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!await reserveDownloadUsage('export_site_index', {
         format: normalizedFormat,
         bytes: blob.size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
       })) return;
       downloadBlob(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.${formatConfig.extension}`, blob);
       showToast(`Site Index ${formatConfig.label} downloaded`, 'success');

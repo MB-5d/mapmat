@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 const REPETITIVE_GROUP_THRESHOLD = 20;
 const REPETITIVE_GROUP_CAPTURE_LIMIT = 10;
 
@@ -102,6 +104,11 @@ function isVariablePathSegment(value) {
   return shape === 'uuid' || shape === 'dated' || shape === 'number';
 }
 
+function getStableRepetitiveGroupId(key) {
+  const digest = crypto.createHash('sha256').update(String(key || '')).digest('hex').slice(0, 32);
+  return `deferred_${digest}`;
+}
+
 function getRepetitiveGroupDescriptor(url) {
   const normalized = normalizeScanUrl(url);
   if (!normalized) return null;
@@ -116,7 +123,7 @@ function getRepetitiveGroupDescriptor(url) {
       .join('&');
     const routeTemplate = `${segments.join('/')}?${queryTemplate}`;
     const key = `${parentUrl}|${routeTemplate}`;
-    const groupId = `deferred_${Buffer.from(key).toString('base64url').slice(0, 40)}`;
+    const groupId = getStableRepetitiveGroupId(key);
     return {
       groupId,
       key,
@@ -149,7 +156,7 @@ function getRepetitiveGroupDescriptor(url) {
     `:${shape}${extension ? `.${extension}` : ''}`,
   ].join('/');
   const key = `${stableParentUrl}|${routeTemplate}`;
-  const groupId = `deferred_${Buffer.from(key).toString('base64url').slice(0, 40)}`;
+  const groupId = getStableRepetitiveGroupId(key);
   return {
     groupId,
     key,
@@ -178,7 +185,7 @@ function buildRepetitiveGroups(urls, {
     groups.get(descriptor.key).members.push({ url, order });
   });
   return Array.from(groups.values())
-    .filter((group) => group.members.length >= threshold)
+    .filter((group) => group.members.length > threshold)
     .map((group) => ({
       ...group,
       capturedEntries: group.members.slice(0, captureLimit),
@@ -186,9 +193,16 @@ function buildRepetitiveGroups(urls, {
     }));
 }
 
-function buildPreservedNumberMap(urlEntries, startUrl) {
+function buildPreservedNumberMap(urlEntries, startUrl, {
+  completeParentUrls = [],
+} = {}) {
   const descriptor = createFocusedScanDescriptor(startUrl);
   const records = new Map();
+  const completeParents = new Set(
+    (Array.isArray(completeParentUrls) ? completeParentUrls : [])
+      .map(normalizeScanUrl)
+      .filter(Boolean)
+  );
   const querySeed = new URL(descriptor.seed).search ? descriptor.seed : null;
   const getNumberingParentUrl = (url) => {
     if (querySeed && url === querySeed) {
@@ -198,21 +212,30 @@ function buildPreservedNumberMap(urlEntries, startUrl) {
     }
     return getParentUrl(url);
   };
-  const addRecord = (rawUrl, order = Number.POSITIVE_INFINITY) => {
+  const addRecord = (rawUrl, order = Number.POSITIVE_INFINITY, exact = false) => {
     const url = normalizeScanUrl(rawUrl);
     if (!url) return;
     const parsed = new URL(url);
     if (parsed.origin !== descriptor.origin) return;
     const current = records.get(url);
     if (!current) {
-      records.set(url, { url, order: Number.isFinite(order) ? order : Number.POSITIVE_INFINITY });
+      records.set(url, {
+        url,
+        order: Number.isFinite(order) ? order : Number.POSITIVE_INFINITY,
+        exact: Boolean(exact),
+      });
     } else if (Number.isFinite(order)) {
       current.order = Math.min(current.order, order);
+      current.exact = current.exact || Boolean(exact);
     }
     let parentUrl = getNumberingParentUrl(url);
     while (parentUrl) {
       if (!records.has(parentUrl)) {
-        records.set(parentUrl, { url: parentUrl, order: Number.POSITIVE_INFINITY });
+        records.set(parentUrl, {
+          url: parentUrl,
+          order: Number.POSITIVE_INFINITY,
+          exact: false,
+        });
       }
       parentUrl = getNumberingParentUrl(parentUrl);
     }
@@ -220,7 +243,7 @@ function buildPreservedNumberMap(urlEntries, startUrl) {
 
   (Array.isArray(urlEntries) ? urlEntries : []).forEach((entry, index) => {
     if (typeof entry === 'string') addRecord(entry, index);
-    else addRecord(entry?.url, Number(entry?.order ?? index));
+    else addRecord(entry?.url, Number(entry?.order ?? index), entry?.exact === true);
   });
   getFocusedAncestorUrls(descriptor.seed).forEach((url) => addRecord(url));
   addRecord(descriptor.seed);
@@ -257,8 +280,14 @@ function buildPreservedNumberMap(urlEntries, startUrl) {
 
   const numbers = new Map([[descriptor.siteRootUrl, '0']]);
   const visit = (parentUrl, parentNumber) => {
-    (childrenByParent.get(parentUrl) || []).forEach((childUrl, index) => {
-      const number = parentNumber === '0' ? `${index + 1}` : `${parentNumber}.${index + 1}`;
+    const children = childrenByParent.get(parentUrl) || [];
+    const hasCompleteOrder = completeParents.has(parentUrl)
+      && children.length > 0
+      && children.every((childUrl) => records.get(childUrl)?.exact === true);
+    const unknownSegment = children.length >= 10 ? 'XX' : 'X';
+    children.forEach((childUrl, index) => {
+      const segment = hasCompleteOrder ? `${index + 1}` : unknownSegment;
+      const number = parentNumber === '0' ? segment : `${parentNumber}.${segment}`;
       numbers.set(childUrl, number);
       visit(childUrl, number);
     });
@@ -287,6 +316,7 @@ module.exports = {
   getFocusedAncestorUrls,
   getParentUrl,
   getRepetitiveGroupDescriptor,
+  getStableRepetitiveGroupId,
   getSiteRootUrl,
   isUrlWithinFocusedPath,
   normalizeScanUrl,

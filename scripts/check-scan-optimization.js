@@ -41,38 +41,56 @@ assert.deepEqual(
 );
 
 const numbers = buildPreservedNumberMap([
-  { url: 'https://example.com/about', order: 0 },
-  { url: 'https://example.com/blog', order: 1 },
-  { url: 'https://example.com/blog/post-1', order: 2 },
-  { url: 'https://example.com/pricing', order: 3 },
-], 'https://example.com/blog/post-1');
+  { url: 'https://example.com/about', order: 0, exact: true },
+  { url: 'https://example.com/blog', order: 1, exact: true },
+  { url: 'https://example.com/blog/post-1', order: 2, exact: true },
+  { url: 'https://example.com/pricing', order: 3, exact: true },
+], 'https://example.com/blog/post-1', {
+  completeParentUrls: ['https://example.com/', 'https://example.com/blog'],
+});
 assert.equal(numbers.get('https://example.com/'), '0');
 assert.equal(numbers.get('https://example.com/blog'), '2');
 assert.equal(numbers.get('https://example.com/blog/post-1'), '2.1');
 assert.notEqual(numbers.get('https://example.com/blog/post-1'), '0');
 
 const queryNumbers = buildPreservedNumberMap([
-  { url: 'https://example.com/about', order: 0 },
-  { url: 'https://example.com/blog', order: 1 },
-  { url: 'https://example.com/blog/post-1', order: 2 },
-], 'https://example.com/blog/post-1?edition=gb');
+  { url: 'https://example.com/about', order: 0, exact: true },
+  { url: 'https://example.com/blog', order: 1, exact: true },
+  { url: 'https://example.com/blog/post-1', order: 2, exact: true },
+  { url: 'https://example.com/blog/post-1?edition=gb', order: 3, exact: true },
+], 'https://example.com/blog/post-1?edition=gb', {
+  completeParentUrls: ['https://example.com/', 'https://example.com/blog'],
+});
 assert.equal(queryNumbers.get('https://example.com/blog/post-1'), '2.1');
 assert.equal(queryNumbers.get('https://example.com/blog/post-1?edition=gb'), '2.2');
 assert.notEqual(queryNumbers.get('https://example.com/blog/post-1?edition=gb'), '0');
 
-const blogUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/blog/post-${index + 1}`);
-const newsUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/news/story-${index + 1}`);
-const paginationUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/news?page=${index + 1}`);
+const unknownNumbers = buildPreservedNumberMap([
+  { url: 'https://example.com/blog', order: 0 },
+  ...Array.from({ length: 12 }, (_, index) => ({
+    url: `https://example.com/blog/post-${index + 1}`,
+    order: index + 1,
+  })),
+], 'https://example.com/blog/post-1');
+assert.equal(unknownNumbers.get('https://example.com/blog'), 'X');
+assert.equal(unknownNumbers.get('https://example.com/blog/post-1'), 'X.XX');
+
+const twentyUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/threshold/item-${index + 1}`);
+assert.equal(buildRepetitiveGroups(twentyUrls).length, 0);
+
+const blogUrls = Array.from({ length: 21 }, (_, index) => `https://example.com/blog/post-${index + 1}`);
+const newsUrls = Array.from({ length: 21 }, (_, index) => `https://example.com/news/story-${index + 1}`);
+const paginationUrls = Array.from({ length: 21 }, (_, index) => `https://example.com/news?page=${index + 1}`);
 const datedUrls = Array.from(
-  { length: 20 },
+  { length: 21 },
   (_, index) => `https://example.com/archive/2026/${String((index % 12) + 1).padStart(2, '0')}/entry-${index + 1}`
 );
 const groups = buildRepetitiveGroups([...blogUrls, blogUrls[0], ...newsUrls, ...datedUrls, ...paginationUrls]);
 assert.equal(groups.length, 4);
 assert.equal(groups[0].capturedEntries.length, 10);
-assert.equal(groups[0].deferredEntries.length, 10);
+assert.equal(groups[0].deferredEntries.length, 11);
 assert.equal(groups[1].capturedEntries.length, 10);
-assert.equal(groups[1].deferredEntries.length, 10);
+assert.equal(groups[1].deferredEntries.length, 11);
 assert.equal(groups[0].parentUrl, 'https://example.com/blog');
 assert.equal(groups[1].parentUrl, 'https://example.com/news');
 assert.equal(groups[2].parentUrl, 'https://example.com/archive');
@@ -80,6 +98,7 @@ assert.equal(groups[2].routeTemplate, 'archive/:number/:number/:mixed');
 assert.equal(groups[3].parentUrl, 'https://example.com/news');
 assert.equal(groups[3].shape, 'query');
 assert.equal(groups[3].routeTemplate, 'news?page=:number');
+assert.notEqual(groups[1].groupId, groups[3].groupId);
 
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:article', 'schema:article']), true);
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:jobposting', 'element:product']), false);

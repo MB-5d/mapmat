@@ -1,7 +1,7 @@
 import { getSeoMetadata, getSeoValue } from './seoMetadata';
 import { getDepthColor } from './constants';
 import { isRenderableTextUrl } from './url';
-import { isPageNode } from './treeUtils';
+import { isCapturedPageNode, isPageNode } from './treeUtils';
 import {
   getNodeHttpErrorLabel,
   getNodeStatusCode,
@@ -168,6 +168,7 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
       httpErrorLabel: getNodeHttpErrorLabel(node),
       isViewableError: Boolean(node.isViewableError),
       isVirtualMissing: isVirtualMissingNode(node),
+      isCapturedPage: isCapturedPageNode(node),
       blockedReason: node.blockedReason || '',
       scanStatus: node.scanStatus || '',
       showFullTitle,
@@ -197,7 +198,7 @@ export const getReportEntitlementVisibleLimit = (scanMeta = null) => {
 };
 
 export const buildReportStats = (entries = [], typeOptions = [], scanMeta = null) => {
-  const realEntries = entries.filter((entry) => !entry.isEntitlementLocked);
+  const realEntries = entries.filter((entry) => entry.isCapturedPage !== false && !entry.isEntitlementLocked);
   const visibleLimit = getReportEntitlementVisibleLimit(scanMeta);
   const stats = {
     total: visibleLimit ? Math.min(realEntries.length, visibleLimit) : realEntries.length,
@@ -205,7 +206,7 @@ export const buildReportStats = (entries = [], typeOptions = [], scanMeta = null
   typeOptions.forEach((option) => {
     stats[option.key] = 0;
   });
-  realEntries.forEach((entry) => {
+  entries.filter((entry) => !entry.isEntitlementLocked).forEach((entry) => {
     entry.types.forEach((type) => {
       stats[type] = (stats[type] || 0) + 1;
     });

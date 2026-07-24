@@ -43,9 +43,16 @@ export const isPageNode = (node) => {
   }
 };
 
+export const isCapturedPageNode = (node) => (
+  isPageNode(node)
+  && !node.isVirtualMissing
+  && !node.isEntitlementLocked
+  && !node.entitlementLocked
+);
+
 export const countPageNodes = (node) => {
   if (!node) return 0;
-  return (isPageNode(node) ? 1 : 0)
+  return (isCapturedPageNode(node) ? 1 : 0)
     + (node.children || []).reduce((sum, child) => sum + countPageNodes(child), 0);
 };
 

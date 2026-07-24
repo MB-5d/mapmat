@@ -31,13 +31,16 @@ function createFixtureServer() {
         `${origin}/about`,
         `${origin}/blogger`,
         `${origin}/blog`,
-        ...Array.from({ length: 20 }, (_, index) => `${origin}/blog/post-${index + 1}`),
+        ...Array.from({ length: 21 }, (_, index) => `${origin}/blog/post-${index + 1}`),
         `${origin}/section/science`,
         `${origin}/section/science/space`,
-        ...Array.from({ length: 20 }, (_, index) => `${origin}/section/science/space?page=${index + 1}`),
+        ...Array.from({ length: 21 }, (_, index) => `${origin}/section/science/space?page=${index + 1}`),
         `${origin}/section/catalog`,
-        ...Array.from({ length: 20 }, (_, index) => `${origin}/section/catalog/category-${index + 1}`),
-        `${origin}/section/catalog/category-20/detail`,
+        ...Array.from({ length: 21 }, (_, index) => `${origin}/section/catalog/category-${index + 1}`),
+        `${origin}/section/catalog/category-21/detail`,
+        `${origin}/section/mixed`,
+        ...Array.from({ length: 21 }, (_, index) => `${origin}/section/mixed/item-${index + 1}`),
+        ...Array.from({ length: 21 }, (_, index) => `${origin}/section/mixed?page=${index + 1}`),
       ];
       res.writeHead(200, { 'content-type': 'application/xml' });
       res.end(`<urlset>${urls.map((entry) => `<url><loc>${entry}</loc></url>`).join('')}</urlset>`);
@@ -49,11 +52,24 @@ function createFixtureServer() {
       return;
     }
     if (url.pathname === '/blog') {
-      const links = Array.from({ length: 20 }, (_, index) => (
+      const links = Array.from({ length: 21 }, (_, index) => (
         `<a href="/blog/post-${index + 1}">Post ${index + 1}</a>`
       )).join('');
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>Blog</title></head><body><h1>Blog</h1>${links}<a href="/blogger">Blogger</a></body></html>`);
+      return;
+    }
+    if (url.pathname === '/limited') {
+      const links = Array.from({ length: 12 }, (_, index) => (
+        `<a href="/limited/page-${index + 1}">Page ${index + 1}</a>`
+      )).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Limited</title></head><body>${links}</body></html>`);
+      return;
+    }
+    if (/^\/limited\/page-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body>Page</body></html>`);
       return;
     }
     if (postMatch) {
@@ -99,7 +115,7 @@ function createFixtureServer() {
       const page = Math.max(1, Number(url.searchParams.get('page') || 1) || 1);
       const links = page === 1
         ? Array.from(
-          { length: 20 },
+          { length: 21 },
           (_, index) => `<a href="/section/science/space?page=${index + 1}">Page ${index + 1}</a>`
         ).join('')
         : '';
@@ -114,19 +130,24 @@ function createFixtureServer() {
     }
     if (url.pathname === '/section/editorial') {
       const articleLinks = Array.from({ length: 25 }, (_, index) => (
-        `<article><h2><a href="/stories/article-${index + 1}">Article ${index + 1}</a></h2></article>`
+        `<article><h2><a href="/section/editorial/articles/article-${index + 1}">Article ${index + 1}</a></h2></article>`
       )).join('');
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<html><head><title>Editorial</title></head><body><nav><a href="/pricing">Pricing</a></nav><main>${articleLinks}</main></body></html>`);
+      res.end(`<html><head><title>Editorial</title></head><body><nav><a href="/pricing">Pricing</a><a href="/stories/off-path">Off path</a></nav><main>${articleLinks}</main></body></html>`);
       return;
     }
-    if (/^\/stories\/article-\d+$/.test(url.pathname)) {
+    if (url.pathname === '/section/editorial/articles') {
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<html><head><title>${url.pathname.slice(9)}</title><meta property="og:type" content="article"></head><body><article><h1>Article</h1><a href="/pricing">Pricing</a></article></body></html>`);
+      res.end('<html><head><title>Editorial articles</title></head><body><h1>Articles</h1></body></html>');
+      return;
+    }
+    if (/^\/section\/editorial\/articles\/article-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Article</h1><a href="/pricing">Pricing</a></article></body></html>`);
       return;
     }
     if (url.pathname === '/section/catalog') {
-      const categoryLinks = Array.from({ length: 20 }, (_, index) => (
+      const categoryLinks = Array.from({ length: 21 }, (_, index) => (
         `<a href="/section/catalog/category-${index + 1}">Category ${index + 1}</a>`
       )).join('');
       res.writeHead(200, { 'content-type': 'text/html' });
@@ -138,9 +159,30 @@ function createFixtureServer() {
       res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body><h1>Category</h1></body></html>`);
       return;
     }
-    if (url.pathname === '/section/catalog/category-20/detail') {
+    if (url.pathname === '/section/catalog/category-21/detail') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end('<html><head><title>Category 20 detail</title></head><body><h1>Detail</h1></body></html>');
+      return;
+    }
+    if (url.pathname === '/section/mixed') {
+      const page = Number(url.searchParams.get('page') || 0);
+      const links = page === 0
+        ? [
+          ...Array.from({ length: 21 }, (_, index) => (
+            `<a href="/section/mixed/item-${index + 1}">Item ${index + 1}</a>`
+          )),
+          ...Array.from({ length: 21 }, (_, index) => (
+            `<a href="/section/mixed?page=${index + 1}">Page ${index + 1}</a>`
+          )),
+        ].join('')
+        : '';
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Mixed ${page || 'index'}</title></head><body><h1>Mixed</h1>${links}</body></html>`);
+      return;
+    }
+    if (/^\/section\/mixed\/item-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body><h1>Mixed item</h1></body></html>`);
       return;
     }
     if (url.pathname === '/jobs-old') {
@@ -191,9 +233,20 @@ async function waitForJob(jobId, accessToken, authToken) {
     if (response.job?.status === 'complete') {
       assert.ok(Number(response.job.progress?.sequence || 0) > 0, 'completed jobs should persist sequenced progress');
       assert.equal(response.job.progress?.final, true, 'completed jobs should persist their final progress snapshot');
+      assert.equal(
+        Number(response.job.progress?.processed || 0),
+        Number(response.job.progress?.discovered || 0),
+        `normal completed scans should finish with every discovered URL processed (${JSON.stringify(response.job.progress)})`
+      );
       assert.ok(
         Number(response.job.progress?.discovered || 0) >= Number(response.job.progress?.mapped || 0),
         'discovered progress should not trail mapped progress'
+      );
+      assert.ok(
+        Number(response.job.progress?.processed || 0)
+          >= Number(response.job.progress?.captured || response.job.progress?.mapped || 0)
+            + Number(response.job.progress?.deferred || 0),
+        'captured and deferred outcomes should be disjoint'
       );
       return response.job.result;
     }
@@ -267,12 +320,12 @@ async function main() {
     assert.notEqual(target.scanNumber, '0');
     assert.equal(nodes.some((node) => node.url === `${fixtureOrigin}/blogger`), false);
     assert.ok(placeholder, 'repetitive group placeholder should be present');
-    assert.equal(placeholder.remainingCount, 10);
+    assert.equal(placeholder.remainingCount, 11);
     assert.equal(placeholder.capturedCount, 10);
-    assert.equal(result.pageCountSummary.totalDiscoveredPageCount, 21);
+    assert.equal(result.pageCountSummary.totalDiscoveredPageCount, 22);
     assert.equal(result.partial, undefined);
 
-    const captureResult = await createScan({
+    const capturePayload = {
       url: `${fixtureOrigin}/blog`,
       maxPages: placeholder.deferredEntries.length,
       options: {
@@ -281,14 +334,45 @@ async function main() {
           entries: placeholder.deferredEntries,
         },
       },
-    }, authToken);
+    };
+    const captureHeaders = {
+      authorization: `Bearer ${authToken}`,
+      'idempotency-key': `fixture-capture:${placeholder.deferredGroupId}`,
+    };
+    const firstCaptureJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: captureHeaders,
+      body: JSON.stringify(capturePayload),
+    });
+    const replayedCaptureJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: captureHeaders,
+      body: JSON.stringify(capturePayload),
+    });
+    assert.equal(replayedCaptureJob.jobId, firstCaptureJob.jobId);
+    assert.equal(replayedCaptureJob.jobAccessToken, firstCaptureJob.jobAccessToken);
+    assert.equal(replayedCaptureJob.idempotentReplay, true);
+    const captureResult = await waitForJob(
+      firstCaptureJob.jobId,
+      firstCaptureJob.jobAccessToken,
+      authToken
+    );
     assert.equal(captureResult.captureSummary.groupId, placeholder.deferredGroupId);
-    assert.equal(captureResult.captureSummary.capturedCount, 10);
+    assert.equal(captureResult.captureSummary.capturedCount, 11);
     assert.equal(captureResult.captureSummary.remainingEntries.length, 0);
+
+    const limitedResult = await createScan({
+      url: `${fixtureOrigin}/limited`,
+      maxPages: 5,
+      options: {},
+    }, authToken);
+    assert.equal(limitedResult.pageCountSummary.capturedPageCount, 5);
+    assert.equal(limitedResult.pageCountSummary.deferredPageCount, 8);
+    assert.equal(limitedResult.pageCountSummary.totalDiscoveredPageCount, 13);
 
     const wholeSiteResult = await createScan({
       url: `${fixtureOrigin}/`,
-      maxPages: 100,
+      maxPages: 200,
       options: {},
     }, authToken);
     const wholeSiteNodes = flattenTree(wholeSiteResult.root);
@@ -296,7 +380,7 @@ async function main() {
     assert.equal(wholeSiteResult.scanScope.focused, false);
     assert.ok(wholeSitePlaceholder, 'homepage scans should use the same repetitive-page optimization');
     assert.equal(wholeSitePlaceholder.capturedCount, 10);
-    assert.equal(wholeSitePlaceholder.remainingCount, 10);
+    assert.equal(wholeSitePlaceholder.remainingCount, 11);
     const wholeSiteParent = wholeSiteNodes.find((node) => node.url === `${fixtureOrigin}/blog`);
     assert.equal(wholeSiteParent.children.at(-1).nodeKind, 'deferred-group');
 
@@ -390,7 +474,10 @@ async function main() {
     const blockedTarget = blockedNodes.find((node) => node.url === `${fixtureOrigin}/blocked-focus`);
     assert.equal(blockedTarget?.httpStatus, 403);
     assert.equal(blockedTarget?.scanStatus, 'scan_limited');
+    assert.equal(blockedTarget?.nodeKind, 'focus-ghost');
+    assert.equal(blockedTarget?.isBlockedBoundary, true);
     assert.equal(blockedResult.partialReason, 'root_discovery_failed');
+    assert.equal(blockedResult.blockedSections?.[0]?.url, `${fixtureOrigin}/blocked-focus`);
     assert.equal(blockedResult.scanDiagnostics?.sitemapSkippedForBlockedFocusedRoot, true);
     assert.equal(blockedResult.scanDiagnostics?.sitemapUrlsFound, 0);
 
@@ -409,7 +496,7 @@ async function main() {
     );
     assert.equal(paginationTarget.nodeKind, undefined);
     assert.equal(paginationPlaceholder.parentUrl, paginationTarget.url);
-    assert.equal(paginationPlaceholder.remainingCount, 10);
+    assert.equal(paginationPlaceholder.remainingCount, 11);
     assert.equal(capturedPaginationChildren.length, 10);
     assert.deepEqual(
       capturedPaginationChildren.map((node) => Number(new URL(node.url).searchParams.get('page'))),
@@ -426,7 +513,7 @@ async function main() {
     });
     assert.equal(
       paginationResult.pageCountSummary.totalDiscoveredPageCount,
-      21,
+      22,
       'focused pagination should retain captured and deferred page totals'
     );
 
@@ -445,14 +532,27 @@ async function main() {
       'global navigation links outside the focused path should remain excluded'
     );
     assert.equal(
-      editorialNodes.filter((node) => node.url?.startsWith(`${fixtureOrigin}/stories/article-`)).length,
+      editorialNodes.some((node) => node.url === `${fixtureOrigin}/stories/off-path`),
+      false,
+      'crosslinks outside the focused URL path must not become structural children'
+    );
+    const editorialArticlesParent = editorialNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/editorial/articles`
+    );
+    assert.equal(
+      editorialNodes.filter((node) => node.url?.startsWith(`${fixtureOrigin}/section/editorial/articles/article-`)).length,
       10,
-      'content cards may be captured as focused leaf pages even when their URLs live outside the section path'
+      'focused descendants should capture the representative sample'
     );
     assert.equal(editorialPlaceholder?.remainingCount, 15);
     assert.equal(editorialPlaceholder?.capturedCount, 10);
-    assert.equal(editorialPlaceholder?.parentUrl, editorialTarget.url);
-    assert.equal(editorialResult.pageCountSummary.totalDiscoveredPageCount, 26);
+    assert.equal(editorialPlaceholder?.parentUrl, editorialArticlesParent?.url);
+    assert.equal(
+      editorialArticlesParent?.parentUrl,
+      editorialTarget.url,
+      'normalized URL paths must determine structural parents'
+    );
+    assert.equal(editorialResult.pageCountSummary.totalDiscoveredPageCount, 27);
 
     const catalogResult = await createScan({
       url: `${fixtureOrigin}/section/catalog`,
@@ -460,22 +560,38 @@ async function main() {
       options: {},
     }, authToken);
     const catalogNodes = flattenTree(catalogResult.root);
-    const categoryTwenty = catalogNodes.find(
-      (node) => node.url === `${fixtureOrigin}/section/catalog/category-20`
+    const categoryTwentyOne = catalogNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/catalog/category-21`
     );
     const catalogPlaceholder = catalogNodes.find((node) => node.nodeKind === 'deferred-group');
-    assert.equal(categoryTwenty?.httpStatus, 200);
-    assert.equal(categoryTwenty?.isMissing, false);
-    assert.equal(categoryTwenty?.isVirtualMissing, false);
+    assert.equal(categoryTwentyOne?.httpStatus, 200);
+    assert.equal(categoryTwentyOne?.isMissing, false);
+    assert.equal(categoryTwentyOne?.isVirtualMissing, false);
     assert.ok(
-      categoryTwenty?.children?.some(
-        (node) => node.url === `${fixtureOrigin}/section/catalog/category-20/detail`
+      categoryTwentyOne?.children?.some(
+        (node) => node.url === `${fixtureOrigin}/section/catalog/category-21/detail`
       ),
       'a deferred page required by a captured descendant should be promoted and scanned as its real parent'
     );
     assert.equal(catalogPlaceholder?.capturedCount, 11);
-    assert.equal(catalogPlaceholder?.remainingCount, 9);
+    assert.equal(catalogPlaceholder?.remainingCount, 10);
     assert.equal(catalogResult.scanDiagnostics?.promotedDeferredAncestorCount, 1);
+
+    const mixedResult = await createScan({
+      url: `${fixtureOrigin}/section/mixed`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const mixedNodes = flattenTree(mixedResult.root);
+    const mixedPlaceholders = mixedNodes.filter((node) => node.nodeKind === 'deferred-group');
+    assert.equal(
+      mixedPlaceholders.length,
+      1,
+      `one visible parent should render one combined placeholder (${JSON.stringify(mixedResult.repetitiveGroups)})`
+    );
+    assert.equal(mixedPlaceholders[0].parentUrl, `${fixtureOrigin}/section/mixed`);
+    assert.equal(mixedPlaceholders[0].capturedCount, 20);
+    assert.equal(mixedPlaceholders[0].remainingCount, 22);
 
     const redirectedResult = await createScan({
       url: `${fixtureOrigin}/jobs-old`,

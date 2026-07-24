@@ -621,6 +621,22 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('root_links_found');
   });
 
+  test('shows the blocked section boundary in the report', () => {
+    renderDrawer({
+      scanMeta: {
+        partialReason: 'blocked_sections',
+        blockedSections: [{
+          url: 'https://example.com/private',
+          status: 403,
+          reason: 'crawler_limited',
+        }],
+      },
+    });
+
+    expect(container.textContent).toContain('Some sections could not be scanned.');
+    expect(container.textContent).toContain('https://example.com/private');
+  });
+
   test('hides stale scan-limit warning when a saved map only has one real page', () => {
     renderDrawer({
       entries: [entries[0]],

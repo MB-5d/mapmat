@@ -90,4 +90,20 @@ describe('page node contract', () => {
     expect(isPageNode(root.children[1])).toBe(false);
     expect(countPageNodes(root)).toBe(1);
   });
+
+  test('excludes virtual Missing nodes from captured page counts', () => {
+    const root = makeNode('home', {
+      children: [
+        makeNode('captured'),
+        makeNode('virtual', {
+          isMissing: true,
+          isVirtualMissing: true,
+          scanStatus: 'missing',
+        }),
+      ],
+    });
+
+    expect(isPageNode(root.children[1])).toBe(true);
+    expect(countPageNodes(root)).toBe(2);
+  });
 });

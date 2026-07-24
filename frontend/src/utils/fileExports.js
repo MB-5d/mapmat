@@ -1,7 +1,7 @@
 import { getSeoValue } from './seoMetadata';
 import { isVirtualMissingNode } from './scanStatus';
 import { isRenderableTextUrl } from './url';
-import { isPageNode } from './treeUtils';
+import { isCapturedPageNode, isPageNode } from './treeUtils';
 
 export const EXPORT_BRANDING = Object.freeze({
   name: 'Vellic',
@@ -108,6 +108,7 @@ export const buildSitemapExportRows = (rootNode, orphanNodes = []) => {
         thumbnailFullUrl: node.thumbnailFullUrl || '',
         fullScreenshotUrl: node.fullScreenshotUrl || '',
         childCount: Array.isArray(node.children) ? node.children.filter(isPageNode).length : 0,
+        isCapturedPage: isCapturedPageNode(node),
       });
     }
 
@@ -132,6 +133,10 @@ export const buildSitemapExportRows = (rootNode, orphanNodes = []) => {
 
   return rows;
 };
+
+export const countCapturedExportRows = (rows = []) => (
+  (Array.isArray(rows) ? rows : []).filter((row) => row?.isCapturedPage !== false).length
+);
 
 const escapeCsvValue = (value) => {
   const normalized = String(value ?? '').replace(/\r\n|\r|\n/g, ' ');
@@ -333,7 +338,7 @@ export const buildSiteIndexHtml = ({
 <body>
   <h1>Site Index</h1>
   <p class="subtitle">${escapeHtml(metadata.title)} - ${escapeHtml(normalizeIndexHostname(hostname))}</p>
-  <p class="meta">Root URL: ${escapeHtml(rootUrl)}<br>Total Pages: ${rows.length}<br>Generated: ${escapeHtml(metadata.generatedAt)}</p>
+  <p class="meta">Root URL: ${escapeHtml(rootUrl)}<br>Total Pages: ${metadata.pageCount}<br>Generated: ${escapeHtml(metadata.generatedAt)}</p>
   <p class="brand">${escapeHtml(metadata.tagline)}</p>
 
   <nav aria-label="Site index">
@@ -354,7 +359,7 @@ export const buildSiteIndexMarkdown = ({
   `**${metadata.title} - ${normalizeIndexHostname(hostname)}**`,
   '',
   `Root URL: ${normalizeExportText(rootUrl)}`,
-  `Total Pages: ${rows.length}`,
+  `Total Pages: ${metadata.pageCount}`,
   `Generated: ${metadata.generatedAt}`,
   metadata.tagline,
   '',
@@ -372,7 +377,7 @@ export const buildSiteIndexText = ({
   ...buildIndexHeadingLines({
     metadata: {
       ...metadata,
-      pageCount: rows.length,
+      pageCount: metadata.pageCount,
     },
     rootUrl,
     hostname,

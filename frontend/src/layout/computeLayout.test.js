@@ -135,7 +135,7 @@ describe('computeLayout orientation', () => {
 
     const expanded = computeLayout(tree, [], false, { blog: true });
     expect(expanded.nodes.get('more-posts').number).toBe('');
-    expect(expanded.nodes.get('more-posts').stackInfo.showCollapse).toBe(false);
-    expect(expanded.nodes.get('post-10').stackInfo.showCollapse).toBe(true);
+    expect(expanded.nodes.get('more-posts').stackInfo.showCollapse).toBe(true);
+    expect(expanded.nodes.get('post-10').stackInfo.showCollapse).toBe(false);
   });
 });
