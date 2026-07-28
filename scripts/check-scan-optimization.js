@@ -71,9 +71,24 @@ const unknownNumbers = buildPreservedNumberMap([
     url: `https://example.com/blog/post-${index + 1}`,
     order: index + 1,
   })),
+  { url: 'https://example.com/blog/post-1/comments', order: 20 },
 ], 'https://example.com/blog/post-1');
 assert.equal(unknownNumbers.get('https://example.com/blog'), 'X');
 assert.equal(unknownNumbers.get('https://example.com/blog/post-1'), 'X.XX');
+assert.equal(unknownNumbers.get('https://example.com/blog/post-1/comments'), 'X.XX.1');
+
+const offPathNumbers = buildPreservedNumberMap([
+  { url: 'https://example.com/section/art-design', order: 0 },
+  { url: 'https://example.com/2026/07/story', order: 1 },
+], 'https://example.com/section/art-design', {
+  knownParentUrls: [
+    'https://example.com/2026',
+    'https://example.com/2026/07',
+  ],
+});
+assert.equal(offPathNumbers.get('https://example.com/2026'), 'X');
+assert.equal(offPathNumbers.get('https://example.com/2026/07'), 'X.1');
+assert.equal(offPathNumbers.get('https://example.com/2026/07/story'), 'X.1.1');
 
 const twentyUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/threshold/item-${index + 1}`);
 assert.equal(buildRepetitiveGroups(twentyUrls).length, 0);

@@ -519,6 +519,9 @@ const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 ];
+const SCAN_REQUEST_USER_AGENT = String(
+  process.env.SCAN_REQUEST_USER_AGENT || SCREENSHOT_USER_AGENTS[0]
+).trim();
 const CLOUDFLARE_UTILITY_PATHS = new Set([
   '/cdn-cgi/l/email-protection',
 ]);
@@ -3460,6 +3463,49 @@ function getCanonicalKey(urlStr) {
   }
 }
 
+const DISTINCT_COLLECTION_QUERY_KEYS = new Set([
+  'after',
+  'before',
+  'cursor',
+  'date',
+  'month',
+  'offset',
+  'p',
+  'page',
+  'start',
+  'year',
+]);
+
+function getPageIdentityUrl(meta = {}) {
+  const sourceUrl = normalizeUrl(meta.finalUrl || meta.url);
+  const canonicalUrl = normalizeUrl(meta.canonicalUrl);
+  if (!sourceUrl) return canonicalUrl;
+  if (!canonicalUrl) return sourceUrl;
+  try {
+    const source = new URL(sourceUrl);
+    const canonical = new URL(canonicalUrl);
+    const sourceCollectionKeys = Array.from(source.searchParams.keys())
+      .map((key) => key.toLowerCase())
+      .filter((key) => DISTINCT_COLLECTION_QUERY_KEYS.has(key));
+    const canonicalKeys = new Set(
+      Array.from(canonical.searchParams.keys()).map((key) => key.toLowerCase())
+    );
+    if (
+      sourceCollectionKeys.length > 0
+      && sourceCollectionKeys.some((key) => !canonicalKeys.has(key))
+    ) {
+      return sourceUrl;
+    }
+  } catch {
+    return canonicalUrl || sourceUrl;
+  }
+  return canonicalUrl;
+}
+
+function getPageIdentityKey(meta = {}) {
+  return getCanonicalKey(getPageIdentityUrl(meta));
+}
+
 function getParentUrl(urlStr) {
   const u = new URL(urlStr);
   if (u.search) {
@@ -3905,7 +3951,7 @@ async function fetchPage(url, extraHeaders = {}, timeoutMs = 20000) {
     maxContentLength: SCAN_HTML_RESPONSE_MAX_BYTES,
     maxBodyLength: SCAN_HTML_RESPONSE_MAX_BYTES,
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; VellicBot/1.0)',
+      'User-Agent': SCAN_REQUEST_USER_AGENT,
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.5',
       ...extraHeaders,
@@ -3990,7 +4036,7 @@ async function checkLinkStatus(url, extraHeaders = {}) {
       timeout: 10000,
       maxRedirects: 5,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; VellicBot/1.0)',
+        'User-Agent': SCAN_REQUEST_USER_AGENT,
         ...extraHeaders,
       },
       validateStatus: () => true,
@@ -4009,7 +4055,7 @@ async function checkLinkStatus(url, extraHeaders = {}) {
       maxContentLength: SCAN_HTML_RESPONSE_MAX_BYTES,
       maxBodyLength: SCAN_HTML_RESPONSE_MAX_BYTES,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; VellicBot/1.0)',
+        'User-Agent': SCAN_REQUEST_USER_AGENT,
         Accept: '*/*',
         ...extraHeaders,
       },
@@ -4118,7 +4164,7 @@ const collectSitemapUrls = async (origin, hostNormalized, protocol, abortCheck =
         timeout: 10000,
         maxContentLength: SCAN_SITEMAP_RESPONSE_MAX_BYTES,
         maxBodyLength: SCAN_SITEMAP_RESPONSE_MAX_BYTES,
-        headers: { 'User-Agent': 'VellicBot/1.0' },
+        headers: { 'User-Agent': SCAN_REQUEST_USER_AGENT },
         validateStatus: (s) => s >= 200 && s < 400,
       });
 
@@ -4298,24 +4344,29 @@ function extractLinks(html, baseUrl) {
   return Array.from(links);
 }
 
+const FOCUSED_CONTENT_LINK_SELECTOR = [
+  'article a[href]',
+  'h1 a[href]',
+  'h2 a[href]',
+  'h3 a[href]',
+  'h4 a[href]',
+  'main li a[href]',
+  'main [role="listitem"] a[href]',
+  '[class*="card"] a[href]',
+  '[class*="Card"] a[href]',
+  '[class*="tile"] a[href]',
+  '[class*="Tile"] a[href]',
+  '[class*="teaser"] a[href]',
+  '[class*="Teaser"] a[href]',
+  '[class*="story"] a[href]',
+  '[class*="Story"] a[href]',
+].join(', ');
+
 function extractFocusedContentLinks(html, baseUrl) {
   const $ = cheerio.load(html);
   const links = new Set();
-  const contentSelector = [
-    'article a[href]',
-    'h1 a[href]',
-    'h2 a[href]',
-    'h3 a[href]',
-    'h4 a[href]',
-    '[class*="card"] a[href]',
-    '[class*="Card"] a[href]',
-    '[class*="tile"] a[href]',
-    '[class*="Tile"] a[href]',
-    '[class*="teaser"] a[href]',
-    '[class*="Teaser"] a[href]',
-  ].join(', ');
 
-  $(contentSelector).each((_, el) => {
+  $(FOCUSED_CONTENT_LINK_SELECTOR).each((_, el) => {
     const $link = $(el);
     if ($link.closest('header, nav, footer, aside, [role="navigation"]').length > 0) return;
     const href = ($link.attr('href') || '').trim();
@@ -4347,21 +4398,8 @@ async function extractRenderedLinks(url, context = null) {
       timeout: 12000,
     });
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
-    const renderedLinks = await page.evaluate(() => {
-      const selectors = [
-        'article a[href]',
-        'h1 a[href]',
-        'h2 a[href]',
-        'h3 a[href]',
-        'h4 a[href]',
-        '[class*="card"] a[href]',
-        '[class*="Card"] a[href]',
-        '[class*="tile"] a[href]',
-        '[class*="Tile"] a[href]',
-        '[class*="teaser"] a[href]',
-        '[class*="Teaser"] a[href]',
-      ].join(', ');
-      const contentLinks = Array.from(document.querySelectorAll(selectors))
+    const renderedLinks = await page.evaluate((selector) => {
+      const contentLinks = Array.from(document.querySelectorAll(selector))
         .filter((anchor) => !anchor.closest('header, nav, footer, aside, [role="navigation"]'))
         .map((anchor) => anchor.href)
         .filter(Boolean);
@@ -4371,7 +4409,7 @@ async function extractRenderedLinks(url, context = null) {
           .filter(Boolean),
         contentLinks,
       };
-    });
+    }, FOCUSED_CONTENT_LINK_SELECTOR);
     return {
       links: Array.from(new Set(renderedLinks.links)),
       contentLinks: Array.from(new Set(renderedLinks.contentLinks)),
@@ -4572,7 +4610,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!placement) return false;
     if (!allowSubdomains) {
       if (!(placement === 'Primary' && sameOrigin(normalized, origin))) return false;
-      return isWithinFocusedPathAlias(normalized);
+      return isWithinFocusedPathAlias(normalized) || focusedContentUrls.has(normalized);
     }
     return true;
   };
@@ -4582,6 +4620,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (normalized === seed) return true;
     if (depthLimit === null) return true;
     if (scanScope.focused) {
+      if (focusedContentUrls.has(normalized)) return true;
       const matchingDepths = [scanScope.focusPath, ...Array.from(focusedPathAliases)]
         .filter((path) => {
           const pathname = new URL(normalized).pathname;
@@ -4965,15 +5004,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     const host = normalizeHost(new URL(url).hostname);
-    const preferBrowser = browserPreferredHosts.has(host) && !scanScope.focused;
+    const preferBrowser = browserPreferredHosts.has(host);
     let browserAttempted = false;
 
     if (preferBrowser && source !== 'common_path') {
       browserAttempted = true;
       scanDiagnostics.browserFetchPreferredCount += 1;
       try {
-        const context = await getCrawlBrowserContext(url);
-        const response = await fetchPageWithBrowserContext(context, url);
+        const response = await fetchWithBrowserFallbackContext(url);
         browserPreferredHosts.add(host);
         return { ...response, usedBrowser: true };
       } catch (error) {
@@ -4982,21 +5020,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           url,
           message: error?.message || 'browser fetch failed',
         });
-        scanDiagnostics.browserFetchFallbackCount += 1;
-        try {
-          const context = await getCrawlBrowserContext(url);
-          const response = await fetchPageWithBrowserRequestContext(context, url);
-          browserPreferredHosts.add(host);
-          scanDiagnostics.browserFetchFallbackSuccessCount += 1;
-          return { ...response, usedBrowser: true };
-        } catch (requestError) {
-          scanDiagnostics.browserFetchFallbackFailedCount += 1;
-          recordDiscoveryError({
-            source: 'browser_request_fallback',
-            url,
-            message: requestError?.message || 'browser request fallback failed',
-          });
-        }
+        scanDiagnostics.browserFetchFallbackFailedCount += 1;
       }
     }
 
@@ -5067,7 +5091,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     try {
       const sitemapRes = await axios.get(sitemapUrl, {
         timeout: 10000,
-        headers: { 'User-Agent': 'VellicBot/1.0' },
+        headers: { 'User-Agent': SCAN_REQUEST_USER_AGENT },
         validateStatus: (s) => s >= 200 && s < 400,
       });
 
@@ -5170,7 +5194,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         timeout: 8000,
         maxContentLength: SCAN_HTML_RESPONSE_MAX_BYTES,
         maxBodyLength: SCAN_HTML_RESPONSE_MAX_BYTES,
-        headers: { 'User-Agent': 'VellicBot/1.0' },
+        headers: { 'User-Agent': SCAN_REQUEST_USER_AGENT },
         validateStatus: (s) => s >= 200 && s < 400,
       });
       const sitemapUrls = String(robotsRes.data || '')
@@ -5228,7 +5252,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const seen = new Set();
     let duplicateCount = 0;
     pageMap.forEach((meta) => {
-      const key = getCanonicalKey(meta.canonicalUrl || meta.finalUrl || meta.url);
+      const key = getPageIdentityKey(meta);
       if (!key) return;
       if (seen.has(key)) {
         duplicateCount += 1;
@@ -5543,6 +5567,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const wasRedirect = normalizeUrl(finalUrl || url) !== normalizeUrl(url);
     const description = getPrimaryDescription(seoMetadata);
     const metaTags = getPrimaryMetaTags(seoMetadata);
+    const repetitivePageSignal = extractRepetitivePageSignal(html, seoMetadata);
 
     pageMap.set(url, {
       url,
@@ -5570,7 +5595,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       isBlocked: classification.isBlockedStatus,
       scanStatus: classification.scanStatus,
       metadataAvailable: classification.metadataAvailable,
-      repetitivePageSignal: extractRepetitivePageSignal(html, seoMetadata),
+      repetitivePageSignal,
     });
     if (classification.isBlockedStatus || classification.isChallengePage) {
       blockedOutcomeUrls.add(url);
@@ -5589,12 +5614,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (classification.isAuthStatus) scanDiagnostics.authCount += 1;
     if (classification.isInactiveStatus) scanDiagnostics.inactiveCount += 1;
 
-    const isFocusedContentLeaf = focusedContentUrls.has(url) && !isWithinFocusedPathAlias(url);
+    const isFocusedContentLeaf = url !== seed && focusedListingUrls.has(url);
     const suppressLinkDiscovery = isFocusedContentLeaf || source === 'parent_probe';
     const links = classification.shouldExtractLinks && !suppressLinkDiscovery
       ? extractLinks(html, finalUrl || url)
       : [];
-    if (scanScope.focused && !suppressLinkDiscovery && classification.shouldExtractLinks) {
+    if (
+      scanScope.focused
+      && !suppressLinkDiscovery
+      && classification.shouldExtractLinks
+    ) {
       extractFocusedContentLinks(html, finalUrl || url).forEach((link) => {
         registerFocusedContentLink(link, url);
         if (!links.includes(link)) links.push(link);
@@ -6080,7 +6109,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const scannedKeys = new Set();
   pageMap.forEach((meta) => {
-    const key = getCanonicalKey(meta.canonicalUrl || meta.finalUrl || meta.url);
+    const key = getPageIdentityKey(meta);
     if (key) scannedKeys.add(key);
   });
 
@@ -6164,7 +6193,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     nodes.delete(url);
   });
 
-  const canonicalKeyFor = (node) => getCanonicalKey(node.canonicalUrl || node.finalUrl || node.url);
+  const canonicalKeyFor = (node) => getPageIdentityKey(node);
   const shouldInferPathParents = (node) => {
     if (!node?.url || node.url === rootUrl) return false;
     try {
@@ -6182,11 +6211,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!canonicalToUrl.has(key)) canonicalToUrl.set(key, node.url);
   });
 
-  const ensureParentChain = (url) => {
+  const ensureParentChain = (url, { allowFocusedContentAncestors = false } = {}) => {
     let parentUrl = getParentUrl(url);
     while (parentUrl && !nodes.has(parentUrl)) {
       if (focusedContextAncestorUrls.has(parentUrl)) break;
-      if (scanScope.focused && !allowUrl(parentUrl)) break;
+      if (scanScope.focused && !allowUrl(parentUrl) && !allowFocusedContentAncestors) break;
       const canonicalMatch = canonicalToUrl.get(getCanonicalKey(parentUrl));
       if (canonicalMatch) return;
       nodes.set(parentUrl, {
@@ -6212,12 +6241,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     && pageLimit !== null
     && pageMap.size >= pageLimit;
 
-  if (!shouldSuppressVirtualPlaceholders) {
-    for (const node of nodes.values()) {
-      if (node.url === rootUrl) continue;
-      if (!shouldInferPathParents(node)) continue;
-      ensureParentChain(node.url);
-    }
+  for (const node of nodes.values()) {
+    if (node.url === rootUrl) continue;
+    if (!shouldInferPathParents(node)) continue;
+    const allowFocusedContentAncestors = scanScope.focused && focusedContentUrls.has(node.url);
+    if (shouldSuppressVirtualPlaceholders && !allowFocusedContentAncestors) continue;
+    ensureParentChain(node.url, { allowFocusedContentAncestors });
   }
 
   nodes.forEach((node) => {
@@ -6321,21 +6350,21 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   // Ensure path ancestors for visible nodes are also visible (for missing placeholders).
   // Capped scans should spend the visible allowance on captured pages, not generated placeholders.
-  if (!shouldSuppressVirtualPlaceholders) {
-    Array.from(visiblePrimaryUrls).forEach((url) => {
-      const linkedNode = nodes.get(url);
-      if (linkedNode && !shouldInferPathParents(linkedNode)) return;
-      let parentUrl = getParentUrl(url);
-      while (parentUrl) {
-        if (!nodes.has(parentUrl)) break;
-        const parentHost = new URL(parentUrl).hostname;
-        if (normalizeHost(parentHost) !== rootHostNormalized) break;
-        if (visiblePrimaryUrls.has(parentUrl)) break;
-        visiblePrimaryUrls.add(parentUrl);
-        parentUrl = getParentUrl(parentUrl);
-      }
-    });
-  }
+  Array.from(visiblePrimaryUrls).forEach((url) => {
+    const linkedNode = nodes.get(url);
+    if (linkedNode && !shouldInferPathParents(linkedNode)) return;
+    const allowFocusedContentAncestors = scanScope.focused && focusedContentUrls.has(url);
+    if (shouldSuppressVirtualPlaceholders && !allowFocusedContentAncestors) return;
+    let parentUrl = getParentUrl(url);
+    while (parentUrl) {
+      if (!nodes.has(parentUrl)) break;
+      const parentHost = new URL(parentUrl).hostname;
+      if (normalizeHost(parentHost) !== rootHostNormalized) break;
+      if (visiblePrimaryUrls.has(parentUrl)) break;
+      visiblePrimaryUrls.add(parentUrl);
+      parentUrl = getParentUrl(parentUrl);
+    }
+  });
 
   const orphanCandidates = [];
   const subdomainCandidates = [];
@@ -6455,6 +6484,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   });
 
+  const focusedKnownNumberingParents = new Set();
+  if (scanScope.focused) {
+    focusedContentUrls.forEach((url) => {
+      let parentUrl = getParentUrl(url);
+      while (parentUrl && parentUrl !== scanScope.siteRootUrl) {
+        focusedKnownNumberingParents.add(parentUrl);
+        parentUrl = getParentUrl(parentUrl);
+      }
+    });
+  }
   const preservedNumberMap = scanScope.focused
     ? buildPreservedNumberMap(
       Array.from(numberingDiscoveryOrder.entries()).map(([url, order]) => ({
@@ -6465,7 +6504,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         exact: sitemapNumberingOrder.has(url),
       })),
       seed,
-      { completeParentUrls: Array.from(sitemapCompleteParentUrls) }
+      {
+        completeParentUrls: Array.from(sitemapCompleteParentUrls),
+        knownParentUrls: Array.from(focusedKnownNumberingParents),
+      }
     )
     : new Map();
   if (scanScope.focused) {

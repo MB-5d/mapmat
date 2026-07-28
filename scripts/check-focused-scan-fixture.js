@@ -93,7 +93,7 @@ function createFixtureServer() {
       return;
     }
     if (url.pathname === '/browser-only' || url.pathname === '/browser-only/page') {
-      const isBasicScanner = String(req.headers['user-agent'] || '').includes('VellicBot');
+      const isBasicScanner = String(req.headers['user-agent'] || '').includes('FixtureDirect');
       if (isBasicScanner) {
         res.writeHead(503, { 'content-type': 'text/html' });
         res.end('<html><head><title>Unavailable</title></head><body>Unavailable</body></html>');
@@ -109,6 +109,25 @@ function createFixtureServer() {
     if (url.pathname === '/blocked-focus') {
       res.writeHead(403, { 'content-type': 'text/html' });
       res.end('<html><head><title>Access denied</title></head><body>Access denied</body></html>');
+      return;
+    }
+    if (url.pathname === '/section/archive-months' && !url.searchParams.has('date')) {
+      const monthLinks = Array.from({ length: 21 }, (_, index) => (
+        `<a href="/section/archive-months?date=${index + 1}-28-2026">Month ${index + 1}</a>`
+      )).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Archive months</title></head><body><main><ol><li>${monthLinks}</li></ol></main></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/archive-months' && url.searchParams.has('date')) {
+      const month = Math.max(1, Number(String(url.searchParams.get('date')).split('-')[0]) || 1);
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Archive month ${month}</title><link rel="canonical" href="/section/archive-months"></head><body><main><ol><li><p><a href="/2026/${String(month).padStart(2, '0')}/28/archive-story-${month}">Archive story ${month}</a></p></li></ol></main></body></html>`);
+      return;
+    }
+    if (/^\/2026\/\d{2}\/28\/archive-story-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Archive story</h1></article></body></html>`);
       return;
     }
     if (url.pathname === '/section/science/space') {
@@ -296,6 +315,7 @@ async function main() {
         RUN_MODE: 'web',
         JOB_WORKER_TYPES: 'scan',
         ALLOW_PRIVATE_NETWORKS: 'true',
+        SCAN_REQUEST_USER_AGENT: 'FixtureDirect/1.0',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -521,6 +541,44 @@ async function main() {
       paginationResult.pageCountSummary.totalDiscoveredPageCount,
       22,
       'focused pagination should retain captured and deferred page totals'
+    );
+
+    const archiveResult = await createScan({
+      url: `${fixtureOrigin}/section/archive-months`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const archiveNodes = flattenTree(archiveResult.root);
+    const archiveTarget = archiveNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/archive-months`
+    );
+    const archiveMonthNodes = archiveTarget.children.filter((node) => (
+      String(node.url || '').startsWith(`${fixtureOrigin}/section/archive-months?date=`)
+    ));
+    const archivePlaceholder = archiveTarget.children.find(
+      (node) => node.nodeKind === 'deferred-group'
+    );
+    const archiveArticleNodes = archiveNodes.filter((node) => (
+      String(node.url || '').startsWith(`${fixtureOrigin}/2026/`)
+      && /\/archive-story-\d+$/.test(node.url)
+    ));
+    assert.equal(archiveMonthNodes.length, 10);
+    assert.equal(archiveMonthNodes.every((node) => node.isDuplicate !== true), true);
+    assert.equal(
+      archiveMonthNodes.every((node) => node.canonicalUrl === `${fixtureOrigin}/section/archive-months`),
+      true,
+      'archive month pages should retain their declared canonical without being flattened as duplicate URLs'
+    );
+    assert.equal(archivePlaceholder?.remainingCount, 11);
+    assert.equal(archiveArticleNodes.length, 10);
+    assert.equal(
+      archiveArticleNodes.every((node) => /^(?:X|XX)(?:\.\d+){3}$/.test(node.scanNumber)),
+      true,
+      'known local date/article positions should remain numeric after the unknown full-site prefix'
+    );
+    assert.ok(
+      archiveNodes.some((node) => node.url === `${fixtureOrigin}/2026` && node.isVirtualMissing),
+      'off-path focused content should retain its normalized URL ancestor chain'
     );
 
     const editorialResult = await createScan({

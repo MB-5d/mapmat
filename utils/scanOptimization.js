@@ -195,11 +195,17 @@ function buildRepetitiveGroups(urls, {
 
 function buildPreservedNumberMap(urlEntries, startUrl, {
   completeParentUrls = [],
+  knownParentUrls = [],
 } = {}) {
   const descriptor = createFocusedScanDescriptor(startUrl);
   const records = new Map();
   const completeParents = new Set(
     (Array.isArray(completeParentUrls) ? completeParentUrls : [])
+      .map(normalizeScanUrl)
+      .filter(Boolean)
+  );
+  const knownParents = new Set(
+    (Array.isArray(knownParentUrls) ? knownParentUrls : [])
       .map(normalizeScanUrl)
       .filter(Boolean)
   );
@@ -284,9 +290,15 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
     const hasCompleteOrder = completeParents.has(parentUrl)
       && children.length > 0
       && children.every((childUrl) => records.get(childUrl)?.exact === true);
+    const parentPath = new URL(parentUrl).pathname.replace(/\/+$/, '') || '/';
+    const isKnownFocusedParent = parentPath === descriptor.focusPath
+      || parentPath.startsWith(`${descriptor.focusPath}/`);
+    const hasKnownLocalOrder = hasCompleteOrder
+      || knownParents.has(parentUrl)
+      || isKnownFocusedParent;
     const unknownSegment = children.length >= 10 ? 'XX' : 'X';
     children.forEach((childUrl, index) => {
-      const segment = hasCompleteOrder ? `${index + 1}` : unknownSegment;
+      const segment = hasKnownLocalOrder ? `${index + 1}` : unknownSegment;
       const number = parentNumber === '0' ? segment : `${parentNumber}.${segment}`;
       numbers.set(childUrl, number);
       visit(childUrl, number);
