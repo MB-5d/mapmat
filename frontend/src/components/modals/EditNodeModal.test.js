@@ -30,12 +30,12 @@ describe('EditNodeModal', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('saves updated page fields through the shared form controls', () => {
-    const onSave = vi.fn();
-    const onClose = vi.fn();
+    const onSave = jest.fn();
+    const onClose = jest.fn();
 
     act(() => {
       root.render(
@@ -53,7 +53,7 @@ describe('EditNodeModal', () => {
           onSave={onSave}
           mode="edit"
           customPageTypes={[]}
-          onAddCustomType={vi.fn()}
+          onAddCustomType={jest.fn()}
           specialParentOptions={[]}
         />
       );
@@ -85,8 +85,8 @@ describe('EditNodeModal', () => {
   });
 
   test('normalizes scanned SEO metadata and preserves it on save', () => {
-    const onSave = vi.fn();
-    const onClose = vi.fn();
+    const onSave = jest.fn();
+    const onClose = jest.fn();
 
     act(() => {
       root.render(
@@ -116,7 +116,7 @@ describe('EditNodeModal', () => {
           onSave={onSave}
           mode="edit"
           customPageTypes={[]}
-          onAddCustomType={vi.fn()}
+          onAddCustomType={jest.fn()}
           specialParentOptions={[]}
         />
       );
@@ -188,8 +188,8 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={null}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
           mode="edit"
         />
       );
@@ -203,7 +203,7 @@ describe('EditNodeModal', () => {
   });
 
   test('views the best available saved image asset from the thumbnail section', () => {
-    const onViewImage = vi.fn();
+    const onViewImage = jest.fn();
 
     act(() => {
       root.render(
@@ -219,8 +219,8 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={null}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
           onViewImage={onViewImage}
           mode="edit"
         />
@@ -258,9 +258,9 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={null}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
-          onViewImage={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onViewImage={jest.fn()}
           mode="edit"
         />
       );
@@ -278,7 +278,7 @@ describe('EditNodeModal', () => {
   });
 
   test('clears thumbnail image fields from the delete image overlay', () => {
-    const onSave = vi.fn();
+    const onSave = jest.fn();
 
     act(() => {
       root.render(
@@ -294,9 +294,9 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={null}
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           onSave={onSave}
-          onViewImage={vi.fn()}
+          onViewImage={jest.fn()}
           mode="edit"
         />
       );
@@ -347,9 +347,9 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={null}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
-          onViewImage={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onViewImage={jest.fn()}
           mode="edit"
         />
       );
@@ -361,9 +361,9 @@ describe('EditNodeModal', () => {
   });
 
   test('uploads inline thumbnail data before saving', async () => {
-    const onSave = vi.fn();
-    const onClose = vi.fn();
-    const onUploadNodeImageAsset = vi.fn().mockResolvedValue({
+    const onSave = jest.fn();
+    const onClose = jest.fn();
+    const onUploadNodeImageAsset = jest.fn().mockResolvedValue({
       assetUrl: '/screenshots/uploaded-node-thumb.png',
     });
 
@@ -406,7 +406,7 @@ describe('EditNodeModal', () => {
   });
 
   test('shows delete action in edit mode when provided', () => {
-    const onDelete = vi.fn();
+    const onDelete = jest.fn();
 
     act(() => {
       root.render(
@@ -414,8 +414,8 @@ describe('EditNodeModal', () => {
           node={{ id: 'node-1', title: 'Scanned page', url: 'https://example.com/page', pageType: 'Page' }}
           allNodes={[]}
           rootTree={{ id: 'root', children: [] }}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
           onDelete={onDelete}
           mode="edit"
         />
@@ -437,7 +437,7 @@ describe('EditNodeModal', () => {
   });
 
   test('does not show delete action for the home page', () => {
-    const onDelete = vi.fn();
+    const onDelete = jest.fn();
 
     act(() => {
       root.render(
@@ -445,8 +445,8 @@ describe('EditNodeModal', () => {
           node={{ id: 'root', title: 'Home', url: 'https://example.com/', pageType: 'Home', pageNumber: '0' }}
           allNodes={[]}
           rootTree={{ id: 'root', children: [] }}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
           onDelete={onDelete}
           mode="edit"
         />
@@ -458,7 +458,7 @@ describe('EditNodeModal', () => {
   });
 
   test('shows duplicate source link and locate action for duplicate pages', () => {
-    const onLocateUrl = vi.fn();
+    const onLocateUrl = jest.fn();
 
     act(() => {
       root.render(
@@ -473,8 +473,8 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={{ id: 'root', children: [] }}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
           onLocateUrl={onLocateUrl}
           canLocateUrl={() => true}
           mode="edit"
@@ -510,9 +510,9 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={{ id: 'root', children: [] }}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
-          onLocateUrl={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onLocateUrl={jest.fn()}
           mode="edit"
         />
       );
@@ -540,8 +540,8 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={{ id: 'root', children: [] }}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
           mode="edit"
         />
       );
@@ -571,11 +571,11 @@ describe('EditNodeModal', () => {
             { id: '2', title: 'Second page', pageType: 'Page' },
           ]}
           rootTree={null}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
           mode="edit"
           customPageTypes={[]}
-          onAddCustomType={vi.fn()}
+          onAddCustomType={jest.fn()}
           specialParentOptions={[]}
         />
       );
@@ -591,7 +591,7 @@ describe('EditNodeModal', () => {
   });
 
   test('locks the first page as Home when creating a new map', () => {
-    const onSave = vi.fn();
+    const onSave = jest.fn();
 
     act(() => {
       root.render(
@@ -606,11 +606,11 @@ describe('EditNodeModal', () => {
           }}
           allNodes={[]}
           rootTree={null}
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           onSave={onSave}
           mode="add"
           customPageTypes={[]}
-          onAddCustomType={vi.fn()}
+          onAddCustomType={jest.fn()}
           specialParentOptions={[{ value: '__home__', label: 'No Parent (Home)' }]}
           isHomePageCreation
         />
@@ -663,11 +663,11 @@ describe('EditNodeModal', () => {
             { id: '2', title: 'Second page', pageNumber: '1', depth: 1 },
           ]}
           rootTree={null}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
           mode="edit"
           customPageTypes={[]}
-          onAddCustomType={vi.fn()}
+          onAddCustomType={jest.fn()}
           specialParentOptions={[{ value: '__orphan_root__', label: 'No Parent (Orphan)' }]}
           showParentSelector={false}
         />

@@ -1,4 +1,4 @@
-const { randomUUID: uuidv4 } = require('node:crypto');
+const { v4: uuidv4 } = require('uuid');
 const adapter = require('./dbAdapter');
 
 let ensureSchemaPromise = null;

@@ -9,26 +9,24 @@
     "emoji-picker-element": "^1.29.1",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
-    "lucide-react": "^1.27.0",
-    "react": "^19.2.8",
-    "react-colorful": "^5.8.0",
-    "react-dom": "^19.2.8",
-    "react-easy-crop": "^6.2.3"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^6.0.4",
-    "jsdom": "^30.0.0",
-    "vite": "^8.1.5",
-    "vitest": "^4.1.10"
+    "lucide-react": "^0.263.1",
+    "react": "^18.3.1",
+    "react-colorful": "^5.6.1",
+    "react-dom": "^18.3.1",
+    "react-easy-crop": "^5.5.7",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^5.1.0"
   },
   "scripts": {
-    "start": "vite",
-    "build": "vite build",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
-  "engines": {
-    "node": ">=24.18.0 <25"
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
   },
   "browserslist": {
     "production": [

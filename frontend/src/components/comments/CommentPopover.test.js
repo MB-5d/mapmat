@@ -64,13 +64,13 @@ describe('CommentPopover', () => {
   const renderPopover = (props = {}) => {
     const defaults = {
       node,
-      onClose: vi.fn(),
-      onAddComment: vi.fn(),
-      onUpdateComment: vi.fn(),
-      onDeleteComment: vi.fn(),
-      onToggleCompleted: vi.fn(),
-      onSetCommentsCompleted: vi.fn(),
-      onDeleteAllComments: vi.fn(),
+      onClose: jest.fn(),
+      onAddComment: jest.fn(),
+      onUpdateComment: jest.fn(),
+      onDeleteComment: jest.fn(),
+      onToggleCompleted: jest.fn(),
+      onSetCommentsCompleted: jest.fn(),
+      onDeleteAllComments: jest.fn(),
       collaborators: ['Alex', 'Sam', 'Jennifer'],
       canComment: true,
       canResolveComments: true,
@@ -96,7 +96,7 @@ describe('CommentPopover', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('renders no footer, newest unresolved top-level comments first, and hides resolved by default', () => {
@@ -128,7 +128,7 @@ describe('CommentPopover', () => {
   });
 
   test('hides share until text is typed and submits with the Share button', () => {
-    const onAddComment = vi.fn();
+    const onAddComment = jest.fn();
     renderPopover({ onAddComment });
 
     act(() => {
@@ -165,7 +165,7 @@ describe('CommentPopover', () => {
   });
 
   test('submits with shift-enter while plain enter remains available for line breaks', () => {
-    const onAddComment = vi.fn();
+    const onAddComment = jest.fn();
     renderPopover({ onAddComment });
 
     act(() => {
@@ -252,8 +252,8 @@ describe('CommentPopover', () => {
   });
 
   test('limits resolve to editors and closes when resolving a thread', () => {
-    const onClose = vi.fn();
-    const onSetCommentsCompleted = vi.fn();
+    const onClose = jest.fn();
+    const onSetCommentsCompleted = jest.fn();
     renderPopover({ onClose, onSetCommentsCompleted });
 
     act(() => {
@@ -271,9 +271,9 @@ describe('CommentPopover', () => {
   });
 
   test('supports whole-node delete and resolve actions only for resolvers', () => {
-    const onDeleteAllComments = vi.fn();
-    const onSetCommentsCompleted = vi.fn();
-    const onClose = vi.fn();
+    const onDeleteAllComments = jest.fn();
+    const onSetCommentsCompleted = jest.fn();
+    const onClose = jest.fn();
     renderPopover({ onDeleteAllComments, onSetCommentsCompleted, onClose });
 
     act(() => {

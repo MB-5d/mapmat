@@ -3,52 +3,48 @@ import { createRoot } from 'react-dom/client';
 
 import RootApp from './RootApp';
 
-vi.mock('./App', () => ({
-  default: function MockApp() {
-    return <div>App surface</div>;
-  },
-}));
+jest.mock('./App', () => function MockApp() {
+  return <div>App surface</div>;
+});
 
-vi.mock('./marketing/MarketingSite', () => ({
-  default: function MockMarketingSite() {
-    return <div>Marketing preview surface</div>;
-  },
-}));
+jest.mock('./marketing/MarketingSite', () => function MockMarketingSite() {
+  return <div>Marketing preview surface</div>;
+});
 
-vi.mock('./marketing/MarketingPreviewV2', () => ({
-  default: function MockMarketingPreviewV2() {
-    return <div>Marketing preview v2 surface</div>;
-  },
-}));
+jest.mock('./marketing/MarketingPreviewV2', () => function MockMarketingPreviewV2() {
+  return <div>Marketing preview v2 surface</div>;
+});
 
-vi.mock('./components/admin/AdminConsole', () => ({
-  default: function MockAdminConsole() {
-    return <div>Admin surface</div>;
-  },
-}));
+jest.mock('./marketing/MarketingSite', () => function MockMarketingSite() {
+  return <div>Marketing preview surface</div>;
+});
 
-vi.mock('./components/consent/ConsentDrawer', () => ({
-  default: function MockConsentDrawer() {
-    return null;
-  },
-}));
+jest.mock('./marketing/MarketingPreviewV2', () => function MockMarketingPreviewV2() {
+  return <div>Marketing preview v2 surface</div>;
+});
 
-vi.mock('./components/consent/ConsentSettingsModal', () => ({
-  default: function MockConsentSettingsModal() {
-    return null;
-  },
-}));
+jest.mock('./components/admin/AdminConsole', () => function MockAdminConsole() {
+  return <div>Admin surface</div>;
+});
 
-vi.mock('./contexts/ConsentContext', () => ({
+jest.mock('./components/consent/ConsentDrawer', () => function MockConsentDrawer() {
+  return null;
+});
+
+jest.mock('./components/consent/ConsentSettingsModal', () => function MockConsentSettingsModal() {
+  return null;
+});
+
+jest.mock('./contexts/ConsentContext', () => ({
   useConsent: () => ({
     consent: { analytics: false },
     hasStoredConsent: false,
   }),
 }));
 
-vi.mock('./utils/analytics', () => ({
-  initAnalytics: vi.fn(),
-  trackPageView: vi.fn(),
+jest.mock('./utils/analytics', () => ({
+  initAnalytics: jest.fn(),
+  trackPageView: jest.fn(),
 }));
 
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
@@ -69,15 +65,15 @@ describe('RootApp device support gate', () => {
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
     Object.defineProperty(window.navigator, 'userAgent', { configurable: true, value: userAgent });
     Object.defineProperty(window.navigator, 'maxTouchPoints', { configurable: true, value: maxTouchPoints });
-    window.matchMedia = vi.fn().mockImplementation((query) => ({
+    window.matchMedia = jest.fn().mockImplementation((query) => ({
       matches: query === '(pointer: coarse)' ? coarsePointer : false,
       media: query,
       onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
     }));
   };
 
@@ -95,7 +91,7 @@ describe('RootApp device support gate', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     window.history.pushState({}, '', '/');
   });
 
