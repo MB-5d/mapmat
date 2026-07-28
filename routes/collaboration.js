@@ -1,6 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const { authMiddleware, requireAuth } = require('./auth');
 const mapStore = require('../stores/mapStore');
 const authStore = require('../stores/authStore');
