@@ -1,3 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { TextDecoder, TextEncoder } from 'node:util';
+import { fileURLToPath } from 'node:url';
+import { jsPDF } from 'jspdf';
+
 import {
   EXPORT_MAP_PADDING,
   buildExportInsights,
@@ -14,10 +20,9 @@ import {
 import { REPORT_TYPE_OPTIONS } from './constants';
 import { VELLIC_LOGO_MARK_PATH } from '../components/brand/VellicLogo';
 
-global.TextEncoder = global.TextEncoder || require('util').TextEncoder;
-global.TextDecoder = global.TextDecoder || require('util').TextDecoder;
-
-const { jsPDF } = require('jspdf');
+globalThis.TextEncoder = globalThis.TextEncoder || TextEncoder;
+globalThis.TextDecoder = globalThis.TextDecoder || TextDecoder;
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 const makeNode = (id, children = []) => ({
   id,
@@ -267,11 +272,9 @@ describe('export scene helpers', () => {
   });
 
   test('registerExportPdfFonts embeds Sora for vector PDF text', async () => {
-    const fs = require('fs');
-    const path = require('path');
     const originalFetch = global.fetch;
-    const fontBuffer = fs.readFileSync(path.join(__dirname, '../assets/fonts/Sora-Variable.ttf'));
-    global.fetch = jest.fn(async () => ({
+    const fontBuffer = fs.readFileSync(path.join(testDirectory, '../assets/fonts/Sora-Variable.ttf'));
+    global.fetch = vi.fn(async () => ({
       ok: true,
       arrayBuffer: async () => fontBuffer.buffer.slice(
         fontBuffer.byteOffset,

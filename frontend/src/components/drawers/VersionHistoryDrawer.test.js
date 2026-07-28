@@ -43,13 +43,13 @@ describe('VersionHistoryDrawer', () => {
       root.render(
         <VersionHistoryDrawer
           isOpen
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           versions={[]}
-          onRestoreVersion={jest.fn()}
+          onRestoreVersion={vi.fn()}
           activeVersionId={null}
           latestVersionId={null}
           isLoading={false}
-          onBookmarkVersion={jest.fn()}
+          onBookmarkVersion={vi.fn()}
           canBookmarkVersion={false}
           canViewActivity={false}
           currentUser={{ name: 'Alex' }}
@@ -97,7 +97,7 @@ describe('VersionHistoryDrawer', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('groups versions by month and date with the latest day open', async () => {
@@ -192,7 +192,7 @@ describe('VersionHistoryDrawer', () => {
 
   test('bookmarks an existing version from the row action', async () => {
     const currentDate = isoDateForOffset(0, 12);
-    const onBookmarkVersion = jest.fn().mockResolvedValue({});
+    const onBookmarkVersion = vi.fn().mockResolvedValue({});
     await renderDrawer({
       canBookmarkVersion: true,
       onBookmarkVersion,

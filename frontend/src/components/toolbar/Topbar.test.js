@@ -6,7 +6,7 @@ import path from 'path';
 import Topbar from './Topbar';
 import { AuthProvider } from '../../contexts/AuthContext';
 
-jest.mock('../../contexts/LocaleContext', () => ({
+vi.mock('../../contexts/LocaleContext', () => ({
   useLocale: () => ({
     locale: 'en',
     t: (source) => source,
@@ -21,13 +21,13 @@ describe('Topbar', () => {
 
   const renderTopbar = (authValue = {}) => {
     const authHandlers = {
-      onShowProfile: jest.fn(),
-      onShowBilling: jest.fn(),
-      onShowSettings: jest.fn(),
-      onShowSupport: jest.fn(),
-      onLogout: jest.fn(),
-      onLogin: jest.fn(),
-      onSignup: jest.fn(),
+      onShowProfile: vi.fn(),
+      onShowBilling: vi.fn(),
+      onShowSettings: vi.fn(),
+      onShowSupport: vi.fn(),
+      onLogout: vi.fn(),
+      onLogin: vi.fn(),
+      onSignup: vi.fn(),
     };
     act(() => {
       root.render(
@@ -45,27 +45,27 @@ describe('Topbar', () => {
           <Topbar
             canEdit
             urlInput="https://example.com"
-            onUrlInputChange={jest.fn()}
-            onUrlKeyDown={jest.fn()}
+            onUrlInputChange={vi.fn()}
+            onUrlKeyDown={vi.fn()}
             scanOptions={{}}
             showScanOptions={false}
             scanOptionsRef={{ current: null }}
-            onToggleScanOptions={jest.fn()}
-            onScanOptionChange={jest.fn()}
+            onToggleScanOptions={vi.fn()}
+            onScanOptionChange={vi.fn()}
             scanLayerAvailability={{}}
             scanLayerVisibility={{}}
-            onToggleScanLayer={jest.fn()}
-            onScan={jest.fn()}
+            onToggleScanLayer={vi.fn()}
+            onScan={vi.fn()}
             scanDisabled={false}
             scanTitle="Run scan"
             optionsDisabled={false}
-            onClearUrl={jest.fn()}
+            onClearUrl={vi.fn()}
             showClearUrl={false}
             sharedTitle=""
-            onShowProjects={jest.fn()}
-            onShowHistory={jest.fn()}
-            onShowInvites={jest.fn()}
-            onShowAccessRequests={jest.fn()}
+            onShowProjects={vi.fn()}
+            onShowHistory={vi.fn()}
+            onShowInvites={vi.fn()}
+            onShowAccessRequests={vi.fn()}
             pendingInviteCount={3}
             pendingAccessRequestCount={2}
           />
@@ -88,7 +88,7 @@ describe('Topbar', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('uses shared button styling for the account trigger and keeps badges inside the menu', () => {
@@ -202,11 +202,11 @@ describe('Topbar', () => {
               name: 'Matthew',
               avatarUrl: 'https://example.com/avatar.png',
             },
-            onShowProfile: jest.fn(),
-            onShowBilling: jest.fn(),
-            onShowSettings: jest.fn(),
-            onLogout: jest.fn(),
-            onLogin: jest.fn(),
+            onShowProfile: vi.fn(),
+            onShowBilling: vi.fn(),
+            onShowSettings: vi.fn(),
+            onLogout: vi.fn(),
+            onLogin: vi.fn(),
           }}
         >
           <Topbar
@@ -214,27 +214,27 @@ describe('Topbar', () => {
             appHome
             showScanBar={false}
             urlInput="https://example.com"
-            onUrlInputChange={jest.fn()}
-            onUrlKeyDown={jest.fn()}
+            onUrlInputChange={vi.fn()}
+            onUrlKeyDown={vi.fn()}
             scanOptions={{}}
             showScanOptions={false}
             scanOptionsRef={{ current: null }}
-            onToggleScanOptions={jest.fn()}
-            onScanOptionChange={jest.fn()}
+            onToggleScanOptions={vi.fn()}
+            onScanOptionChange={vi.fn()}
             scanLayerAvailability={{}}
             scanLayerVisibility={{}}
-            onToggleScanLayer={jest.fn()}
-            onScan={jest.fn()}
+            onToggleScanLayer={vi.fn()}
+            onScan={vi.fn()}
             scanDisabled={false}
             scanTitle="Run scan"
             optionsDisabled={false}
-            onClearUrl={jest.fn()}
+            onClearUrl={vi.fn()}
             showClearUrl={false}
             sharedTitle=""
-            onShowProjects={jest.fn()}
-            onShowHistory={jest.fn()}
-            onShowInvites={jest.fn()}
-            onShowAccessRequests={jest.fn()}
+            onShowProjects={vi.fn()}
+            onShowHistory={vi.fn()}
+            onShowInvites={vi.fn()}
+            onShowAccessRequests={vi.fn()}
           />
         </AuthProvider>
       );
@@ -248,7 +248,7 @@ describe('Topbar', () => {
   });
 
   test('makes the map logo clickable only when a saved-map clear handler is provided', () => {
-    const onMapLogoClick = jest.fn();
+    const onMapLogoClick = vi.fn();
 
     act(() => {
       root.render(
@@ -256,11 +256,11 @@ describe('Topbar', () => {
           value={{
             isLoggedIn: true,
             currentUser: { name: 'Matthew' },
-            onShowProfile: jest.fn(),
-            onShowBilling: jest.fn(),
-            onShowSettings: jest.fn(),
-            onLogout: jest.fn(),
-            onLogin: jest.fn(),
+            onShowProfile: vi.fn(),
+            onShowBilling: vi.fn(),
+            onShowSettings: vi.fn(),
+            onLogout: vi.fn(),
+            onLogin: vi.fn(),
           }}
         >
           <Topbar
@@ -269,27 +269,27 @@ describe('Topbar', () => {
             mapName="Saved map"
             onMapLogoClick={onMapLogoClick}
             urlInput=""
-            onUrlInputChange={jest.fn()}
-            onUrlKeyDown={jest.fn()}
+            onUrlInputChange={vi.fn()}
+            onUrlKeyDown={vi.fn()}
             scanOptions={{}}
             showScanOptions={false}
             scanOptionsRef={{ current: null }}
-            onToggleScanOptions={jest.fn()}
-            onScanOptionChange={jest.fn()}
+            onToggleScanOptions={vi.fn()}
+            onScanOptionChange={vi.fn()}
             scanLayerAvailability={{}}
             scanLayerVisibility={{}}
-            onToggleScanLayer={jest.fn()}
-            onScan={jest.fn()}
+            onToggleScanLayer={vi.fn()}
+            onScan={vi.fn()}
             scanDisabled={false}
             scanTitle="Run scan"
             optionsDisabled={false}
-            onClearUrl={jest.fn()}
+            onClearUrl={vi.fn()}
             showClearUrl={false}
             sharedTitle=""
-            onShowProjects={jest.fn()}
-            onShowHistory={jest.fn()}
-            onShowInvites={jest.fn()}
-            onShowAccessRequests={jest.fn()}
+            onShowProjects={vi.fn()}
+            onShowHistory={vi.fn()}
+            onShowInvites={vi.fn()}
+            onShowAccessRequests={vi.fn()}
           />
         </AuthProvider>
       );
@@ -310,11 +310,11 @@ describe('Topbar', () => {
           value={{
             isLoggedIn: true,
             currentUser: { name: 'Matthew' },
-            onShowProfile: jest.fn(),
-            onShowBilling: jest.fn(),
-            onShowSettings: jest.fn(),
-            onLogout: jest.fn(),
-            onLogin: jest.fn(),
+            onShowProfile: vi.fn(),
+            onShowBilling: vi.fn(),
+            onShowSettings: vi.fn(),
+            onLogout: vi.fn(),
+            onLogin: vi.fn(),
           }}
         >
           <Topbar
@@ -322,27 +322,27 @@ describe('Topbar', () => {
             hasMap
             mapName="Unsaved map"
             urlInput=""
-            onUrlInputChange={jest.fn()}
-            onUrlKeyDown={jest.fn()}
+            onUrlInputChange={vi.fn()}
+            onUrlKeyDown={vi.fn()}
             scanOptions={{}}
             showScanOptions={false}
             scanOptionsRef={{ current: null }}
-            onToggleScanOptions={jest.fn()}
-            onScanOptionChange={jest.fn()}
+            onToggleScanOptions={vi.fn()}
+            onScanOptionChange={vi.fn()}
             scanLayerAvailability={{}}
             scanLayerVisibility={{}}
-            onToggleScanLayer={jest.fn()}
-            onScan={jest.fn()}
+            onToggleScanLayer={vi.fn()}
+            onScan={vi.fn()}
             scanDisabled={false}
             scanTitle="Run scan"
             optionsDisabled={false}
-            onClearUrl={jest.fn()}
+            onClearUrl={vi.fn()}
             showClearUrl={false}
             sharedTitle=""
-            onShowProjects={jest.fn()}
-            onShowHistory={jest.fn()}
-            onShowInvites={jest.fn()}
-            onShowAccessRequests={jest.fn()}
+            onShowProjects={vi.fn()}
+            onShowHistory={vi.fn()}
+            onShowInvites={vi.fn()}
+            onShowAccessRequests={vi.fn()}
           />
         </AuthProvider>
       );

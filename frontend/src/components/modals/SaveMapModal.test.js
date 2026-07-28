@@ -30,25 +30,25 @@ describe('SaveMapModal', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('saves the current map values through the shared form controls', async () => {
-    const onSave = jest.fn();
+    const onSave = vi.fn();
 
     act(() => {
       root.render(
         <SaveMapModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           isLoggedIn
-          onRequireLogin={jest.fn()}
+          onRequireLogin={vi.fn()}
           projects={[{ id: 'p1', name: 'Project One' }]}
           currentMap={{ name: 'Current map', notes: 'Old notes' }}
           rootUrl="https://example.com"
           defaultProjectId=""
           onSave={onSave}
-          onCreateProject={jest.fn()}
+          onCreateProject={vi.fn()}
         />
       );
     });
@@ -89,15 +89,15 @@ describe('SaveMapModal', () => {
       root.render(
         <SaveMapModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           isLoggedIn
-          onRequireLogin={jest.fn()}
+          onRequireLogin={vi.fn()}
           projects={[]}
           currentMap={{ name: 'Current map', notes: '' }}
           rootUrl="https://example.com"
           defaultProjectId=""
-          onSave={jest.fn()}
-          onCreateProject={jest.fn()}
+          onSave={vi.fn()}
+          onCreateProject={vi.fn()}
         />
       );
     });
@@ -127,15 +127,15 @@ describe('SaveMapModal', () => {
       root.render(
         <SaveMapModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           isLoggedIn
-          onRequireLogin={jest.fn()}
+          onRequireLogin={vi.fn()}
           projects={[{ id: 'p1', name: 'Project One' }]}
           currentMap={{ name: 'Current map' }}
           rootUrl="https://example.com"
           defaultProjectId="uncategorized"
-          onSave={jest.fn()}
-          onCreateProject={jest.fn()}
+          onSave={vi.fn()}
+          onCreateProject={vi.fn()}
         />
       );
     });
@@ -152,15 +152,15 @@ describe('SaveMapModal', () => {
       root.render(
         <SaveMapModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           isLoggedIn
-          onRequireLogin={jest.fn()}
+          onRequireLogin={vi.fn()}
           projects={[]}
           currentMap={{ name: 'Current map', notes: '' }}
           rootUrl="https://example.com"
           defaultProjectId=""
-          onSave={jest.fn()}
-          onCreateProject={jest.fn()}
+          onSave={vi.fn()}
+          onCreateProject={vi.fn()}
           projectCreateDisabledReason="project limit reached"
         />
       );
@@ -176,23 +176,23 @@ describe('SaveMapModal', () => {
   });
 
   test('supports contextual cancel labels and actions', () => {
-    const onCancel = jest.fn();
+    const onCancel = vi.fn();
 
     act(() => {
       root.render(
         <SaveMapModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           onCancel={onCancel}
           cancelLabel="Don't save"
           isLoggedIn
-          onRequireLogin={jest.fn()}
+          onRequireLogin={vi.fn()}
           projects={[]}
           currentMap={{ name: 'Unsaved map', notes: '' }}
           rootUrl="https://example.com"
           defaultProjectId=""
-          onSave={jest.fn()}
-          onCreateProject={jest.fn()}
+          onSave={vi.fn()}
+          onCreateProject={vi.fn()}
         />
       );
     });
@@ -210,7 +210,7 @@ describe('SaveMapModal', () => {
 
   test('shows saving state while save is in progress', async () => {
     let resolveSave;
-    const onSave = jest.fn(() => new Promise((resolve) => {
+    const onSave = vi.fn(() => new Promise((resolve) => {
       resolveSave = resolve;
     }));
 
@@ -218,15 +218,15 @@ describe('SaveMapModal', () => {
       root.render(
         <SaveMapModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           isLoggedIn
-          onRequireLogin={jest.fn()}
+          onRequireLogin={vi.fn()}
           projects={[]}
           currentMap={{ name: 'Current map', notes: '' }}
           rootUrl="https://example.com"
           defaultProjectId=""
           onSave={onSave}
-          onCreateProject={jest.fn()}
+          onCreateProject={vi.fn()}
         />
       );
     });
@@ -251,21 +251,21 @@ describe('SaveMapModal', () => {
   });
 
   test('shows a saving response before starting deferred save work', async () => {
-    const onSave = jest.fn();
+    const onSave = vi.fn();
 
     await act(async () => {
       root.render(
         <SaveMapModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           isLoggedIn
-          onRequireLogin={jest.fn()}
+          onRequireLogin={vi.fn()}
           projects={[]}
           currentMap={{ name: 'Current map', notes: '' }}
           rootUrl="https://example.com"
           defaultProjectId=""
           onSave={onSave}
-          onCreateProject={jest.fn()}
+          onCreateProject={vi.fn()}
         />
       );
     });
@@ -290,15 +290,15 @@ describe('SaveMapModal', () => {
   });
 
   test('blocks duplicate map names within the selected project', async () => {
-    const onSave = jest.fn();
+    const onSave = vi.fn();
 
     act(() => {
       root.render(
         <SaveMapModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           isLoggedIn
-          onRequireLogin={jest.fn()}
+          onRequireLogin={vi.fn()}
           projects={[{
             id: 'p1',
             name: 'Project One',
@@ -309,7 +309,7 @@ describe('SaveMapModal', () => {
           defaultProjectId="p1"
           defaultName="Homepage map"
           onSave={onSave}
-          onCreateProject={jest.fn()}
+          onCreateProject={vi.fn()}
         />
       );
     });
