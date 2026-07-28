@@ -5,27 +5,29 @@ import * as api from '../../api';
 import * as avatarCrop from '../../utils/avatarCrop';
 import ProfileDrawer from './ProfileDrawer';
 
-jest.mock('react-easy-crop', () => {
-  const React = require('react');
-  return function MockCropper(props) {
-    React.useEffect(() => {
-      props.onCropComplete?.({}, { x: 0, y: 0, width: 128, height: 128 });
-    }, []);
-    return React.createElement('div', { 'data-testid': 'avatar-cropper' });
+vi.mock('react-easy-crop', async () => {
+  const ReactModule = await vi.importActual('react');
+  return {
+    default: function MockCropper(props) {
+      ReactModule.useEffect(() => {
+        props.onCropComplete?.({}, { x: 0, y: 0, width: 128, height: 128 });
+      }, []);
+      return ReactModule.createElement('div', { 'data-testid': 'avatar-cropper' });
+    },
   };
 });
 
-jest.mock('../../api', () => ({
-  updateProfile: jest.fn(),
-  uploadMyAvatar: jest.fn(),
-  removeMyAvatar: jest.fn(),
-  deleteAccount: jest.fn(),
-  getAccountEditors: jest.fn(() => Promise.resolve({ editors: [] })),
-  removeAccountEditor: jest.fn(() => Promise.resolve({ entitlements: null })),
+vi.mock('../../api', () => ({
+  updateProfile: vi.fn(),
+  uploadMyAvatar: vi.fn(),
+  removeMyAvatar: vi.fn(),
+  deleteAccount: vi.fn(),
+  getAccountEditors: vi.fn(() => Promise.resolve({ editors: [] })),
+  removeAccountEditor: vi.fn(() => Promise.resolve({ entitlements: null })),
 }));
 
-jest.mock('../../utils/avatarCrop', () => ({
-  createCroppedAvatarDataUrl: jest.fn(() => Promise.resolve('data:image/webp;base64,cropped')),
+vi.mock('../../utils/avatarCrop', () => ({
+  createCroppedAvatarDataUrl: vi.fn(() => Promise.resolve('data:image/webp;base64,cropped')),
 }));
 
 describe('ProfileDrawer', () => {
@@ -49,6 +51,16 @@ describe('ProfileDrawer', () => {
     return summary;
   };
 
+  const openPlanDetails = async () => {
+    const summary = container.querySelector('button[aria-controls="account-plan-details"]');
+    expect(summary).not.toBeNull();
+    await act(async () => {
+      summary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    return summary;
+  };
+
   beforeEach(() => {
     api.getAccountEditors.mockImplementation(() => new Promise(() => {}));
     api.removeAccountEditor.mockResolvedValue({ entitlements: null });
@@ -64,7 +76,7 @@ describe('ProfileDrawer', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('shows circular fallback avatar and username label when no avatar exists', () => {
@@ -73,10 +85,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={baseUser}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -105,10 +117,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={{ ...baseUser, avatarUrl: '/uploads/avatars/maya.webp' }}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -144,10 +156,10 @@ describe('ProfileDrawer', () => {
             avatarSource: 'google',
             hasCustomAvatar: false,
           }}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -167,9 +179,9 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('[data-testid="avatar-cropper"]')).toBeNull();
   });
 
-  test('opens plan summary by default and shows owner plan actions', () => {
-    const onOpenPlans = jest.fn();
-    const onOpenBilling = jest.fn();
+  test('shows owner plan actions when the plan summary is opened', async () => {
+    const onOpenPlans = vi.fn();
+    const onOpenBilling = vi.fn();
 
     act(() => {
       root.render(
@@ -184,18 +196,20 @@ describe('ProfileDrawer', () => {
               limits: {},
             },
           }}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
           onOpenPlans={onOpenPlans}
           onOpenBilling={onOpenBilling}
-          showToast={jest.fn()}
+          showToast={vi.fn()}
         />
       );
     });
 
     const summaryButton = container.querySelector('button[aria-controls="account-plan-details"]');
     expect(summaryButton).not.toBeNull();
+    expect(summaryButton.getAttribute('aria-expanded')).toBe('false');
+    await openPlanDetails();
     expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
     expect(summaryButton.textContent).toContain('Plan:');
     expect(summaryButton.textContent).toContain('Studio');
@@ -238,7 +252,7 @@ describe('ProfileDrawer', () => {
     expect(onOpenBilling).toHaveBeenCalledTimes(1);
   });
 
-  test('shows available amounts before used amounts in the plan overview', () => {
+  test('shows available amounts before used amounts in the plan overview', async () => {
     act(() => {
       root.render(
         <ProfileDrawer
@@ -293,17 +307,18 @@ describe('ProfileDrawer', () => {
               },
             },
           }}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          onOpenPlans={jest.fn()}
-          onOpenBilling={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          onOpenPlans={vi.fn()}
+          onOpenBilling={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
 
     const summaryButton = container.querySelector('button[aria-controls="account-plan-details"]');
+    await openPlanDetails();
     expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
 
     const table = container.querySelector('.account-usage-table');
@@ -352,9 +367,9 @@ describe('ProfileDrawer', () => {
         limits: {},
       },
     });
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
-    const onUpdate = jest.fn();
-    const showToast = jest.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onUpdate = vi.fn();
+    const showToast = vi.fn();
 
     await act(async () => {
       root.render(
@@ -369,15 +384,16 @@ describe('ProfileDrawer', () => {
               limits: {},
             },
           }}
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           onUpdate={onUpdate}
-          onLogout={jest.fn()}
+          onLogout={vi.fn()}
           showToast={showToast}
         />
       );
     });
 
     expect(api.getAccountEditors).toHaveBeenCalledTimes(1);
+    await openPlanDetails();
     expect(container.textContent).toContain('Editors');
     expect(container.textContent).toContain('Eli');
     expect(container.textContent).toContain('eli@example.com');
@@ -420,12 +436,12 @@ describe('ProfileDrawer', () => {
                 limits: {},
               },
             }}
-            onClose={jest.fn()}
-            onUpdate={jest.fn()}
-            onLogout={jest.fn()}
-            onOpenPlans={jest.fn()}
-            onOpenBilling={jest.fn()}
-            showToast={jest.fn()}
+            onClose={vi.fn()}
+            onUpdate={vi.fn()}
+            onLogout={vi.fn()}
+            onOpenPlans={vi.fn()}
+            onOpenBilling={vi.fn()}
+            showToast={vi.fn()}
           />
         );
       });
@@ -438,7 +454,7 @@ describe('ProfileDrawer', () => {
     renderWithRole('commenter');
   });
 
-  test('shows plan details for account owners', () => {
+  test('shows plan details for account owners', async () => {
     act(() => {
       root.render(
         <ProfileDrawer
@@ -452,21 +468,22 @@ describe('ProfileDrawer', () => {
               limits: {},
             },
           }}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          onOpenPlans={jest.fn()}
-          onOpenBilling={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          onOpenPlans={vi.fn()}
+          onOpenBilling={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
 
     expect(container.querySelector('button[aria-controls="account-plan-details"]')).not.toBeNull();
+    await openPlanDetails();
     expect(container.querySelector('.account-plan-actions')).not.toBeNull();
   });
 
-  test('keeps only one profile accordion open at a time', () => {
+  test('keeps only one profile accordion open at a time', async () => {
     act(() => {
       root.render(
         <ProfileDrawer
@@ -480,10 +497,10 @@ describe('ProfileDrawer', () => {
               limits: {},
             },
           }}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -492,6 +509,13 @@ describe('ProfileDrawer', () => {
     const profileSummary = container.querySelector('button[aria-controls="profile-fields-details"]');
     const passwordSummary = container.querySelector('button[aria-controls="profile-password-details"]');
     const deleteSummary = container.querySelector('button[aria-controls="profile-delete-details"]');
+
+    expect(planSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(profileSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(deleteSummary.getAttribute('aria-expanded')).toBe('false');
+
+    await openPlanDetails();
 
     expect(planSummary.getAttribute('aria-expanded')).toBe('true');
     expect(profileSummary.getAttribute('aria-expanded')).toBe('false');
@@ -532,10 +556,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={baseUser}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -569,10 +593,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={baseUser}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -599,10 +623,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={baseUser}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -640,10 +664,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={baseUser}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -677,10 +701,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={null}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -690,10 +714,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={baseUser}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -712,17 +736,17 @@ describe('ProfileDrawer', () => {
     api.updateProfile.mockResolvedValue({
       user: { ...baseUser, email: 'new@example.com' },
     });
-    const onUpdate = jest.fn();
+    const onUpdate = vi.fn();
 
     await act(async () => {
       root.render(
         <ProfileDrawer
           isOpen
           user={baseUser}
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           onUpdate={onUpdate}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -761,10 +785,10 @@ describe('ProfileDrawer', () => {
         <ProfileDrawer
           isOpen
           user={baseUser}
-          onClose={jest.fn()}
-          onUpdate={jest.fn()}
-          onLogout={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          onLogout={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -798,17 +822,17 @@ describe('ProfileDrawer', () => {
     api.uploadMyAvatar.mockResolvedValue({
       user: { ...baseUser, avatarUrl: '/uploads/avatars/new.webp' },
     });
-    const onUpdate = jest.fn();
-    const showToast = jest.fn();
+    const onUpdate = vi.fn();
+    const showToast = vi.fn();
 
     await act(async () => {
       root.render(
         <ProfileDrawer
           isOpen
           user={{ ...baseUser, avatarUrl: '/uploads/avatars/maya.webp' }}
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           onUpdate={onUpdate}
-          onLogout={jest.fn()}
+          onLogout={vi.fn()}
           showToast={showToast}
         />
       );

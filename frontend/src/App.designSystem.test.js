@@ -364,7 +364,7 @@ describe('UI design-system contract', () => {
     expect(accessHandlerStart).toBeGreaterThan(inviteHandlerStart);
     expect(accessHandlerEnd).toBeGreaterThan(accessHandlerStart);
     expect(inviteHandler).toContain('setShowInviteInboxModal(true);');
-    expect(inviteHandler).toContain('await loadPendingMapInvites();');
+    expect(inviteHandler).toContain('loadPendingMapInvites(),');
     expect(inviteHandler).not.toContain('navigateToRoute');
     expect(accessHandler).toContain('setShowAccessRequestsInboxModal(true);');
     expect(accessHandler).toContain('await loadPendingAccessRequests();');

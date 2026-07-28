@@ -8,11 +8,11 @@ describe('MarketingSite', () => {
   let container;
   let root;
 
-  const renderAt = (path, navigateToRoute = jest.fn()) => {
+  const renderAt = (path, navigateToRoute = vi.fn()) => {
     window.history.pushState({}, '', path);
     const route = parseCurrentRoute(window.location);
     act(() => {
-      root.render(<MarketingSite route={route} navigateToRoute={navigateToRoute} onOpenApp={jest.fn()} />);
+      root.render(<MarketingSite route={route} navigateToRoute={navigateToRoute} onOpenApp={vi.fn()} />);
     });
     return { route, navigateToRoute };
   };
@@ -61,7 +61,7 @@ describe('MarketingSite', () => {
   });
 
   test('uses real links and intercepts marketing navigation for SPA routing', () => {
-    const navigateToRoute = jest.fn();
+    const navigateToRoute = vi.fn();
     renderAt('/marketing-preview', navigateToRoute);
     const examplesLink = Array.from(container.querySelectorAll('a')).find((link) => (
       link.getAttribute('href') === '/marketing-preview/examples'
@@ -88,7 +88,7 @@ describe('MarketingSite', () => {
 
   test('routes phone-sized page CTAs to the start handoff', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    const navigateToRoute = jest.fn();
+    const navigateToRoute = vi.fn();
     renderAt('/marketing-preview/features', navigateToRoute);
 
     act(() => {

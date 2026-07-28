@@ -33,7 +33,7 @@ describe('large map viewport behavior', () => {
   test('imported normal maps queue home centering after layout is available', () => {
     const pendingInitialCenterRef = { current: false };
     const pendingInitialLargeMapCenterRef = { current: true };
-    const scheduleResetView = jest.fn();
+    const scheduleResetView = vi.fn();
 
     expect(__testing.queueNormalMapInitialCenter({
       pendingInitialCenterRef,
