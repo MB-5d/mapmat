@@ -30,7 +30,7 @@ describe('MarketingScanBar', () => {
   });
 
   test('validates and opens the app scan URL on desktop', () => {
-    const openApp = vi.fn();
+    const openApp = jest.fn();
     act(() => {
       root.render(<MarketingScanBar onOpenApp={openApp} />);
     });
@@ -58,9 +58,9 @@ describe('MarketingScanBar', () => {
 
   test('routes phones to the marketing start handoff', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    const navigate = vi.fn();
+    const navigate = jest.fn();
     act(() => {
-      root.render(<MarketingScanBar onNavigate={navigate} onOpenApp={vi.fn()} />);
+      root.render(<MarketingScanBar onNavigate={navigate} onOpenApp={jest.fn()} />);
     });
 
     const input = container.querySelector('input');
@@ -74,10 +74,10 @@ describe('MarketingScanBar', () => {
 
   test('allows a phone scan override without routing to the start handoff', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    const phoneScan = vi.fn();
-    const navigate = vi.fn();
+    const phoneScan = jest.fn();
+    const navigate = jest.fn();
     act(() => {
-      root.render(<MarketingScanBar onNavigate={navigate} onPhoneScan={phoneScan} onOpenApp={vi.fn()} />);
+      root.render(<MarketingScanBar onNavigate={navigate} onPhoneScan={phoneScan} onOpenApp={jest.fn()} />);
     });
 
     const input = container.querySelector('input');
@@ -95,7 +95,7 @@ describe('MarketingScanBar', () => {
 
   test('shows an accessible validation error for invalid URLs', () => {
     act(() => {
-      root.render(<MarketingScanBar onOpenApp={vi.fn()} />);
+      root.render(<MarketingScanBar onOpenApp={jest.fn()} />);
     });
 
     const input = container.querySelector('input');

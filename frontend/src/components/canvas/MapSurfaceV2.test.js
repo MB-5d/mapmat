@@ -23,7 +23,7 @@ describe('MapSurfaceV2', () => {
     originalPerformanceMemoryDescriptor = Object.getOwnPropertyDescriptor(performance, 'memory');
     window.requestAnimationFrame = (callback) => setTimeout(() => callback(Date.now()), 16);
     window.cancelAnimationFrame = (id) => clearTimeout(id);
-    window.HTMLCanvasElement.prototype.getContext = vi.fn(() => null);
+    window.HTMLCanvasElement.prototype.getContext = jest.fn(() => null);
   });
 
   afterEach(() => {
@@ -49,8 +49,8 @@ describe('MapSurfaceV2', () => {
       nodes: [],
       connectors: [],
     };
-    const getScene = vi.fn().mockResolvedValue({ scene });
-    const onSceneLoaded = vi.fn();
+    const getScene = jest.fn().mockResolvedValue({ scene });
+    const onSceneLoaded = jest.fn();
 
     await act(async () => {
       root.render(
@@ -76,7 +76,7 @@ describe('MapSurfaceV2', () => {
   });
 
   test('fetches a fresh scene when the map id changes', async () => {
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map',
         homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 200 },
@@ -125,7 +125,7 @@ describe('MapSurfaceV2', () => {
   });
 
   test('fetches a fresh scene when the refresh key changes', async () => {
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map-1',
         homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 200 },
@@ -166,7 +166,7 @@ describe('MapSurfaceV2', () => {
   });
 
   test('passes expanded stack ids to large-map scene requests', async () => {
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map-1',
         homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 200 },
@@ -199,7 +199,7 @@ describe('MapSurfaceV2', () => {
   });
 
   test('renders existing node card UI for visible scene nodes', async () => {
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 600 },
@@ -247,7 +247,7 @@ describe('MapSurfaceV2', () => {
   });
 
   test('renders finding badges for visible large-map scene nodes', async () => {
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 600 },
@@ -297,7 +297,7 @@ describe('MapSurfaceV2', () => {
   });
 
   test('keeps cached thumbnails when the scene response omits LOD image URLs', async () => {
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 600 },
@@ -319,7 +319,7 @@ describe('MapSurfaceV2', () => {
         connectors: [],
       },
     });
-    const onViewImage = vi.fn();
+    const onViewImage = jest.fn();
 
     await act(async () => {
       root.render(
@@ -359,7 +359,7 @@ describe('MapSurfaceV2', () => {
   });
 
   test('uses full screenshot metadata from sparse scene responses with cached thumbnails', async () => {
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 600 },
@@ -383,7 +383,7 @@ describe('MapSurfaceV2', () => {
         connectors: [],
       },
     });
-    const onViewImage = vi.fn();
+    const onViewImage = jest.fn();
 
     await act(async () => {
       root.render(
@@ -425,7 +425,7 @@ describe('MapSurfaceV2', () => {
       configurable: true,
       value: { usedJSHeapSize: 950 * 1024 * 1024 },
     });
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 600 },
@@ -483,7 +483,7 @@ describe('MapSurfaceV2', () => {
   });
 
   test('renders and toggles collapsed stack controls for large maps', async () => {
-    const getScene = vi.fn().mockResolvedValue({
+    const getScene = jest.fn().mockResolvedValue({
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 900 },
@@ -508,7 +508,7 @@ describe('MapSurfaceV2', () => {
         connectors: [],
       },
     });
-    const onToggleStack = vi.fn();
+    const onToggleStack = jest.fn();
 
     await act(async () => {
       root.render(

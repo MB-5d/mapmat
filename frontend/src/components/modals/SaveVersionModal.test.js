@@ -28,17 +28,17 @@ describe('SaveVersionModal', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('blocks empty titles and shows an error', () => {
-    const onSave = vi.fn();
+    const onSave = jest.fn();
 
     act(() => {
       root.render(
         <SaveVersionModal
           show
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           onSave={onSave}
           versionNumber={3}
           timestamp="Today"
@@ -67,13 +67,13 @@ describe('SaveVersionModal', () => {
   });
 
   test('saves trimmed values', () => {
-    const onSave = vi.fn();
+    const onSave = jest.fn();
 
     act(() => {
       root.render(
         <SaveVersionModal
           show
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           onSave={onSave}
           versionNumber={4}
           timestamp="Today"

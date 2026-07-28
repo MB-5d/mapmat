@@ -24,11 +24,11 @@ describe('InviteInboxModal', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('accepts invites without a refresh action', () => {
-    const onAccept = vi.fn();
+    const onAccept = jest.fn();
     const invite = {
       id: 'inv-1',
       mapName: 'Alpha Map',
@@ -41,9 +41,9 @@ describe('InviteInboxModal', () => {
         <InviteInboxModal
           show
           invites={[invite]}
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           onAccept={onAccept}
-          onDecline={vi.fn()}
+          onDecline={jest.fn()}
         />
       );
     });
@@ -68,9 +68,9 @@ describe('InviteInboxModal', () => {
   });
 
   test('hides not found on empty state and sends an invite from the composer', () => {
-    const onSendInvite = vi.fn();
-    const onSelectedMapIdChange = vi.fn();
-    const onInviteEmailChange = vi.fn();
+    const onSendInvite = jest.fn();
+    const onSelectedMapIdChange = jest.fn();
+    const onInviteEmailChange = jest.fn();
 
     act(() => {
       root.render(
@@ -89,11 +89,11 @@ describe('InviteInboxModal', () => {
           onInviteEmailChange={onInviteEmailChange}
           inviteRole="viewer"
           inviteRoleOptions={['viewer', 'commenter']}
-          onInviteRoleChange={vi.fn()}
+          onInviteRoleChange={jest.fn()}
           onSendInvite={onSendInvite}
-          onClose={vi.fn()}
-          onAccept={vi.fn()}
-          onDecline={vi.fn()}
+          onClose={jest.fn()}
+          onAccept={jest.fn()}
+          onDecline={jest.fn()}
         />
       );
     });
@@ -140,9 +140,9 @@ describe('InviteInboxModal', () => {
           eligibleMaps={[{ id: 'map-1', name: 'Example: long page site scan with full-page screenshots' }]}
           selectedMapId="map-1"
           inviteRoleOptions={['viewer', 'commenter', 'editor']}
-          onClose={vi.fn()}
-          onCancelSentInvite={vi.fn()}
-          onResendSentInvite={vi.fn()}
+          onClose={jest.fn()}
+          onCancelSentInvite={jest.fn()}
+          onResendSentInvite={jest.fn()}
         />
       );
     });

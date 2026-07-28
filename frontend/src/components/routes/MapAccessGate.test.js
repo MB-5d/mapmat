@@ -25,12 +25,12 @@ describe('MapAccessGate', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('lets a logged-in user request access', () => {
-    const onRequestMessageChange = vi.fn();
-    const onRequestAccess = vi.fn();
+    const onRequestMessageChange = jest.fn();
+    const onRequestAccess = jest.fn();
 
     act(() => {
       root.render(
@@ -38,7 +38,7 @@ describe('MapAccessGate', () => {
           isLoggedIn
           requestStatus="idle"
           requestMessage=""
-          onGoHome={vi.fn()}
+          onGoHome={jest.fn()}
           onRequestMessageChange={onRequestMessageChange}
           onRequestAccess={onRequestAccess}
         />
@@ -70,9 +70,9 @@ describe('MapAccessGate', () => {
           loading
           requestStatus="idle"
           requestMessage=""
-          onGoHome={vi.fn()}
-          onRequestMessageChange={vi.fn()}
-          onRequestAccess={vi.fn()}
+          onGoHome={jest.fn()}
+          onRequestMessageChange={jest.fn()}
+          onRequestAccess={jest.fn()}
         />
       );
     });

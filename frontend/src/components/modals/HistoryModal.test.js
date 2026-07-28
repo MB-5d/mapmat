@@ -20,11 +20,11 @@ describe('HistoryModal', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('uses icon delete action and select controls for history actions', () => {
-    const onDeleteSelected = vi.fn();
+    const onDeleteSelected = jest.fn();
     const scanHistory = [
       {
         id: 'scan-1',
@@ -46,13 +46,13 @@ describe('HistoryModal', () => {
       root.render(
         <HistoryModal
           show
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           scanHistory={scanHistory}
           selectedHistoryItems={new Set(['scan-1'])}
-          onToggleSelection={vi.fn()}
-          onSelectAllToggle={vi.fn()}
+          onToggleSelection={jest.fn()}
+          onSelectAllToggle={jest.fn()}
           onDeleteSelected={onDeleteSelected}
-          onLoadFromHistory={vi.fn()}
+          onLoadFromHistory={jest.fn()}
         />
       );
     });
@@ -96,13 +96,13 @@ describe('HistoryModal', () => {
       root.render(
         <HistoryModal
           show
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           scanHistory={scanHistory}
           selectedHistoryItems={new Set()}
-          onToggleSelection={vi.fn()}
-          onSelectAllToggle={vi.fn()}
-          onDeleteSelected={vi.fn()}
-          onLoadFromHistory={vi.fn()}
+          onToggleSelection={jest.fn()}
+          onSelectAllToggle={jest.fn()}
+          onDeleteSelected={jest.fn()}
+          onLoadFromHistory={jest.fn()}
         />
       );
     });

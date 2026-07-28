@@ -4,8 +4,8 @@ import { createRoot } from 'react-dom/client';
 import * as api from '../../api';
 import SupportDrawer from './SupportDrawer';
 
-vi.mock('../../api', () => ({
-  submitMarketingContact: vi.fn(),
+jest.mock('../../api', () => ({
+  submitMarketingContact: jest.fn(),
 }));
 
 function setInputValue(input, value) {
@@ -39,7 +39,7 @@ describe('SupportDrawer', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('shows a stacked support form with General inquiry as the default', () => {
@@ -47,7 +47,7 @@ describe('SupportDrawer', () => {
       root.render(
         <SupportDrawer
           isOpen
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           user={{ name: 'Dana Owner', email: 'dana@example.com' }}
         />
       );
@@ -72,13 +72,13 @@ describe('SupportDrawer', () => {
   });
 
   test('submits support messages through the contact API', async () => {
-    const showToast = vi.fn();
+    const showToast = jest.fn();
 
     act(() => {
       root.render(
         <SupportDrawer
           isOpen
-          onClose={vi.fn()}
+          onClose={jest.fn()}
           user={{ name: 'Dana Owner', email: 'dana@example.com' }}
           showToast={showToast}
         />

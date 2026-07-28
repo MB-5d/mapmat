@@ -49,7 +49,7 @@ describe('ui primitives', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('Button shows loading state and disables interaction', () => {
@@ -65,7 +65,7 @@ describe('ui primitives', () => {
   });
 
   test('Accordion wires ARIA, meta content, class hooks, and toggle state', () => {
-    const onOpenChange = vi.fn();
+    const onOpenChange = jest.fn();
 
     act(() => {
       root.render(
@@ -234,7 +234,7 @@ describe('ui primitives', () => {
   });
 
   test('MenuTitle and MenuRadioItem support shared menu structure and single-select rows', () => {
-    const onChange = vi.fn();
+    const onChange = jest.fn();
 
     act(() => {
       root.render(
@@ -324,7 +324,7 @@ describe('ui primitives', () => {
   });
 
   test('StatusAlert and Toast share tone, icon, and dismiss primitives', () => {
-    const onDismiss = vi.fn();
+    const onDismiss = jest.fn();
 
     act(() => {
       root.render(
@@ -354,7 +354,7 @@ describe('ui primitives', () => {
   });
 
   test('Modal closes on Escape', () => {
-    const onClose = vi.fn();
+    const onClose = jest.fn();
 
     act(() => {
       root.render(
@@ -385,9 +385,9 @@ describe('ui primitives', () => {
   });
 
   test('CheckboxField, RadioCardGroup, and ToggleSwitch emit changes', () => {
-    const onCheckboxChange = vi.fn();
-    const onRadioChange = vi.fn();
-    const onToggleChange = vi.fn();
+    const onCheckboxChange = jest.fn();
+    const onRadioChange = jest.fn();
+    const onToggleChange = jest.fn();
 
     act(() => {
       root.render(
@@ -480,7 +480,7 @@ describe('ui primitives', () => {
   });
 
   test('SearchInput uses shared input chrome and clear action', () => {
-    const onClear = vi.fn();
+    const onClear = jest.fn();
 
     act(() => {
       root.render(
@@ -546,8 +546,8 @@ describe('ui primitives', () => {
   });
 
   test('SegmentedControl and OptionCard emit interactions', () => {
-    const onSegmentChange = vi.fn();
-    const onOptionClick = vi.fn();
+    const onSegmentChange = jest.fn();
+    const onOptionClick = jest.fn();
 
     act(() => {
       root.render(
