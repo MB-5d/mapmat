@@ -161,7 +161,7 @@ describe('NodeCard', () => {
     expect(container.querySelector('.anchor-point')).toBeNull();
   });
 
-  test('shows focused ancestors as interactive ghosted context with their preserved number and findings', () => {
+  test('shows focused ancestors as non-capturable structural context with their preserved number', () => {
     act(() => {
       root.render(
         <NodeCard
@@ -171,24 +171,22 @@ describe('NodeCard', () => {
             url: 'https://example.com/blog',
             nodeKind: 'focus-ghost',
             isFocusAncestor: true,
-            httpStatus: 404,
-            statusCode: 404,
-            isError: true,
+            scanStatus: 'structural',
           }}
           number="3"
           color="#0ea5e9"
-          showThumbnails={false}
+          showThumbnails
           showPageNumbers
           canEdit
-          badges={['404']}
         />
       );
     });
 
     expect(container.querySelector('.node-card.focus-ghost.ghosted.focus-ghost-reveal-card')).not.toBeNull();
     expect(container.querySelector('.page-number')?.textContent).toBe('3');
-    expect(container.querySelector('.card-actions')).not.toBeNull();
-    expect(container.textContent).toContain('404');
+    expect(container.querySelector('.card-actions')).toBeNull();
+    expect(container.querySelector('.card-thumb')).toBeNull();
+    expect(container.textContent).toContain('Structural context');
   });
 
   test('renders a group-only capture action for deferred pages', () => {

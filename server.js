@@ -4771,6 +4771,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const discoverySourceByUrl = new Map();
   const numberingDiscoveryOrder = new Map();
   const focusedListingOrder = new Map();
+  const focusedListingParentByUrl = new Map();
   const scopedDiscoveredUrls = new Set([seed]);
   const deferredOutcomeUrls = new Set();
   const blockedOutcomeUrls = new Set();
@@ -4915,13 +4916,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     ) {
       return false;
     }
+    const sourceDiscoveryOrder = numberingDiscoveryOrder.get(normalizedSource);
     const sourceKey = normalizedSource === seed
       ? 'listing:0'
-      : `listing:1:${normalizedSource}`;
+      : Number.isFinite(sourceDiscoveryOrder)
+        ? `listing:1:${String(Math.max(0, sourceDiscoveryOrder)).padStart(12, '0')}`
+        : `listing:2:${normalizedSource}`;
     const listingKey = `${sourceKey}:${String(Math.max(0, sourceOrder)).padStart(8, '0')}`;
     const existingListingKey = focusedListingOrder.get(normalized);
     if (!existingListingKey || listingKey.localeCompare(existingListingKey) < 0) {
       focusedListingOrder.set(normalized, listingKey);
+      focusedListingParentByUrl.set(normalized, normalizedSource);
     }
     focusedListingUrls.add(normalized);
     if (!isWithinFocusedPathAlias(normalized) && !focusedContentUrls.has(normalized)) {
@@ -5053,11 +5058,24 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   let discoveryCounter = 0;
   const markCompleteSitemapParents = (urls = []) => {
     if (!scanScope.focused) return;
-    urls.forEach((url) => {
-      const normalized = normalizeUrl(url);
-      if (!normalized || !sameOrigin(normalized, origin)) return;
+    const normalizedUrls = urls
+      .map((url) => normalizeUrl(url))
+      .filter((url) => url && sameOrigin(url, origin));
+    const focusedRootChildUrl = normalizeUrl(
+      `${origin}/${scanScope.focusPath.split('/').filter(Boolean)[0] || ''}`
+    );
+    const hasDeclaredFocusedRootChild = normalizedUrls.includes(focusedRootChildUrl);
+    normalizedUrls.forEach((normalized) => {
       const parentUrl = getParentUrl(normalized);
-      if (parentUrl) sitemapCompleteParentUrls.add(parentUrl);
+      if (
+        parentUrl
+        && (
+          parentUrl !== scanScope.siteRootUrl
+          || hasDeclaredFocusedRootChild
+        )
+      ) {
+        sitemapCompleteParentUrls.add(parentUrl);
+      }
     });
   };
 
@@ -6346,6 +6364,46 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!canonicalToUrl.has(key)) canonicalToUrl.set(key, node.url);
   });
 
+  const focusedContentParentByUrl = new Map();
+  if (scanScope.focused) {
+    nodes.forEach((node) => {
+      if (
+        !focusedContentUrls.has(node.url)
+        || isWithinFocusedPathAlias(node.url)
+      ) {
+        return;
+      }
+      let parentUrl = focusedListingParentByUrl.get(node.url)
+        || referrerMap.get(node.url)
+        || seed;
+      const visitedParents = new Set([node.url]);
+      let resolvedParentUrl = null;
+      while (parentUrl && !visitedParents.has(parentUrl)) {
+        visitedParents.add(parentUrl);
+        const normalizedParentUrl = normalizeUrl(parentUrl);
+        if (
+          normalizedParentUrl
+          && nodes.has(normalizedParentUrl)
+          && (
+            normalizedParentUrl === seed
+            || isWithinFocusedPathAlias(normalizedParentUrl)
+            || focusedContentUrls.has(normalizedParentUrl)
+          )
+        ) {
+          resolvedParentUrl = normalizedParentUrl;
+          break;
+        }
+        parentUrl = normalizedParentUrl
+          ? focusedListingParentByUrl.get(normalizedParentUrl)
+            || referrerMap.get(normalizedParentUrl)
+          : null;
+      }
+      parentUrl = resolvedParentUrl || seed;
+      node.parentUrl = parentUrl;
+      focusedContentParentByUrl.set(node.url, parentUrl);
+    });
+  }
+
   const ensureParentChain = (url, { allowFocusedContentAncestors = false } = {}) => {
     let parentUrl = getParentUrl(url);
     while (parentUrl && !nodes.has(parentUrl)) {
@@ -6384,6 +6442,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   for (const node of nodes.values()) {
     if (node.url === rootUrl) continue;
     if (!shouldInferPathParents(node)) continue;
+    if (focusedContentParentByUrl.has(node.url)) continue;
     const allowFocusedContentAncestors = scanScope.focused && focusedContentUrls.has(node.url);
     if (shouldSuppressVirtualPlaceholders && !allowFocusedContentAncestors) continue;
     ensureParentChain(node.url, { allowFocusedContentAncestors });
@@ -6493,6 +6552,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   Array.from(visiblePrimaryUrls).forEach((url) => {
     const linkedNode = nodes.get(url);
     if (linkedNode && !shouldInferPathParents(linkedNode)) return;
+    if (focusedContentParentByUrl.has(url)) return;
     const allowFocusedContentAncestors = scanScope.focused && focusedContentUrls.has(url);
     if (shouldSuppressVirtualPlaceholders && !allowFocusedContentAncestors) return;
     let parentUrl = getParentUrl(url);
@@ -6627,10 +6687,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const focusedKnownNumberingParents = new Set();
   if (scanScope.focused) {
     focusedContentUrls.forEach((url) => {
-      let parentUrl = getParentUrl(url);
+      let parentUrl = focusedContentParentByUrl.get(url)
+        || nodes.get(url)?.parentUrl
+        || getParentUrl(url);
+      const visitedParents = new Set([url]);
       while (parentUrl && parentUrl !== scanScope.siteRootUrl) {
+        if (visitedParents.has(parentUrl)) break;
+        visitedParents.add(parentUrl);
         focusedKnownNumberingParents.add(parentUrl);
-        parentUrl = getParentUrl(parentUrl);
+        parentUrl = focusedContentParentByUrl.get(parentUrl)
+          || nodes.get(parentUrl)?.parentUrl
+          || getParentUrl(parentUrl);
       }
     });
   }
@@ -6638,6 +6705,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     ? buildPreservedNumberMap(
       Array.from(numberingDiscoveryOrder.entries()).map(([url, order]) => ({
         url,
+        parentUrl: focusedContentParentByUrl.get(url)
+          || nodes.get(url)?.parentUrl
+          || undefined,
         order: sitemapNumberingOrder.get(url) ?? order,
         sortKey: focusedListingOrder.get(url)
           || (
@@ -6937,6 +7007,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
     root = focusedTree;
   }
+
+  const annotateImageCaptureEligibility = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const eligibility = getImageCaptureEligibility(node);
+    node.captureEligible = eligibility.eligible;
+    node.captureReasonCode = eligibility.code || '';
+    node.captureReason = eligibility.reason || '';
+    node.children?.forEach(annotateImageCaptureEligibility);
+  };
+  annotateImageCaptureEligibility(root);
+  prunedOrphanNodes.forEach(annotateImageCaptureEligibility);
+  subdomainNodes.forEach(annotateImageCaptureEligibility);
 
   const stripInternalFields = (node) => {
     if (!node) return;

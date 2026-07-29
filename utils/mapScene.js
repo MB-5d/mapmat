@@ -1,3 +1,5 @@
+const { getImageCaptureEligibility } = require('./imageCapturePlan');
+
 const DEFAULT_LAYOUT = Object.freeze({
   NODE_W: 288,
   NODE_H_COLLAPSED: 200,
@@ -1045,6 +1047,7 @@ function resolveSceneThumbnailLod(requestedLod, { visibleNodeCount = 0 } = {}) {
 
 function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
   const node = layoutNode.node || {};
+  const captureEligibility = getImageCaptureEligibility(node);
   const rawThumbnailUrl = String(node.thumbnailUrl || '');
   const thumbnailUrl = thumbnailLod === 'none' ? '' : rawThumbnailUrl;
   const thumbnailFullUrl = String(node.thumbnailFullUrl || '');
@@ -1087,6 +1090,9 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     annotations,
     comments: Array.isArray(node.comments) ? node.comments.slice(0, 20) : [],
     authRequired: !!node.authRequired,
+    captureEligible: node.captureEligible ?? captureEligibility.eligible,
+    captureReasonCode: node.captureReasonCode || captureEligibility.code || '',
+    captureReason: node.captureReason || captureEligibility.reason || '',
     isMissing: !!node.isMissing,
     isVirtualMissing: !!node.isVirtualMissing,
     isBroken: !!node.isBroken,
@@ -1094,6 +1100,15 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     isFile: !!node.isFile,
     isError: !!node.isError,
     isViewableError: !!node.isViewableError,
+    isBlocked: !!node.isBlocked,
+    isChallengePage: !!node.isChallengePage,
+    isBlockedBoundary: !!node.isBlockedBoundary,
+    blockedReason: node.blockedReason || '',
+    httpErrorType: node.httpErrorType || '',
+    httpErrorLabel: node.httpErrorLabel || '',
+    errorStatus: node.errorStatus ?? null,
+    isStructuralContext: !!node.isStructuralContext,
+    contextHttpStatus: node.contextHttpStatus ?? null,
     isDuplicate: !!node.isDuplicate,
     duplicateOf: node.duplicateOf || '',
     pageType: node.pageType || node.type || '',

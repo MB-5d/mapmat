@@ -20,6 +20,16 @@ const root = {
     url: `https://example.com/${index}`,
     thumbnailUrl: `/screenshots/child_${index}_thumb_v1.jpg`,
     fullScreenshotUrl: `/screenshots/child_${index}_full_v1.jpg`,
+    ...(index === 0 ? {
+      isBlocked: true,
+      isChallengePage: true,
+      isBlockedBoundary: true,
+      blockedReason: 'challenge',
+      httpErrorType: 'forbidden',
+      httpErrorLabel: 'Forbidden',
+      errorStatus: 403,
+      scanStatus: 'scan_limited',
+    } : {}),
   })),
 };
 
@@ -40,6 +50,15 @@ assert(scene.nodes.every((node) => Object.prototype.hasOwnProperty.call(node, 'f
 assert(scene.nodes.every((node) => Object.prototype.hasOwnProperty.call(node, 'thumbnailFullUrl')));
 assert(scene.nodes.some((node) => node.thumbnailUrl));
 assert(scene.nodes.some((node) => node.hasThumbnail === true));
+const blockedSceneNode = scene.nodes.find((node) => node.id === 'child-0');
+assert.strictEqual(blockedSceneNode.isBlocked, true);
+assert.strictEqual(blockedSceneNode.isChallengePage, true);
+assert.strictEqual(blockedSceneNode.isBlockedBoundary, true);
+assert.strictEqual(blockedSceneNode.blockedReason, 'challenge');
+assert.strictEqual(blockedSceneNode.httpErrorLabel, 'Forbidden');
+assert.strictEqual(blockedSceneNode.errorStatus, 403);
+assert.strictEqual(blockedSceneNode.captureEligible, false);
+assert.strictEqual(blockedSceneNode.captureReasonCode, 'blocked');
 assert.strictEqual(getThumbnailLod(0.1), 'none');
 assert.strictEqual(getThumbnailLod(0.4), 'preview');
 assert.strictEqual(getThumbnailLod(1), 'thumbnail');

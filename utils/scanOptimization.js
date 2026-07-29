@@ -248,6 +248,22 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
   knownParentUrls = [],
 } = {}) {
   const descriptor = createFocusedScanDescriptor(startUrl);
+  const explicitParentByUrl = new Map();
+  (Array.isArray(urlEntries) ? urlEntries : []).forEach((entry) => {
+    if (!entry || typeof entry === 'string') return;
+    const url = normalizeScanUrl(entry.url);
+    const parentUrl = normalizeScanUrl(entry.parentUrl);
+    if (
+      !url
+      || !parentUrl
+      || url === parentUrl
+      || new URL(url).origin !== descriptor.origin
+      || new URL(parentUrl).origin !== descriptor.origin
+    ) {
+      return;
+    }
+    explicitParentByUrl.set(url, parentUrl);
+  });
   const records = new Map();
   const completeParents = new Set(
     (Array.isArray(completeParentUrls) ? completeParentUrls : [])
@@ -261,6 +277,8 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
   );
   const querySeed = new URL(descriptor.seed).search ? descriptor.seed : null;
   const getNumberingParentUrl = (url) => {
+    const explicitParentUrl = explicitParentByUrl.get(url);
+    if (explicitParentUrl && explicitParentUrl !== url) return explicitParentUrl;
     if (querySeed && url === querySeed) {
       const queryless = new URL(url);
       queryless.search = '';
@@ -299,7 +317,9 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
       current.exact = current.exact || Boolean(exact || orderKey);
     }
     let parentUrl = getNumberingParentUrl(url);
-    while (parentUrl) {
+    const visitedParents = new Set([url]);
+    while (parentUrl && !visitedParents.has(parentUrl)) {
+      visitedParents.add(parentUrl);
       if (!records.has(parentUrl)) {
         records.set(parentUrl, {
           url: parentUrl,

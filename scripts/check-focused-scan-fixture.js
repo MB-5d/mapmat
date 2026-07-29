@@ -589,17 +589,23 @@ async function main() {
     assert.equal(
       archiveArticleNodes.every((node) => /^(?:X|XX)(?:\.\d+){3}$/.test(node.scanNumber)),
       true,
-      'known local date/article positions should remain numeric after the unknown full-site prefix'
+      `listing month and article positions should remain numeric after the unknown full-site prefix: ${archiveArticleNodes
+        .map((node) => `${node.scanNumber}:${node.url}`)
+        .join(', ')}`
     );
-    assert.ok(
-      archiveNodes.some((node) => (
-        node.url === `${fixtureOrigin}/2026`
-        && node.nodeKind === 'focus-ghost'
-        && !node.isVirtualMissing
-        && !node.isMissing
-      )),
-      'off-path focused content should retain a structural URL ancestor chain without Missing findings'
+    assert.equal(
+      archiveNodes.some((node) => node.url === `${fixtureOrigin}/2026`),
+      false,
+      'off-path article URL folders must not become structural map nodes'
     );
+    archiveArticleNodes.forEach((node) => {
+      const month = Number(node.url.match(/\/2026\/(\d{2})\//)?.[1] || 0);
+      assert.equal(
+        node.parentUrl,
+        `${fixtureOrigin}/section/archive-months?date=${month}-28-2026`,
+        'off-path articles should remain children of the listing page that declared them'
+      );
+    });
 
     // NPR-style editorial cards with category crosslinks beside primary story links.
     const editorialResult = await createScan({

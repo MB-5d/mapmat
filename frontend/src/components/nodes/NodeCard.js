@@ -108,7 +108,7 @@ const NodeCard = ({
   const isFocusGhost = node?.nodeKind === 'focus-ghost' || node?.isFocusAncestor;
   const isDeferredGroup = node?.nodeKind === 'deferred-group';
   const isImportStructuralNode = isImportGhost || isSourceGroup;
-  const isStructuralNode = isImportStructuralNode || isDeferredGroup;
+  const isStructuralNode = isImportStructuralNode || isFocusGhost || isDeferredGroup;
   const shouldGhost = isGhosted || isDeleted || isFocusGhost;
   const showActionBar = !isEntitlementLocked
     && !isStructuralNode
@@ -326,8 +326,16 @@ const NodeCard = ({
       data-feedback-label={node.title || 'Node card'}
       title={isEntitlementLocked
         ? 'Upgrade to see full map'
-        : (isImportGhost ? 'Inferred from the URL path; this is not a page' : undefined)}
-      aria-label={isImportGhost ? `${node.title}, inferred path, not a page` : undefined}
+        : (
+          isImportGhost || isFocusGhost
+            ? 'Inferred structural context; this is not a captured page'
+            : undefined
+        )}
+      aria-label={
+        isImportGhost || isFocusGhost
+          ? `${node.title}, inferred structural context, not a captured page`
+          : undefined
+      }
       style={{ cursor: isStructuralNode ? 'default' : (isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab'))) }}
       {...(isRoot || isStructuralNode ? {} : dragHandleProps)}
     >
@@ -487,6 +495,8 @@ const NodeCard = ({
             <span className="import-structural-label">
               {isImportGhost ? 'Inferred path' : 'Section'}
             </span>
+          ) : isFocusGhost ? (
+            <span className="import-structural-label">Structural context</span>
           ) : null}
           {showBadge && (
             <Badge

@@ -120,6 +120,10 @@ describe('page node contract', () => {
     expect(isImageCaptureEligibleNode(makeNode('blocked', { isBlocked: true }))).toBe(false);
     expect(isImageCaptureEligibleNode(makeNode('error', { httpStatus: 404 }))).toBe(false);
     expect(isImageCaptureEligibleNode(makeNode('untyped-error', { isError: true }))).toBe(false);
+    expect(isImageCaptureEligibleNode(makeNode('server-coded', {
+      captureEligible: false,
+      captureReasonCode: 'authentication',
+    }))).toBe(false);
   });
 
   test('compares numeric suffixes after unknown focused prefixes', () => {

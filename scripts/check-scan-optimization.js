@@ -81,15 +81,16 @@ assert.equal(unknownNumbers.get('https://example.com/blog/post-1/comments'), 'X.
 
 const offPathNumbers = buildPreservedNumberMap([
   { url: 'https://example.com/section/art-design', order: 0 },
-  { url: 'https://example.com/2026/07/story', order: 1 },
-], 'https://example.com/section/art-design', {
-  knownParentUrls: [
-    'https://example.com/2026',
-    'https://example.com/2026/07',
-  ],
-});
-assert.equal(offPathNumbers.get('https://example.com/2026'), 'X');
-assert.equal(offPathNumbers.get('https://example.com/2026/07'), 'X.1');
+  {
+    url: 'https://example.com/2026/07/story',
+    parentUrl: 'https://example.com/section/art-design',
+    order: 1,
+    exact: true,
+  },
+], 'https://example.com/section/art-design');
+assert.equal(offPathNumbers.has('https://example.com/2026'), false);
+assert.equal(offPathNumbers.has('https://example.com/2026/07'), false);
+assert.equal(offPathNumbers.get('https://example.com/section/art-design'), 'X.1');
 assert.equal(offPathNumbers.get('https://example.com/2026/07/story'), 'X.1.1');
 
 const stableEntries = [

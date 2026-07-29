@@ -56,6 +56,8 @@ export const isCapturedPageNode = (node) => (
 );
 
 export const getImageCaptureIneligibilityReason = (node) => {
+  const authoritativeCode = String(node?.captureReasonCode || '').trim();
+  if (node?.captureEligible === false && authoritativeCode) return authoritativeCode;
   if (!isPageNode(node)) return 'structural';
   if (node.isVirtualMissing || node.isMissing) return 'structural';
   if (node.isEntitlementLocked || node.entitlementLocked) return 'entitlement_locked';
