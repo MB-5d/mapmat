@@ -5084,7 +5084,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
   const filesByUrl = new Map();
   const crawlBrowserContextsByHost = new Map();
-  const browserPreferredHosts = new Set();
   const addFileArtifact = (url, sourceUrl = null, contentType = null, detectedInfo = null) => {
     const normalized = normalizeUrl(url);
     if (!normalized) return;
@@ -5242,34 +5241,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       };
     }
 
-    const host = normalizeHost(new URL(url).hostname);
-    const preferBrowser = browserPreferredHosts.has(host);
-    let browserAttempted = false;
-
-    if (preferBrowser && source !== 'common_path') {
-      browserAttempted = true;
-      scanDiagnostics.browserFetchPreferredCount += 1;
-      try {
-        const response = await fetchWithBrowserFallbackContext(url);
-        browserPreferredHosts.add(host);
-        return { ...response, usedBrowser: true };
-      } catch (error) {
-        recordDiscoveryError({
-          source: 'browser_preferred_fetch',
-          url,
-          message: error?.message || 'browser fetch failed',
-        });
-        scanDiagnostics.browserFetchFallbackFailedCount += 1;
-      }
-    }
-
     try {
       return {
         ...(await fetchPage(url, extraHeaders, scanScope.focused ? 6000 : 20000)),
         usedBrowser: false,
       };
     } catch (error) {
-      if (source === 'common_path' || browserAttempted) throw error;
+      if (source === 'common_path') throw error;
       if (scanScope.focused && url === seed) {
         try {
           return {
@@ -5283,7 +5261,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanDiagnostics.browserFetchFallbackCount += 1;
       try {
         const response = await fetchWithBrowserFallbackContext(url);
-        browserPreferredHosts.add(host);
         scanDiagnostics.browserFetchFallbackSuccessCount += 1;
         return { ...response, usedBrowser: true };
       } catch (browserError) {
@@ -5776,7 +5753,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         finalUrl = retry.finalUrl || url;
         responseTime = retry.responseTime;
         usedBrowserFetch = true;
-        browserPreferredHosts.add(normalizeHost(new URL(url).hostname));
         classification = retryClassification;
         if (retryClassification.isChallengePage || isCloudflareChallengeResponse(headers)) {
           scanDiagnostics.cloudflareChallengeCount += 1;
