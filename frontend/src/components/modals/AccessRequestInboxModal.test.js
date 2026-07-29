@@ -24,11 +24,11 @@ describe('AccessRequestInboxModal', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('approves a request with the selected role', () => {
-    const onApprove = jest.fn();
+    const onApprove = vi.fn();
     const request = {
       id: 'req-1',
       mapName: 'Alpha Map',
@@ -43,10 +43,10 @@ describe('AccessRequestInboxModal', () => {
         <AccessRequestInboxModal
           show
           requests={[request]}
-          onClose={jest.fn()}
-          onRefresh={jest.fn()}
+          onClose={vi.fn()}
+          onRefresh={vi.fn()}
           onApprove={onApprove}
-          onDeny={jest.fn()}
+          onDeny={vi.fn()}
         />
       );
     });
@@ -84,9 +84,9 @@ describe('AccessRequestInboxModal', () => {
           show
           requests={[]}
           error="Not found"
-          onClose={jest.fn()}
-          onApprove={jest.fn()}
-          onDeny={jest.fn()}
+          onClose={vi.fn()}
+          onApprove={vi.fn()}
+          onDeny={vi.fn()}
         />
       );
     });
@@ -99,7 +99,7 @@ describe('AccessRequestInboxModal', () => {
   });
 
   test('opens approved requester cards and shows success status styling', () => {
-    const onOpenMap = jest.fn();
+    const onOpenMap = vi.fn();
     const request = {
       id: 'req-approved',
       mapId: 'map-1',
@@ -115,9 +115,9 @@ describe('AccessRequestInboxModal', () => {
         <AccessRequestInboxModal
           show
           requests={[request]}
-          onClose={jest.fn()}
-          onApprove={jest.fn()}
-          onDeny={jest.fn()}
+          onClose={vi.fn()}
+          onApprove={vi.fn()}
+          onDeny={vi.fn()}
           onOpenMap={onOpenMap}
         />
       );
@@ -137,7 +137,7 @@ describe('AccessRequestInboxModal', () => {
   });
 
   test('lets reviewers undo approved requests', () => {
-    const onUndo = jest.fn();
+    const onUndo = vi.fn();
     const request = {
       id: 'req-owner-approved',
       mapId: 'map-1',
@@ -154,9 +154,9 @@ describe('AccessRequestInboxModal', () => {
         <AccessRequestInboxModal
           show
           requests={[request]}
-          onClose={jest.fn()}
-          onApprove={jest.fn()}
-          onDeny={jest.fn()}
+          onClose={vi.fn()}
+          onApprove={vi.fn()}
+          onDeny={vi.fn()}
           onUndo={onUndo}
         />
       );

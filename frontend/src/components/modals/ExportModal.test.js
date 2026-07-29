@@ -25,15 +25,15 @@ describe('ExportModal', () => {
   const renderModal = (props = {}) => {
     const defaultProps = {
       show: true,
-      onClose: jest.fn(),
-      onExportAiSiteBrief: jest.fn(),
-      onExportPdf: jest.fn(),
-      onExportSvg: jest.fn(),
-      onExportPng: jest.fn(),
-      onExportCsv: jest.fn(),
-      onExportJson: jest.fn(),
-      onExportXml: jest.fn(),
-      onExportSiteIndex: jest.fn(),
+      onClose: vi.fn(),
+      onExportAiSiteBrief: vi.fn(),
+      onExportPdf: vi.fn(),
+      onExportSvg: vi.fn(),
+      onExportPng: vi.fn(),
+      onExportCsv: vi.fn(),
+      onExportJson: vi.fn(),
+      onExportXml: vi.fn(),
+      onExportSiteIndex: vi.fn(),
     };
 
     act(() => {
@@ -74,7 +74,7 @@ describe('ExportModal', () => {
   });
 
   test('runs SVG export from the download modal', () => {
-    const onExportSvg = jest.fn();
+    const onExportSvg = vi.fn();
     renderModal({ onExportSvg });
 
     const svgButton = Array.from(container.querySelectorAll('button.export-btn'))
@@ -88,7 +88,7 @@ describe('ExportModal', () => {
   });
 
   test('shows same-row Index format actions and reports selected format', () => {
-    const onExportSiteIndex = jest.fn();
+    const onExportSiteIndex = vi.fn();
     renderModal({ onExportSiteIndex });
 
     const actions = container.querySelector('.export-index-format-actions');
@@ -116,7 +116,7 @@ describe('ExportModal', () => {
   });
 
   test('hides Image export while PNG is paused', () => {
-    const onExportPng = jest.fn();
+    const onExportPng = vi.fn();
     renderModal({ onExportPng });
 
     const imageButton = Array.from(container.querySelectorAll('button.export-btn'))

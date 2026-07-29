@@ -35,7 +35,7 @@ describe('FeedbackWidget', () => {
           currentUser={null}
           currentMapId={null}
           activeSurfaces={{}}
-          showToast={jest.fn()}
+          showToast={vi.fn()}
         />
       );
     });

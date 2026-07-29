@@ -1,9 +1,9 @@
-const loadAnalytics = () => {
-  jest.resetModules();
+const loadAnalytics = async () => {
+  vi.resetModules();
   process.env.REACT_APP_ENABLE_ANALYTICS = 'true';
   process.env.REACT_APP_GA_MEASUREMENT_ID = 'G-TEST123';
   process.env.REACT_APP_CLARITY_PROJECT_ID = 'clarity-test';
-  return require('./analytics');
+  return import('./analytics');
 };
 
 describe('analytics consent gating', () => {
@@ -21,8 +21,8 @@ describe('analytics consent gating', () => {
     delete process.env.REACT_APP_CLARITY_PROJECT_ID;
   });
 
-  test('does not load GA4 or Clarity before consent', () => {
-    const { initAnalytics } = loadAnalytics();
+  test('does not load GA4 or Clarity before consent', async () => {
+    const { initAnalytics } = await loadAnalytics();
 
     initAnalytics(null);
 
@@ -40,8 +40,8 @@ describe('analytics consent gating', () => {
     ]);
   });
 
-  test('loads allowed tools only after matching consent', () => {
-    const { initAnalytics } = loadAnalytics();
+  test('loads allowed tools only after matching consent', async () => {
+    const { initAnalytics } = await loadAnalytics();
 
     initAnalytics({
       necessary: true,
@@ -63,8 +63,8 @@ describe('analytics consent gating', () => {
     expect(document.querySelector('script[src*="clarity.ms/tag/clarity-test"]')).not.toBeNull();
   });
 
-  test('drops private event parameters before sending GA events', () => {
-    const { initAnalytics, trackEvent } = loadAnalytics();
+  test('drops private event parameters before sending GA events', async () => {
+    const { initAnalytics, trackEvent } = await loadAnalytics();
 
     initAnalytics({
       necessary: true,
