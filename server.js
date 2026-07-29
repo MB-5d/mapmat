@@ -4498,9 +4498,26 @@ function extractFocusedContentLinks(html, baseUrl) {
   $(containerSelector).each((_, container) => {
     const $container = $(container);
     if ($container.parents(containerSelector).length > 0) return;
-    const headingLink = $container.find('h1 a[href], h2 a[href], h3 a[href], h4 a[href]').first();
+    let headingLink = $();
+    for (const selector of ['h1 a[href]', 'h2 a[href]', 'h3 a[href]', 'h4 a[href]']) {
+      const candidate = $container.find(selector).first();
+      if (candidate.length > 0) {
+        headingLink = candidate;
+        break;
+      }
+    }
     if (headingLink.length > 0) {
       addLink(headingLink.get(0));
+      return;
+    }
+    const className = String($container.attr('class') || '');
+    const isGenericListItem = (
+      $container.is('main li, main [role="listitem"]')
+      && !/(?:card|tile|teaser|story)/i.test(className)
+    );
+    if (isGenericListItem) {
+      const paragraphLink = $container.find('p a[href]').first();
+      if (paragraphLink.length > 0) addLink(paragraphLink.get(0));
       return;
     }
     const directLink = $container.children('a[href]').first();
@@ -6944,17 +6961,37 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       }
     });
   }
+  const preservedNumberingEntries = scanScope.focused
+    ? Array.from(numberingDiscoveryOrder.entries())
+      .filter(([url]) => (
+        focusedAncestorUrlSet.has(url)
+        || isWithinFocusedPathAlias(url)
+        || scopedDiscoveredUrls.has(url)
+        || focusedContentUrls.has(url)
+        || focusedListingUrls.has(url)
+      ))
+      .map(([url, order]) => {
+        const isOutOfPathFocusedContent = (
+          (focusedContentUrls.has(url) || focusedListingUrls.has(url))
+          && !isWithinFocusedPathAlias(url)
+        );
+        const sitemapSortKey = isOutOfPathFocusedContent
+          ? ''
+          : sitemapNumberingOrder.get(url) || '';
+        return {
+          url,
+          parentUrl: focusedContentParentByUrl.get(url)
+            || nodes.get(url)?.parentUrl
+            || undefined,
+          order,
+          sortKey: sitemapSortKey,
+          exact: Boolean(sitemapSortKey),
+        };
+      })
+    : [];
   const preservedNumberMap = scanScope.focused
     ? buildPreservedNumberMap(
-      Array.from(numberingDiscoveryOrder.entries()).map(([url, order]) => ({
-        url,
-        parentUrl: focusedContentParentByUrl.get(url)
-          || nodes.get(url)?.parentUrl
-          || undefined,
-        order,
-        sortKey: sitemapNumberingOrder.get(url) || '',
-        exact: sitemapNumberingOrder.has(url),
-      })),
+      preservedNumberingEntries,
       seed,
       {
         completeParentUrls: Array.from(sitemapCompleteParentUrls),

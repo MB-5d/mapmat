@@ -34,12 +34,13 @@ function createFixtureServer() {
       const origin = `http://127.0.0.1:${server.address().port}`;
       if (sitemapCapFocusedRun > 0 && sitemapCapRequests < 2) {
         sitemapCapRequests += 1;
+        const sitemapIndexes = Array.from({ length: 14 }, (_, index) => index + 1);
+        if (sitemapCapRequests % 2 === 0) sitemapIndexes.reverse();
         res.writeHead(200, { 'content-type': 'application/xml' });
         res.end([
           '<sitemapindex>',
-          ...Array.from(
-            { length: 14 },
-            (_, index) => `<sitemap><loc>${origin}/fixture-cap-${index + 1}.xml</loc></sitemap>`
+          ...sitemapIndexes.map(
+            (index) => `<sitemap><loc>${origin}/fixture-cap-${index}.xml</loc></sitemap>`
           ),
           '</sitemapindex>',
         ].join(''));
@@ -82,7 +83,7 @@ function createFixtureServer() {
       const delay = (index % 2 === 1) === oddRun ? 80 : 5;
       setTimeout(() => {
         res.writeHead(200, { 'content-type': 'application/xml' });
-        res.end(`<urlset><url><loc>${origin}/section/sitemap-cap/item-${index}</loc></url></urlset>`);
+        res.end(`<urlset><url><loc>${origin}/sitemap-content-item-${index}</loc></url></urlset>`);
       }, delay);
       return;
     }
@@ -219,7 +220,7 @@ function createFixtureServer() {
     }
     if (url.pathname === '/section/editorial') {
       const articleLinks = Array.from({ length: 25 }, (_, index) => (
-        `<article><a href="/section/unrelated">Unrelated category</a><h2><a href="/section/editorial/articles/article-${index + 1}">Article ${index + 1}</a></h2></article>`
+        `<article><h3><a href="/section/unrelated">Unrelated category</a></h3><h2><a href="/section/editorial/articles/article-${index + 1}">Article ${index + 1}</a></h2></article>`
       )).join('');
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>Editorial</title></head><body><nav><a href="/pricing">Pricing</a><a href="/stories/off-path">Off path</a></nav><main>${articleLinks}</main></body></html>`);
@@ -273,13 +274,13 @@ function createFixtureServer() {
       sitemapCapFocusedRun += 1;
       const links = Array.from(
         { length: 14 },
-        (_, index) => `<article><h2><a href="/section/sitemap-cap/item-${index + 1}">Item ${index + 1}</a></h2></article>`
+        (_, index) => `<article><h2><a href="/sitemap-content-item-${index + 1}">Item ${index + 1}</a></h2></article>`
       ).join('');
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>Sitemap cap</title></head><body>${links}</body></html>`);
       return;
     }
-    if (/^\/section\/sitemap-cap\/item-\d+$/.test(url.pathname)) {
+    if (/^\/sitemap-content-item-\d+$/.test(url.pathname)) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body>Item</body></html>`);
       return;
@@ -488,7 +489,7 @@ async function main() {
     assert.equal(result.root.url, `${fixtureOrigin}/`);
     assert.equal(result.root.scanNumber, '0');
     assert.ok(target, 'focused target should be present');
-    assert.equal(target.scanNumber, '3');
+    assert.equal(target.scanNumber, '1');
     assert.notEqual(target.scanNumber, '0');
     assert.equal(nodes.some((node) => node.url === `${fixtureOrigin}/blogger`), false);
     assert.ok(placeholder, 'repetitive group placeholder should be present');
@@ -572,7 +573,7 @@ async function main() {
     assert.deepEqual(deepAncestors.map((node) => node.url), [`${fixtureOrigin}/`, `${fixtureOrigin}/blog`]);
     assert.equal(deepAncestors.every((node) => node.nodeKind !== 'focus-ghost'), true);
     assert.equal(deepAncestors.every((node) => node.httpStatus === 200), true);
-    assert.equal(deepTarget.scanNumber, '3.1');
+    assert.equal(deepTarget.scanNumber, 'X.1');
     assert.notEqual(deepTarget.scanNumber, '0');
 
     const queryResult = await createScan({

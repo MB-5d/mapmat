@@ -393,14 +393,21 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
   );
   const visit = (parentUrl, parentNumber) => {
     const children = childrenByParent.get(parentUrl) || [];
-    const hasCompleteOrder = completeParents.has(parentUrl)
+    const containsFocusedSeed = children.includes(descriptor.seed);
+    const containsPreFocusAncestor = children.some((childUrl) => (
+      childUrl !== descriptor.seed
+      && focusedAncestorParentSet.has(childUrl)
+    ));
+    const hasCompleteOrder = !containsPreFocusAncestor
+      && completeParents.has(parentUrl)
       && children.length > 0
       && children.every((childUrl) => records.get(childUrl)?.exact === true);
     const parentPath = new URL(parentUrl).pathname.replace(/\/+$/, '') || '/';
     const isKnownFocusedParent = parentPath === descriptor.focusPath
       || parentPath.startsWith(`${descriptor.focusPath}/`);
     const hasKnownLocalOrder = hasCompleteOrder
-      || knownParents.has(parentUrl)
+      || (!containsPreFocusAncestor && knownParents.has(parentUrl))
+      || containsFocusedSeed
       || focusedAncestorParentSet.has(parentUrl)
       || isKnownFocusedParent;
     const unknownSegment = children.length >= 10 ? 'XX' : 'X';

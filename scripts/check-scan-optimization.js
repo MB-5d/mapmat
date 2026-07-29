@@ -51,8 +51,8 @@ const numbers = buildPreservedNumberMap([
   completeParentUrls: ['https://example.com/', 'https://example.com/blog'],
 });
 assert.equal(numbers.get('https://example.com/'), '0');
-assert.equal(numbers.get('https://example.com/blog'), '2');
-assert.equal(numbers.get('https://example.com/blog/post-1'), '2.1');
+assert.equal(numbers.get('https://example.com/blog'), 'X');
+assert.equal(numbers.get('https://example.com/blog/post-1'), 'X.1');
 assert.notEqual(numbers.get('https://example.com/blog/post-1'), '0');
 
 const queryNumbers = buildPreservedNumberMap([
@@ -63,8 +63,8 @@ const queryNumbers = buildPreservedNumberMap([
 ], 'https://example.com/blog/post-1?edition=gb', {
   completeParentUrls: ['https://example.com/', 'https://example.com/blog'],
 });
-assert.equal(queryNumbers.get('https://example.com/blog/post-1'), '2.1');
-assert.equal(queryNumbers.get('https://example.com/blog/post-1?edition=gb'), '2.2');
+assert.equal(queryNumbers.get('https://example.com/blog/post-1'), 'X.1');
+assert.equal(queryNumbers.get('https://example.com/blog/post-1?edition=gb'), 'X.2');
 assert.notEqual(queryNumbers.get('https://example.com/blog/post-1?edition=gb'), '0');
 
 const unknownNumbers = buildPreservedNumberMap([
@@ -106,10 +106,10 @@ const shuffledStableNumbers = buildPreservedNumberMap(
   [...stableEntries].reverse(),
   'https://example.com/news'
 );
-assert.equal(stableNumbers.get('https://example.com/news'), 'X');
-assert.equal(stableNumbers.get('https://example.com/news/1'), 'X.1');
-assert.equal(stableNumbers.get('https://example.com/news/2'), 'X.2');
-assert.equal(stableNumbers.get('https://example.com/news/10'), 'X.3');
+assert.equal(stableNumbers.get('https://example.com/news'), '1');
+assert.equal(stableNumbers.get('https://example.com/news/1'), '1.1');
+assert.equal(stableNumbers.get('https://example.com/news/2'), '1.2');
+assert.equal(stableNumbers.get('https://example.com/news/10'), '1.3');
 assert.deepEqual(
   Array.from(stableNumbers.entries()),
   Array.from(shuffledStableNumbers.entries())
