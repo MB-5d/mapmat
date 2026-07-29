@@ -37,13 +37,13 @@ describe('MinimapNavigator', () => {
     originalReleasePointerCapture = Element.prototype.releasePointerCapture;
     originalRequestAnimationFrame = window.requestAnimationFrame;
     originalCancelAnimationFrame = window.cancelAnimationFrame;
-    Element.prototype.setPointerCapture = vi.fn();
-    Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.setPointerCapture = jest.fn();
+    Element.prototype.releasePointerCapture = jest.fn();
     window.requestAnimationFrame = (callback) => {
       callback(Date.now());
       return 1;
     };
-    window.cancelAnimationFrame = vi.fn();
+    window.cancelAnimationFrame = jest.fn();
   });
 
   afterEach(() => {
@@ -128,8 +128,8 @@ describe('MinimapNavigator', () => {
   });
 
   test('uses shared icon button states for minimap zoom controls', () => {
-    const onZoomIn = vi.fn();
-    const onZoomOut = vi.fn();
+    const onZoomIn = jest.fn();
+    const onZoomOut = jest.fn();
 
     act(() => {
       root.render(
@@ -207,9 +207,9 @@ describe('MinimapNavigator', () => {
   });
 
   test('drags the red viewport box by the total pointer distance', () => {
-    const onPanTo = vi.fn();
+    const onPanTo = jest.fn();
     const animationFrames = [];
-    window.requestAnimationFrame = vi.fn((callback) => {
+    window.requestAnimationFrame = jest.fn((callback) => {
       animationFrames.push(callback);
       return animationFrames.length;
     });

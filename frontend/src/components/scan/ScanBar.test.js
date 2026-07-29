@@ -24,22 +24,22 @@ describe('ScanBar', () => {
     const defaults = {
       canEdit: true,
       urlInput: 'https://example.com',
-      onUrlInputChange: vi.fn(),
-      onUrlKeyDown: vi.fn(),
+      onUrlInputChange: jest.fn(),
+      onUrlKeyDown: jest.fn(),
       options: defaultOptions,
       showOptions: false,
       optionsRef,
-      onToggleOptions: vi.fn(),
-      onOptionChange: vi.fn(),
+      onToggleOptions: jest.fn(),
+      onOptionChange: jest.fn(),
       scanLayerAvailability: {},
       scanLayerVisibility: {},
-      onToggleScanLayer: vi.fn(),
-      onScan: vi.fn(),
+      onToggleScanLayer: jest.fn(),
+      onScan: jest.fn(),
       scanDisabled: false,
       scanTitle: 'Run scan',
       sharedTitle: '',
       optionsDisabled: false,
-      onClearUrl: vi.fn(),
+      onClearUrl: jest.fn(),
       showClearUrl: false,
     };
 
@@ -71,11 +71,11 @@ describe('ScanBar', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('uses shared input and button primitives for standard scan controls', () => {
-    const onClearUrl = vi.fn();
+    const onClearUrl = jest.fn();
 
     renderScanBar({
       showOptions: true,
@@ -124,7 +124,7 @@ describe('ScanBar', () => {
   });
 
   test('disables the scan action when the URL is invalid', () => {
-    const onScan = vi.fn();
+    const onScan = jest.fn();
     renderScanBar({
       urlInput: 'not-a-url',
       onScan,

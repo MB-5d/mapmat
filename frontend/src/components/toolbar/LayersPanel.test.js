@@ -14,15 +14,15 @@ const renderPanel = (root, props = {}) => {
     embedded: true,
     layers: { userFlows: true, crossLinks: true, brokenLinks: true },
     connectionTool: null,
-    onToggleUserFlows: vi.fn(),
-    onToggleCrossLinks: vi.fn(),
-    onToggleBrokenLinks: vi.fn(),
+    onToggleUserFlows: jest.fn(),
+    onToggleCrossLinks: jest.fn(),
+    onToggleBrokenLinks: jest.fn(),
     connectionAvailability: {},
     scanLayerAvailability: {},
     scanLayerVisibility: {},
-    onToggleScanLayer: vi.fn(),
+    onToggleScanLayer: jest.fn(),
     changeFilters: { statuses: {} },
-    onToggleChangeStatus: vi.fn(),
+    onToggleChangeStatus: jest.fn(),
     changeStatusOptions: [],
     showChangeSection: false,
   };
@@ -51,11 +51,11 @@ describe('LayersPanel', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('hides unavailable placement options and shows every available status option', () => {
-    const onToggleScanLayer = vi.fn();
+    const onToggleScanLayer = jest.fn();
     renderPanel(root, {
       scanLayerAvailability: {
         placementPrimary: true,
@@ -108,7 +108,7 @@ describe('LayersPanel', () => {
   });
 
   test('keeps available subdomain and orphan options functional', () => {
-    const onToggleScanLayer = vi.fn();
+    const onToggleScanLayer = jest.fn();
     renderPanel(root, {
       scanLayerAvailability: {
         placementPrimary: true,
@@ -133,7 +133,7 @@ describe('LayersPanel', () => {
   });
 
   test('shows marker label filters only when marker labels are available', () => {
-    const onToggleChangeStatus = vi.fn();
+    const onToggleChangeStatus = jest.fn();
     renderPanel(root, {
       showChangeSection: true,
       changeStatusOptions: [{ value: 'moved', label: 'Moved' }],

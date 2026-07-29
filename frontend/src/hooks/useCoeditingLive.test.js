@@ -9,11 +9,11 @@ import {
   openCoeditingSocket,
 } from '../api';
 
-vi.mock('../api', () => ({
-  getCoeditingLiveDocument: vi.fn(),
-  getCoeditingReplay: vi.fn(),
-  ingestCoeditingOperation: vi.fn(),
-  openCoeditingSocket: vi.fn(),
+jest.mock('../api', () => ({
+  getCoeditingLiveDocument: jest.fn(),
+  getCoeditingReplay: jest.fn(),
+  ingestCoeditingOperation: jest.fn(),
+  openCoeditingSocket: jest.fn(),
 }));
 
 function createDeferred() {
@@ -29,8 +29,8 @@ function createDeferred() {
 function createMockSocket() {
   return {
     readyState: 1,
-    send: vi.fn(),
-    close: vi.fn(),
+    send: jest.fn(),
+    close: jest.fn(),
     onopen: null,
     onmessage: null,
     onclose: null,
@@ -84,7 +84,7 @@ describe('useCoeditingLive', () => {
     expect(getCoeditingLiveDocument).toHaveBeenCalledWith('map-1');
 
     await act(async () => {
-      vi.advanceTimersByTime(1000);
+      jest.advanceTimersByTime(1000);
       await Promise.resolve();
     });
 
@@ -127,8 +127,8 @@ describe('useCoeditingLive', () => {
 
   beforeEach(() => {
     latestLiveState = null;
-    applyDocument = vi.fn();
-    onWarn = vi.fn();
+    applyDocument = jest.fn();
+    onWarn = jest.fn();
     socket = createMockSocket();
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -140,7 +140,7 @@ describe('useCoeditingLive', () => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     global.structuredClone = global.structuredClone || ((value) => JSON.parse(JSON.stringify(value)));
 
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     getCoeditingLiveDocument.mockResolvedValue({ liveDocument: baseDocument });
     getCoeditingReplay.mockResolvedValue({
       replay: {
@@ -156,12 +156,12 @@ describe('useCoeditingLive', () => {
       renderedRoot.unmount();
     });
     container.remove();
-    vi.clearAllTimers();
-    vi.useRealTimers();
+    jest.clearAllTimers();
+    jest.useRealTimers();
     global.WebSocket = originalWebSocket;
     global.structuredClone = originalStructuredClone;
     global.IS_REACT_ACT_ENVIRONMENT = originalActEnvironmentFlag;
-    vi.resetAllMocks();
+    jest.resetAllMocks();
   });
 
   it('ignores the ingest response when the same committed op already arrived over the socket', async () => {
@@ -192,7 +192,7 @@ describe('useCoeditingLive', () => {
     expect(submitResult).toEqual(expect.objectContaining({ ok: true }));
 
     await act(async () => {
-      vi.advanceTimersByTime(0);
+      jest.advanceTimersByTime(0);
       await Promise.resolve();
     });
 
@@ -257,7 +257,7 @@ describe('useCoeditingLive', () => {
     expect(staleSocket.close).toHaveBeenCalled();
 
     await act(async () => {
-      vi.advanceTimersByTime(1000);
+      jest.advanceTimersByTime(1000);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -328,7 +328,7 @@ describe('useCoeditingLive', () => {
     expect(submitResult).toEqual(expect.objectContaining({ ok: true }));
 
     await act(async () => {
-      vi.advanceTimersByTime(0);
+      jest.advanceTimersByTime(0);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();

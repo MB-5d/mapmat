@@ -27,8 +27,8 @@ describe('DeleteConfirmModal', () => {
       root.render(
         <DeleteConfirmModal
           node={{ title: 'About' }}
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
+          onCancel={jest.fn()}
+          onConfirm={jest.fn()}
         />
       );
     });
