@@ -6260,9 +6260,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       canonicalUrl: meta.canonicalUrl || null,
       title: meta.title || url,
       pageType: url === seed && !scanScope.focused ? PAGE_TYPE_HOME : PAGE_TYPE_PAGE,
-      nodeKind: scanScope.focused && (meta.isBlocked || meta.isChallengePage || meta.scanStatus === 'scan_limited')
-        ? 'focus-ghost'
-        : undefined,
+      nodeKind: undefined,
       isBlockedBoundary: Boolean(
         scanScope.focused
         && (meta.isBlocked || meta.isChallengePage || meta.scanStatus === 'scan_limited')

@@ -514,7 +514,7 @@ async function main() {
     const blockedTarget = blockedNodes.find((node) => node.url === `${fixtureOrigin}/blocked-focus`);
     assert.equal(blockedTarget?.httpStatus, 403);
     assert.equal(blockedTarget?.scanStatus, 'scan_limited');
-    assert.equal(blockedTarget?.nodeKind, 'focus-ghost');
+    assert.equal(blockedTarget?.nodeKind, undefined);
     assert.equal(blockedTarget?.isBlockedBoundary, true);
     assert.equal(blockedResult.partialReason, 'root_discovery_failed');
     assert.equal(blockedResult.blockedSections?.[0]?.url, `${fixtureOrigin}/blocked-focus`);
