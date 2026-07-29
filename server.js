@@ -4790,6 +4790,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const numberingDiscoveryOrder = new Map();
   const focusedListingOrder = new Map();
   const focusedListingParentByUrl = new Map();
+  const sitemapOrder = new Map();
+  const sitemapNumberingOrder = new Map();
+  const sitemapCompleteParentUrls = new Set();
+  let sitemapDocumentCounter = 0;
   const scopedDiscoveredUrls = new Set([seed]);
   const deferredOutcomeUrls = new Set();
   const blockedOutcomeUrls = new Set();
@@ -4846,8 +4850,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 
   const compareFocusedRepetitiveEntries = (left, right) => {
-    const leftKey = focusedListingOrder.get(left.url) || '';
-    const rightKey = focusedListingOrder.get(right.url) || '';
+    const getDeclaredOrderKey = (url) => {
+      const listingKey = focusedListingOrder.get(url);
+      if (listingKey) return `listing:${listingKey}`;
+      const sitemapIndex = sitemapNumberingOrder.get(url);
+      return Number.isFinite(sitemapIndex)
+        ? `sitemap:${String(Math.max(0, sitemapIndex)).padStart(12, '0')}`
+        : '';
+    };
+    const leftKey = getDeclaredOrderKey(left.url);
+    const rightKey = getDeclaredOrderKey(right.url);
     if (leftKey && rightKey && leftKey !== rightKey) return leftKey.localeCompare(rightKey);
     if (leftKey && !rightKey) return -1;
     if (!leftKey && rightKey) return 1;
@@ -5118,10 +5130,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       enqueue(entry.url, Math.max(1, getUrlDepth(entry.url) - scanScope.focusDepth), 'deferred_group');
     });
   }
-  const sitemapOrder = new Map();
-  const sitemapNumberingOrder = new Map();
-  const sitemapCompleteParentUrls = new Set();
-  let sitemapDocumentCounter = 0;
   let discoveryCounter = 0;
   const markCompleteSitemapParents = (urls = []) => {
     if (!scanScope.focused) return;
@@ -5569,6 +5577,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 
   const activeFocusedDepthCounts = new Map();
+  let focusedSitemapDiscoveryPending = false;
   const getMinimumActiveFocusedDepth = () => {
     let minimum = Number.POSITIVE_INFINITY;
     activeFocusedDepthCounts.forEach((count, depth) => {
@@ -5577,31 +5586,57 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     return minimum;
   };
 
+  const isFocusedSitemapQueueItem = (item) => (
+    item?.source === 'sitemap' || item?.source === 'robots_sitemap'
+  );
+  const getFocusedQueueSourcePriority = (item) => {
+    if (item?.source === 'crawl') return 0;
+    if (item?.source === 'focused_content' || item?.source === 'rendered') return 1;
+    if (isFocusedSitemapQueueItem(item)) return 2;
+    return 3;
+  };
+  const compareFocusedQueueItems = (left, right) => {
+    const depthDifference = Number(left?.depth ?? Number.MAX_SAFE_INTEGER)
+      - Number(right?.depth ?? Number.MAX_SAFE_INTEGER);
+    if (depthDifference !== 0) return depthDifference;
+    const sourceDifference = getFocusedQueueSourcePriority(left) - getFocusedQueueSourcePriority(right);
+    if (sourceDifference !== 0) return sourceDifference;
+    const leftListingKey = focusedListingOrder.get(left.url) || '';
+    const rightListingKey = focusedListingOrder.get(right.url) || '';
+    if (leftListingKey && rightListingKey && leftListingKey !== rightListingKey) {
+      return leftListingKey.localeCompare(rightListingKey);
+    }
+    if (leftListingKey && !rightListingKey) return -1;
+    if (!leftListingKey && rightListingKey) return 1;
+    const leftSitemapOrder = sitemapNumberingOrder.get(left.url);
+    const rightSitemapOrder = sitemapNumberingOrder.get(right.url);
+    if (Number.isFinite(leftSitemapOrder) && Number.isFinite(rightSitemapOrder)) {
+      if (leftSitemapOrder !== rightSitemapOrder) return leftSitemapOrder - rightSitemapOrder;
+    } else if (Number.isFinite(leftSitemapOrder)) {
+      return -1;
+    } else if (Number.isFinite(rightSitemapOrder)) {
+      return 1;
+    }
+    return compareNaturalScanUrls(left.url, right.url);
+  };
+
   const takeNextQueueItem = () => {
     while (queueIndex < queue.length && (activePageLimit === null || visited.size < activePageLimit)) {
       if (scanScope.focused) {
-        let preferredIndex = queueIndex;
-        let preferredDepth = Number(queue[preferredIndex]?.depth ?? Number.MAX_SAFE_INTEGER);
-        let preferredSource = ['crawl', 'focused_content', 'rendered'].includes(queue[preferredIndex]?.source)
-          ? 0
-          : 1;
-        for (let index = queueIndex + 1; index < queue.length; index += 1) {
+        let preferredIndex = -1;
+        for (let index = queueIndex; index < queue.length; index += 1) {
           const candidate = queue[index];
           if (!candidate?.url || visited.has(candidate.url)) continue;
           if (deferredUrlToGroup.has(candidate.url)) continue;
-          const candidateDepth = Number(candidate.depth ?? Number.MAX_SAFE_INTEGER);
-          const candidateSource = ['crawl', 'focused_content', 'rendered'].includes(candidate.source)
-            ? 0
-            : 1;
+          if (focusedSitemapDiscoveryPending && isFocusedSitemapQueueItem(candidate)) continue;
           if (
-            candidateDepth < preferredDepth
-            || (candidateDepth === preferredDepth && candidateSource < preferredSource)
+            preferredIndex < 0
+            || compareFocusedQueueItems(candidate, queue[preferredIndex]) < 0
           ) {
             preferredIndex = index;
-            preferredDepth = candidateDepth;
-            preferredSource = candidateSource;
           }
         }
+        if (preferredIndex < 0) return null;
         if (preferredIndex !== queueIndex) {
           [queue[queueIndex], queue[preferredIndex]] = [queue[preferredIndex], queue[queueIndex]];
         }
@@ -6046,10 +6081,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         await processSitemap(`${origin}${altSitemap}`);
       }
     };
-    await Promise.all([
-      runCrawlWorkers(),
-      discoverSitemapPages(),
-    ]);
+    focusedSitemapDiscoveryPending = scanScope.focused;
+    try {
+      await Promise.all([
+        runCrawlWorkers(),
+        discoverSitemapPages(),
+      ]);
+    } finally {
+      focusedSitemapDiscoveryPending = false;
+    }
     reportDiscoveryProgress(true);
   }
   await runCrawlWorkers();
@@ -6193,7 +6233,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const remainingAllowance = pageLimit === null
       ? 20
       : Math.max(0, pageLimit - pageMap.size);
-    const probeUrls = Array.from(candidates).slice(0, Math.min(20, remainingAllowance));
+    const probeUrls = Array.from(candidates)
+      .sort(compareNaturalScanUrls)
+      .slice(0, Math.min(20, remainingAllowance));
     scanDiagnostics.focusedParentProbeCount = probeUrls.length;
     await runWithConcurrency(probeUrls, 4, async (url) => {
       if (await pollJobStatus() || pageMap.has(url)) return;
