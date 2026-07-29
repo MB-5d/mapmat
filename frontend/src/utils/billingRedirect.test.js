@@ -13,8 +13,8 @@ describe('openBillingUrlInNewTab', () => {
       location: { href: '' },
     };
     const browserWindow = {
-      open: jest.fn(() => openedWindow),
-      location: { assign: jest.fn() },
+      open: vi.fn(() => openedWindow),
+      location: { assign: vi.fn() },
     };
 
     expect(openBillingUrlInNewTab('https://billing.example/session', browserWindow)).toBe('new-tab');
@@ -27,8 +27,8 @@ describe('openBillingUrlInNewTab', () => {
 
   test('redirects the current tab only when the new tab is blocked', () => {
     const browserWindow = {
-      open: jest.fn(() => null),
-      location: { assign: jest.fn() },
+      open: vi.fn(() => null),
+      location: { assign: vi.fn() },
     };
 
     expect(openBillingUrlInNewTab('https://billing.example/session', browserWindow)).toBe('same-tab');
@@ -44,7 +44,7 @@ describe('openBillingUrlInNewTab', () => {
     const storage = new Map();
     const browserWindow = {
       localStorage: {
-        setItem: jest.fn((key, value) => storage.set(key, value)),
+        setItem: vi.fn((key, value) => storage.set(key, value)),
       },
     };
 

@@ -12,27 +12,27 @@ const getCssRule = (selector) => {
   return appCss.match(new RegExp(`${escapedSelector} \\{[^}]+\\}`))?.[0] || '';
 };
 
-jest.mock('../../api', () => ({
-  login: jest.fn(),
-  signup: jest.fn(),
-  verifyEmail: jest.fn(),
-  resendVerification: jest.fn(),
-  forgotPassword: jest.fn(),
-  resetPassword: jest.fn(),
-  getAuthConfig: jest.fn(() => Promise.resolve({ googleAuthEnabled: false })),
-  getMe: jest.fn(),
-  loginWithGoogleCredential: jest.fn(),
-  getGoogleAuthStartUrl: jest.fn(() => 'http://localhost:4002/auth/google/start'),
+vi.mock('../../api', () => ({
+  login: vi.fn(),
+  signup: vi.fn(),
+  verifyEmail: vi.fn(),
+  resendVerification: vi.fn(),
+  forgotPassword: vi.fn(),
+  resetPassword: vi.fn(),
+  getAuthConfig: vi.fn(() => Promise.resolve({ googleAuthEnabled: false })),
+  getMe: vi.fn(),
+  loginWithGoogleCredential: vi.fn(),
+  getGoogleAuthStartUrl: vi.fn(() => 'http://localhost:4002/auth/google/start'),
 }));
 
-jest.mock('../../utils/constants', () => ({
+vi.mock('../../utils/constants', () => ({
   API_BASE: 'http://localhost:4002',
   GOOGLE_AUTH_ENABLED: true,
   MIN_PASSWORD_LENGTH: 8,
 }));
 
-jest.mock('../../utils/analytics', () => ({
-  trackEvent: jest.fn(),
+vi.mock('../../utils/analytics', () => ({
+  trackEvent: vi.fn(),
 }));
 
 describe('AuthModal', () => {
@@ -61,8 +61,8 @@ describe('AuthModal', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     api.getAuthConfig.mockResolvedValue({ googleAuthEnabled: false });
-    googleInitialize = jest.fn();
-    googleRenderButton = jest.fn((buttonContainer) => {
+    googleInitialize = vi.fn();
+    googleRenderButton = vi.fn((buttonContainer) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = 'Sign in with Google';
@@ -86,7 +86,7 @@ describe('AuthModal', () => {
     container = null;
     root = null;
     delete window.google;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     window.localStorage.clear();
   });
 
@@ -95,16 +95,16 @@ describe('AuthModal', () => {
       user: { id: 'u1', name: 'Alex', email: 'alex@example.com', authProvider: 'password' },
     });
 
-    const onSuccess = jest.fn();
-    const onClose = jest.fn();
-    const showToast = jest.fn();
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+    const showToast = vi.fn();
 
     await act(async () => {
       root.render(
         <AuthModal
           onClose={onClose}
           onSuccess={onSuccess}
-          onDemo={jest.fn()}
+          onDemo={vi.fn()}
           showToast={showToast}
         />
       );
@@ -140,10 +140,10 @@ describe('AuthModal', () => {
     await act(async () => {
       root.render(
         <AuthModal
-          onClose={jest.fn()}
-          onSuccess={jest.fn()}
-          onDemo={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+          onDemo={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -186,10 +186,10 @@ describe('AuthModal', () => {
     await act(async () => {
       root.render(
         <AuthModal
-          onClose={jest.fn()}
-          onSuccess={jest.fn()}
-          onDemo={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+          onDemo={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -218,10 +218,10 @@ describe('AuthModal', () => {
     await act(async () => {
       root.render(
         <AuthModal
-          onClose={jest.fn()}
-          onSuccess={jest.fn()}
-          onDemo={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+          onDemo={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -248,16 +248,16 @@ describe('AuthModal', () => {
     api.loginWithGoogleCredential.mockResolvedValue({
       user: { id: 'u-google', name: 'Gina', email: 'gina@example.com', authProvider: 'google' },
     });
-    const onSuccess = jest.fn();
-    const onClose = jest.fn();
-    const showToast = jest.fn();
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+    const showToast = vi.fn();
 
     await act(async () => {
       root.render(
         <AuthModal
           onClose={onClose}
           onSuccess={onSuccess}
-          onDemo={jest.fn()}
+          onDemo={vi.fn()}
           showToast={showToast}
         />
       );
@@ -293,10 +293,10 @@ describe('AuthModal', () => {
     await act(async () => {
       root.render(
         <AuthModal
-          onClose={jest.fn()}
-          onSuccess={jest.fn()}
-          onDemo={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+          onDemo={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -343,16 +343,16 @@ describe('AuthModal', () => {
       emailVerificationSkipped: true,
     });
 
-    const onSuccess = jest.fn();
-    const onClose = jest.fn();
-    const showToast = jest.fn();
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+    const showToast = vi.fn();
 
     await act(async () => {
       root.render(
         <AuthModal
           onClose={onClose}
           onSuccess={onSuccess}
-          onDemo={jest.fn()}
+          onDemo={vi.fn()}
           showToast={showToast}
         />
       );
@@ -395,10 +395,10 @@ describe('AuthModal', () => {
     await act(async () => {
       root.render(
         <AuthModal
-          onClose={jest.fn()}
-          onSuccess={jest.fn()}
-          onDemo={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+          onDemo={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -430,10 +430,10 @@ describe('AuthModal', () => {
     await act(async () => {
       root.render(
         <AuthModal
-          onClose={jest.fn()}
-          onSuccess={jest.fn()}
-          onDemo={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+          onDemo={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });
@@ -473,10 +473,10 @@ describe('AuthModal', () => {
     await act(async () => {
       root.render(
         <AuthModal
-          onClose={jest.fn()}
-          onSuccess={jest.fn()}
-          onDemo={jest.fn()}
-          showToast={jest.fn()}
+          onClose={vi.fn()}
+          onSuccess={vi.fn()}
+          onDemo={vi.fn()}
+          showToast={vi.fn()}
         />
       );
     });

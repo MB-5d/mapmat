@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const jobStore = require('../stores/jobStore');
 const emailDeliveryStore = require('../stores/emailDeliveryStore');
 const { getEmailConfigSnapshot, sendEmailAsync } = require('./emailProvider');

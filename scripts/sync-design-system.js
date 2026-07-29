@@ -161,7 +161,7 @@ function primitiveCssEntries() {
   entries['ui-chip-metric-height'] = componentTokens.chip.metricHeight;
   entries['ui-chip-metric-padding'] = componentTokens.chip.metricPadding;
   for (const [name, value] of Object.entries(unitScale)) {
-    entries[`unit-${name}`] = `${value}px`;
+    entries[`unit-${name.replaceAll('.', '_')}`] = `${value}px`;
   }
   for (const [name, value] of Object.entries(border.width)) {
     entries[`border-width-${name}`] = value;

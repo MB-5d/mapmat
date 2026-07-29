@@ -48,9 +48,9 @@ describe('CommentsPanel', () => {
       root: rootNode,
       orphans: [],
       currentUser,
-      onClose: jest.fn(),
-      onCommentClick: jest.fn(),
-      onNavigateToNode: jest.fn(),
+      onClose: vi.fn(),
+      onCommentClick: vi.fn(),
+      onNavigateToNode: vi.fn(),
     };
     const merged = { ...defaults, ...props };
     act(() => {
@@ -72,7 +72,7 @@ describe('CommentsPanel', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('uses comments drawer search, sort, and Show resolved without legacy filter controls', () => {
@@ -125,7 +125,7 @@ describe('CommentsPanel', () => {
   });
 
   test('hides resolved comments by default and shows them when Show resolved is checked', () => {
-    renderPanel({ canResolveComments: true, onToggleCompleted: jest.fn() });
+    renderPanel({ canResolveComments: true, onToggleCompleted: vi.fn() });
 
     expect(container.textContent).toContain('Keep this open');
     expect(container.textContent).not.toContain('Done already');
@@ -150,7 +150,7 @@ describe('CommentsPanel', () => {
     expect(body).not.toBeNull();
     expect(container.querySelector('.drawer-back-to-top')).toBeNull();
 
-    body.scrollTo = jest.fn();
+    body.scrollTo = vi.fn();
     Object.defineProperty(body, 'scrollTop', {
       configurable: true,
       value: 300,
@@ -196,8 +196,8 @@ describe('CommentsPanel', () => {
   });
 
   test('marks the selected comment and reports node/comment ids in one click', () => {
-    const onCommentClick = jest.fn();
-    const onNavigateToNode = jest.fn();
+    const onCommentClick = vi.fn();
+    const onNavigateToNode = vi.fn();
 
     renderPanel({
       selectedCommentId: 'c1',
@@ -218,8 +218,8 @@ describe('CommentsPanel', () => {
   });
 
   test('deletes from the drawer only for the comment author', () => {
-    const onCommentClick = jest.fn();
-    const onDeleteComment = jest.fn();
+    const onCommentClick = vi.fn();
+    const onDeleteComment = vi.fn();
 
     renderPanel({
       selectedCommentId: 'c1',
@@ -245,7 +245,7 @@ describe('CommentsPanel', () => {
   });
 
   test('toggles completed state directly from the drawer only for resolvers', () => {
-    const onToggleCompleted = jest.fn();
+    const onToggleCompleted = vi.fn();
 
     renderPanel({
       onToggleCompleted,
@@ -268,8 +268,8 @@ describe('CommentsPanel', () => {
 
   test('uses the drawer card layout without the legacy expand control', () => {
     renderPanel({
-      onDeleteComment: jest.fn(),
-      onToggleCompleted: jest.fn(),
+      onDeleteComment: vi.fn(),
+      onToggleCompleted: vi.fn(),
       canResolveComments: true,
     });
 
