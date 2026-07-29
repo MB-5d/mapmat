@@ -9370,4 +9370,22 @@ if (RUN_WEB) {
   server.listen(...listenArgs, () => {
     console.log(`Vellic Backend running on http://${HOST || 'localhost'}:${PORT}`);
   });
+} else {
+  const workerHealthServer = http.createServer((req, res) => {
+    let pathname = '/';
+    try {
+      pathname = new URL(req.url || '/', 'http://worker.local').pathname;
+    } catch {
+      // Keep the default path so malformed requests receive a 404.
+    }
+    const payload = req.method === 'GET' && pathname === '/health'
+      ? { status: 200, body: { ok: true } }
+      : { status: 404, body: { error: 'Not found' } };
+    res.writeHead(payload.status, { 'content-type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify(payload.body));
+  });
+  const listenArgs = HOST ? [PORT, HOST] : [PORT];
+  workerHealthServer.listen(...listenArgs, () => {
+    console.log(`Vellic Worker health endpoint running on http://${HOST || 'localhost'}:${PORT}`);
+  });
 }

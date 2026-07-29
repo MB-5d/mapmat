@@ -17,12 +17,12 @@ describe('ImportModal', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('offers upload and paste URL entry points', () => {
     act(() => {
-      root.render(<ImportModal show onClose={jest.fn()} />);
+      root.render(<ImportModal show onClose={vi.fn()} />);
     });
 
     const tabs = container.querySelectorAll('[role="tab"]');
@@ -36,7 +36,7 @@ describe('ImportModal', () => {
   });
 
   test('shows diagnostics and imports with the selected mode', () => {
-    const onImport = jest.fn();
+    const onImport = vi.fn();
     const preview = {
       sourceName: 'urls.csv',
       parseType: 'CSV',
@@ -54,7 +54,7 @@ describe('ImportModal', () => {
       root.render(
         <ImportModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           onImport={onImport}
           preview={preview}
         />
@@ -78,7 +78,7 @@ describe('ImportModal', () => {
       root.render(
         <ImportModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           preview={{
             sourceName: 'backup.json',
             parseType: 'Vellic JSON',

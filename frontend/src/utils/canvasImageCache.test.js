@@ -3,8 +3,8 @@ import { CanvasImageCache, getThumbnailLodForScale } from './canvasImageCache';
 describe('CanvasImageCache', () => {
   test('evicts least recently used images over the byte cap', () => {
     const cache = new CanvasImageCache({ maxBytes: 100, maxConcurrent: 1 });
-    const first = { width: 5, height: 5, close: jest.fn() };
-    const second = { width: 5, height: 5, close: jest.fn() };
+    const first = { width: 5, height: 5, close: vi.fn() };
+    const second = { width: 5, height: 5, close: vi.fn() };
     cache.entries.set('first', { image: first, bytes: 100, lastUsed: 1 });
     cache.entries.set('second', { image: second, bytes: 100, lastUsed: 2 });
     cache.bytes = 200;
@@ -22,8 +22,8 @@ describe('CanvasImageCache', () => {
 
   test('retain disposes images outside the visible set', () => {
     const cache = new CanvasImageCache({ maxBytes: 1000 });
-    const kept = { width: 5, height: 5, close: jest.fn() };
-    const removed = { width: 5, height: 5, close: jest.fn() };
+    const kept = { width: 5, height: 5, close: vi.fn() };
+    const removed = { width: 5, height: 5, close: vi.fn() };
     cache.entries.set('kept', { image: kept, bytes: 100, lastUsed: 1 });
     cache.entries.set('removed', { image: removed, bytes: 100, lastUsed: 2 });
     cache.bytes = 200;

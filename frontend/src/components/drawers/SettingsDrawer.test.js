@@ -21,20 +21,20 @@ describe('SettingsDrawer', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('changes theme, map orientation, and page numbers', () => {
-    const onThemeChange = jest.fn();
-    const onMapOrientationChange = jest.fn();
-    const onTogglePageNumbers = jest.fn();
+    const onThemeChange = vi.fn();
+    const onMapOrientationChange = vi.fn();
+    const onTogglePageNumbers = vi.fn();
 
     act(() => {
       root.render(
         <LocaleProvider>
           <SettingsDrawer
             isOpen
-            onClose={jest.fn()}
+            onClose={vi.fn()}
             theme="auto"
             onThemeChange={onThemeChange}
             mapOrientation="vertical"
@@ -67,18 +67,18 @@ describe('SettingsDrawer', () => {
   });
 
   test('shows cookie consent access and status', () => {
-    const onOpenPrivacySettings = jest.fn();
+    const onOpenPrivacySettings = vi.fn();
 
     act(() => {
       root.render(
         <LocaleProvider>
           <SettingsDrawer
             isOpen
-            onClose={jest.fn()}
+            onClose={vi.fn()}
             theme="auto"
-            onThemeChange={jest.fn()}
+            onThemeChange={vi.fn()}
             showPageNumbers={false}
-            onTogglePageNumbers={jest.fn()}
+            onTogglePageNumbers={vi.fn()}
             consent={{ analytics: true, experienceResearch: false }}
             onOpenPrivacySettings={onOpenPrivacySettings}
           />
@@ -106,11 +106,11 @@ describe('SettingsDrawer', () => {
         <LocaleProvider>
           <SettingsDrawer
             isOpen
-            onClose={jest.fn()}
+            onClose={vi.fn()}
             theme="auto"
-            onThemeChange={jest.fn()}
+            onThemeChange={vi.fn()}
             showPageNumbers={false}
-            onTogglePageNumbers={jest.fn()}
+            onTogglePageNumbers={vi.fn()}
             consent={{ analytics: false, experienceResearch: false }}
           />
         </LocaleProvider>

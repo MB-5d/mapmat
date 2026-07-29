@@ -20,25 +20,25 @@ describe('ShareModal', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('changes share permission from the share modal', () => {
-    const onChangePermission = jest.fn();
+    const onChangePermission = vi.fn();
 
     act(() => {
       root.render(
         <ShareModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
           onChangePermission={onChangePermission}
           linkCopied={false}
-          onCopyLink={jest.fn()}
+          onCopyLink={vi.fn()}
           shareEmails=""
-          onShareEmailsChange={jest.fn()}
-          onSendEmail={jest.fn()}
+          onShareEmailsChange={vi.fn()}
+          onSendEmail={vi.fn()}
           collaborationMemberships={[]}
           collaborationInvites={[]}
           collaborationAccessRequests={[]}
@@ -64,14 +64,14 @@ describe('ShareModal', () => {
   });
 
   test('disables unavailable share levels and share actions with a reason', () => {
-    const onChangePermission = jest.fn();
-    const onCopyLink = jest.fn();
+    const onChangePermission = vi.fn();
+    const onCopyLink = vi.fn();
 
     act(() => {
       root.render(
         <ShareModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="edit"
           onChangePermission={onChangePermission}
@@ -80,8 +80,8 @@ describe('ShareModal', () => {
           canShareLinks
           allowedSharePermissions={['view']}
           shareEmails=""
-          onShareEmailsChange={jest.fn()}
-          onSendEmail={jest.fn()}
+          onShareEmailsChange={vi.fn()}
+          onSendEmail={vi.fn()}
           collaborationMemberships={[]}
           collaborationInvites={[]}
           collaborationAccessRequests={[]}
@@ -113,25 +113,25 @@ describe('ShareModal', () => {
   });
 
   test('shows upgrade action when share links are plan locked', () => {
-    const onUpgradePlan = jest.fn();
+    const onUpgradePlan = vi.fn();
 
     act(() => {
       root.render(
         <ShareModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
-          onChangePermission={jest.fn()}
+          onChangePermission={vi.fn()}
           linkCopied={false}
-          onCopyLink={jest.fn()}
+          onCopyLink={vi.fn()}
           canShareLinks={false}
           shareLinksDisabledReason="Client share links are not available on this plan."
           onUpgradePlan={onUpgradePlan}
           allowedSharePermissions={['view', 'comment', 'edit']}
           shareEmails=""
-          onShareEmailsChange={jest.fn()}
-          onSendEmail={jest.fn()}
+          onShareEmailsChange={vi.fn()}
+          onSendEmail={vi.fn()}
           collaborationMemberships={[]}
           collaborationInvites={[]}
           collaborationAccessRequests={[]}
@@ -154,22 +154,22 @@ describe('ShareModal', () => {
   });
 
   test('changes collaboration settings from the collaboration modal', () => {
-    const onUpdateCollaborationSettings = jest.fn();
+    const onUpdateCollaborationSettings = vi.fn();
 
     act(() => {
       root.render(
         <ShareModal
           show
           mode="collaboration"
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
-          onChangePermission={jest.fn()}
+          onChangePermission={vi.fn()}
           linkCopied={false}
-          onCopyLink={jest.fn()}
+          onCopyLink={vi.fn()}
           shareEmails=""
-          onShareEmailsChange={jest.fn()}
-          onSendEmail={jest.fn()}
+          onShareEmailsChange={vi.fn()}
+          onSendEmail={vi.fn()}
           collaborationEnabled
           collaborationAvailable
           collaborationSettings={{
@@ -240,26 +240,26 @@ describe('ShareModal', () => {
   });
 
   test('collaboration invite row uses an icon role menu and requires a valid invite email', () => {
-    const onCollaborationInviteRoleChange = jest.fn();
-    const onSendCollaborationInvite = jest.fn();
+    const onCollaborationInviteRoleChange = vi.fn();
+    const onSendCollaborationInvite = vi.fn();
     const renderCollaborationModal = (collaborationInviteEmail, collaborationInviteRole = 'viewer') => {
       root.render(
         <ShareModal
           show
           mode="collaboration"
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
-          onChangePermission={jest.fn()}
+          onChangePermission={vi.fn()}
           linkCopied={false}
-          onCopyLink={jest.fn()}
+          onCopyLink={vi.fn()}
           shareEmails=""
-          onShareEmailsChange={jest.fn()}
-          onSendEmail={jest.fn()}
+          onShareEmailsChange={vi.fn()}
+          onSendEmail={vi.fn()}
           collaborationEnabled
           collaborationAvailable
           collaborationInviteEmail={collaborationInviteEmail}
-          onCollaborationInviteEmailChange={jest.fn()}
+          onCollaborationInviteEmailChange={vi.fn()}
           collaborationInviteRole={collaborationInviteRole}
           onCollaborationInviteRoleChange={onCollaborationInviteRoleChange}
           onSendCollaborationInvite={onSendCollaborationInvite}
@@ -324,22 +324,22 @@ describe('ShareModal', () => {
         <ShareModal
           show
           mode="collaboration"
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
-          onChangePermission={jest.fn()}
+          onChangePermission={vi.fn()}
           linkCopied={false}
-          onCopyLink={jest.fn()}
+          onCopyLink={vi.fn()}
           shareEmails=""
-          onShareEmailsChange={jest.fn()}
-          onSendEmail={jest.fn()}
+          onShareEmailsChange={vi.fn()}
+          onSendEmail={vi.fn()}
           collaborationEnabled
           collaborationAvailable
           collaborationInviteEmail="person@example.com"
-          onCollaborationInviteEmailChange={jest.fn()}
+          onCollaborationInviteEmailChange={vi.fn()}
           collaborationInviteRole="viewer"
-          onCollaborationInviteRoleChange={jest.fn()}
-          onSendCollaborationInvite={jest.fn()}
+          onCollaborationInviteRoleChange={vi.fn()}
+          onSendCollaborationInvite={vi.fn()}
           collaborationInviteRoleOptions={['viewer', 'commenter']}
           collaborationMemberships={[]}
           collaborationInvites={[]}
@@ -386,15 +386,15 @@ describe('ShareModal', () => {
         <ShareModal
           show
           mode="collaboration"
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
-          onChangePermission={jest.fn()}
+          onChangePermission={vi.fn()}
           linkCopied={false}
-          onCopyLink={jest.fn()}
+          onCopyLink={vi.fn()}
           shareEmails=""
-          onShareEmailsChange={jest.fn()}
-          onSendEmail={jest.fn()}
+          onShareEmailsChange={vi.fn()}
+          onSendEmail={vi.fn()}
           collaborationEnabled
           collaborationAvailable
           collaborationMemberships={[
@@ -433,15 +433,15 @@ describe('ShareModal', () => {
       root.render(
         <ShareModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
-          onChangePermission={jest.fn()}
+          onChangePermission={vi.fn()}
           linkCopied={false}
-          onCopyLink={jest.fn()}
+          onCopyLink={vi.fn()}
           shareEmails={shareEmails}
-          onShareEmailsChange={jest.fn()}
-          onSendEmail={jest.fn()}
+          onShareEmailsChange={vi.fn()}
+          onSendEmail={vi.fn()}
           collaborationEnabled={false}
           collaborationMemberships={[]}
           collaborationInvites={[]}
@@ -482,20 +482,20 @@ describe('ShareModal', () => {
   });
 
   test('submits the share email form with the same send action', () => {
-    const onSendEmail = jest.fn();
+    const onSendEmail = vi.fn();
 
     act(() => {
       root.render(
         <ShareModal
           show
-          onClose={jest.fn()}
+          onClose={vi.fn()}
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
-          onChangePermission={jest.fn()}
+          onChangePermission={vi.fn()}
           linkCopied={false}
-          onCopyLink={jest.fn()}
+          onCopyLink={vi.fn()}
           shareEmails="person@example.com"
-          onShareEmailsChange={jest.fn()}
+          onShareEmailsChange={vi.fn()}
           onSendEmail={onSendEmail}
           collaborationEnabled={false}
           collaborationMemberships={[]}

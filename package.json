@@ -10,7 +10,7 @@
     "seed:staging-qa-accounts": "node scripts/seed-staging-qa-accounts.js",
     "backfill:test-unlimited": "node scripts/backfill-test-unlimited-accounts.js",
     "sync:design-system": "node scripts/sync-design-system.js",
-    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node --check routes/collaboration.js && node --check routes/realtime.js && node --check routes/coediting.js && node --check routes/emailWebhooks.js && node --check stores/billingStore.js && node --check stores/collaborationStore.js && node --check stores/coeditingStore.js && node --check stores/emailDeliveryStore.js && node --check stores/presenceStore.js && node --check policies/permissionPolicy.js && node --check utils/coeditingContract.js && node --check utils/coeditingObservability.js && node --check utils/coeditingRollout.js && node --check utils/coeditingTransport.js && node --check utils/coeditingSyncEngine.js && node --check utils/emailDelivery.js && node --check utils/emailProvider.js && node --check utils/emailTemplates.js && node --check utils/emailWebhooks.js && node --check utils/entitlements.js && node --check utils/imageCapturePlan.js && node --check utils/mapInsights.js && node --check utils/scanOptimization.js && node --check utils/scanPageClassification.js && node --check utils/scanResultQuality.js && node --check utils/screenshotWorkspace.js && node --check scripts/backfill-test-unlimited-accounts.js && node --check scripts/check-coediting-rollout-state.js && node --check scripts/check-coediting-rollout-preflight.js && node --check scripts/check-staging-auth-domain.js && node --check scripts/check-email-copy.js && node --check scripts/check-email-templates.js && node --check scripts/render-email-previews.js && node --check scripts/check-email-webhooks.js && node --check scripts/check-entitlements.js && node --check scripts/check-map-insights.js && node --check scripts/check-map-display-summary.js && node --check scripts/check-scan-optimization.js && node --check scripts/check-scan-page-classification.js && node --check scripts/check-scan-result-quality.js && node --check scripts/check-screenshot-workspace.js && node --check scripts/seed-staging-qa-accounts.js && node scripts/check-permission-policy.js && node scripts/check-coediting-contract.js && node scripts/check-coediting-rollout.js && node scripts/check-coediting-observability.js && node scripts/check-coediting-transport.js && node scripts/check-coediting-transport-chaos.js && node scripts/check-coediting-sync-engine.js && node scripts/check-coediting-simulation.js && node scripts/check-coediting-load.js && node scripts/check-coediting-recovery.js && node scripts/check-db-boundary.js && node scripts/check-store-async-boundary.js && node scripts/check-store-exports-async.js && node scripts/check-email-copy.js && node scripts/check-email-templates.js && node scripts/check-email-webhooks.js && node scripts/check-entitlements.js && node scripts/check-map-insights.js && node scripts/check-map-display-summary.js && node scripts/check-scan-optimization.js && node scripts/check-scan-page-classification.js && node scripts/check-scan-result-quality.js && node scripts/check-screenshot-workspace.js && EMAIL_PROVIDER=log node scripts/check-email-delivery.js && npm run check:stripe-billing",
+    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node --check routes/collaboration.js && node --check routes/realtime.js && node --check routes/coediting.js && node --check routes/emailWebhooks.js && node --check stores/billingStore.js && node --check stores/collaborationStore.js && node --check stores/coeditingStore.js && node --check stores/emailDeliveryStore.js && node --check stores/presenceStore.js && node --check policies/permissionPolicy.js && node --check utils/coeditingContract.js && node --check utils/coeditingObservability.js && node --check utils/coeditingRollout.js && node --check utils/coeditingTransport.js && node --check utils/coeditingSyncEngine.js && node --check utils/emailDelivery.js && node --check utils/emailProvider.js && node --check utils/emailTemplates.js && node --check utils/emailWebhooks.js && node --check utils/entitlements.js && node --check utils/imageCapturePlan.js && node --check utils/mapInsights.js && node --check utils/scanOptimization.js && node --check utils/scanPageClassification.js && node --check utils/scanResultQuality.js && node --check utils/screenshotWorkspace.js && node --check scripts/backfill-test-unlimited-accounts.js && node --check scripts/check-coediting-rollout-state.js && node --check scripts/check-coediting-rollout-preflight.js && node --check scripts/check-staging-auth-domain.js && node --check scripts/check-email-copy.js && node --check scripts/check-email-templates.js && node --check scripts/render-email-previews.js && node --check scripts/check-email-webhooks.js && node --check scripts/check-entitlements.js && node --check scripts/check-map-insights.js && node --check scripts/check-map-display-summary.js && node --check scripts/check-scan-optimization.js && node --check scripts/check-scan-page-classification.js && node --check scripts/check-scan-result-quality.js && node --check scripts/check-screenshot-workspace.js && node --check scripts/check-worker-health.js && node --check scripts/seed-staging-qa-accounts.js && node scripts/check-permission-policy.js && node scripts/check-coediting-contract.js && node scripts/check-coediting-rollout.js && node scripts/check-coediting-observability.js && node scripts/check-coediting-transport.js && node scripts/check-coediting-transport-chaos.js && node scripts/check-coediting-sync-engine.js && node scripts/check-coediting-simulation.js && node scripts/check-coediting-load.js && node scripts/check-coediting-recovery.js && node scripts/check-db-boundary.js && node scripts/check-store-async-boundary.js && node scripts/check-store-exports-async.js && node scripts/check-email-copy.js && node scripts/check-email-templates.js && node scripts/check-email-webhooks.js && node scripts/check-entitlements.js && node scripts/check-map-insights.js && node scripts/check-map-display-summary.js && node scripts/check-scan-optimization.js && node scripts/check-scan-page-classification.js && node scripts/check-scan-result-quality.js && node scripts/check-screenshot-workspace.js && EMAIL_PROVIDER=log node scripts/check-email-delivery.js && npm run check:worker-health && npm run check:stripe-billing",
     "check:coediting:load": "node scripts/check-coediting-load.js",
     "check:coediting:transport-chaos": "node scripts/check-coediting-transport-chaos.js",
     "check:coediting:recovery": "node scripts/check-coediting-recovery.js",
@@ -21,6 +21,7 @@
     "check:entitlements": "node --check stores/billingStore.js && node --check utils/entitlements.js && node --check scripts/check-entitlements.js && node --check scripts/seed-entitlement-test-accounts.js && node --check scripts/backfill-test-unlimited-accounts.js && node scripts/check-entitlements.js",
     "check:stripe-billing": "node --check routes/admin.js && node --check routes/billing.js && node --check routes/stripeWebhooks.js && node --check stores/promoCodeStore.js && node --check utils/stripeBilling.js && node --check scripts/check-stripe-billing.js && node scripts/check-stripe-billing.js",
     "check:backend:postgres": "DB_PROVIDER=postgres npm run check:backend",
+    "check:worker-health": "node scripts/check-worker-health.js",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "check:scan-job-tree": "node scripts/check-scan-job-tree.js",
     "check:scan-collapse-fixture": "node scripts/check-scan-collapse-fixture.js",
@@ -76,21 +77,21 @@
     "verify:runtime:all:auto": "npm run verify:runtime:all"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.18.0 <25"
   },
+  "packageManager": "npm@11.16.0",
   "dependencies": {
-    "axios": "^1.13.2",
+    "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.5.0",
-    "cheerio": "^1.1.2",
+    "better-sqlite3": "^13.0.1",
+    "cheerio": "^1.2.0",
     "cookie-parser": "^1.4.7",
-    "cors": "^2.8.5",
-    "express": "^4.22.1",
-    "helmet": "^8.1.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.18.0",
-    "playwright": "^1.57.0",
-    "stripe": "^22.2.0",
-    "uuid": "^11.1.1"
+    "pg": "^8.22.0",
+    "playwright": "^1.62.0",
+    "stripe": "^22.3.2"
   }
 }
