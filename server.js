@@ -107,6 +107,7 @@ const {
   normalizeScreenshotStorageError,
   removeScreenshotWorkspace,
 } = require('./utils/screenshotWorkspace');
+const { dismissScreenshotObstructions } = require('./utils/screenshotPreparation');
 const {
   ACTIVITY_SCOPES,
   ACTIVITY_TYPES,
@@ -7700,6 +7701,7 @@ async function captureScreenshotInWorkspace(
           }
           throwIfAborted();
           await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 650);
+          await dismissScreenshotObstructions(page);
           await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE }).catch(() => {});
           await page.evaluate(async ({
             shouldWarmFull,
@@ -7800,6 +7802,7 @@ async function captureScreenshotInWorkspace(
             await page.waitForLoadState('networkidle', { timeout: networkSettleTimeoutMs }).catch(() => {});
           }
           await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 250 : 150);
+          await dismissScreenshotObstructions(page, { settleMs: 100 });
           throwIfAborted();
 
           const title = await page.title();
