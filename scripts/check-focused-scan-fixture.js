@@ -23,11 +23,24 @@ async function fetchJson(url, options = {}) {
 
 function createFixtureServer() {
   let concurrentFocusedRun = 0;
+  let concurrentSitemapRequests = 0;
+  let unstableListingRun = 0;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://fixture.local');
     const postMatch = url.pathname.match(/^\/blog\/post-(\d+)$/);
     if (url.pathname === '/sitemap.xml') {
       const origin = `http://127.0.0.1:${server.address().port}`;
+      if (concurrentFocusedRun > 0 && concurrentSitemapRequests < 2) {
+        concurrentSitemapRequests += 1;
+        res.writeHead(200, { 'content-type': 'application/xml' });
+        res.end([
+          '<sitemapindex>',
+          `<sitemap><loc>${origin}/fixture-parent-a.xml</loc></sitemap>`,
+          `<sitemap><loc>${origin}/fixture-parent-b.xml</loc></sitemap>`,
+          '</sitemapindex>',
+        ].join(''));
+        return;
+      }
       const urls = [
         `${origin}/about`,
         `${origin}/blogger`,
@@ -42,6 +55,31 @@ function createFixtureServer() {
         `${origin}/section/mixed`,
         ...Array.from({ length: 21 }, (_, index) => `${origin}/section/mixed/item-${index + 1}`),
         ...Array.from({ length: 21 }, (_, index) => `${origin}/section/mixed?page=${index + 1}`),
+      ];
+      res.writeHead(200, { 'content-type': 'application/xml' });
+      res.end(`<urlset>${urls.map((entry) => `<url><loc>${entry}</loc></url>`).join('')}</urlset>`);
+      return;
+    }
+    if (/^\/fixture-parent-[ab]\.xml$/.test(url.pathname)) {
+      const branch = url.pathname.includes('parent-a') ? 'a' : 'b';
+      const oddRun = concurrentFocusedRun % 2 === 1;
+      const delay = (branch === 'a') === oddRun ? 120 : 5;
+      setTimeout(() => {
+        const origin = `http://127.0.0.1:${server.address().port}`;
+        res.writeHead(200, { 'content-type': 'application/xml' });
+        res.end(`<sitemapindex><sitemap><loc>${origin}/fixture-child-${branch}.xml</loc></sitemap></sitemapindex>`);
+      }, delay);
+      return;
+    }
+    if (/^\/fixture-child-[ab]\.xml$/.test(url.pathname)) {
+      const origin = `http://127.0.0.1:${server.address().port}`;
+      const branch = url.pathname.includes('child-a') ? 'a' : 'b';
+      const urls = [
+        ...(branch === 'a' ? [`${origin}/section/concurrent`] : []),
+        `${origin}/section/concurrent/branch-${branch}`,
+        `${origin}/section/concurrent/index-${branch}`,
+        `${origin}/section/concurrent/articles/article-${branch}1`,
+        `${origin}/section/concurrent/articles/article-${branch}2`,
       ];
       res.writeHead(200, { 'content-type': 'application/xml' });
       res.end(`<urlset>${urls.map((entry) => `<url><loc>${entry}</loc></url>`).join('')}</urlset>`);
@@ -168,11 +206,15 @@ function createFixtureServer() {
     }
     if (url.pathname === '/section/concurrent') {
       concurrentFocusedRun += 1;
+      const branchOrder = concurrentFocusedRun % 2 === 1
+        ? ['a', 'b']
+        : ['b', 'a'];
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end([
         '<html><head><title>Concurrent section</title></head><body>',
-        '<a href="/section/concurrent/branch-a">Branch A</a>',
-        '<a href="/section/concurrent/branch-b">Branch B</a>',
+        ...branchOrder.map((branch) => (
+          `<article><h2><a href="/section/concurrent/branch-${branch}">Branch ${branch.toUpperCase()}</a></h2></article>`
+        )),
         '</body></html>',
       ].join(''));
       return;
@@ -199,6 +241,22 @@ function createFixtureServer() {
     if (/^\/section\/concurrent\/articles\/article-[ab][12]$/.test(url.pathname)) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Article</h1></article></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/unstable-listing') {
+      unstableListingRun += 1;
+      const indexes = Array.from({ length: 12 }, (_, index) => index + 1);
+      if (unstableListingRun % 2 === 0) indexes.reverse();
+      const links = indexes.map((index) => (
+        `<article><h2><a href="/section/unstable-listing/article-${index}">Article ${index}</a></h2></article>`
+      )).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Unstable listing</title></head><body>${links}</body></html>`);
+      return;
+    }
+    if (/^\/section\/unstable-listing\/article-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body>Article</body></html>`);
       return;
     }
     if (url.pathname === '/section/unrelated') {
@@ -721,6 +779,21 @@ async function main() {
       getNumberingSnapshot(repeatedConcurrentResult),
       getNumberingSnapshot(concurrentResult),
       'parallel focused scans must select and number the same capped descendants regardless of response order'
+    );
+    const unstableListingResult = await createScan({
+      url: `${fixtureOrigin}/section/unstable-listing`,
+      maxPages: 8,
+      options: {},
+    }, authToken);
+    const repeatedUnstableListingResult = await createScan({
+      url: `${fixtureOrigin}/section/unstable-listing`,
+      maxPages: 8,
+      options: {},
+    }, authToken);
+    assert.deepEqual(
+      getNumberingSnapshot(repeatedUnstableListingResult),
+      getNumberingSnapshot(unstableListingResult),
+      'focused scans without a sitemap must use stable URL fallback instead of mutable card order'
     );
 
     // Apple-style newsroom archive with a dated category parent required by a captured detail page.

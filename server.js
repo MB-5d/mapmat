@@ -4802,7 +4802,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const repetitiveGroupsByKey = new Map();
   const repetitiveGroupsById = new Map();
   const deferredUrlToGroup = new Map();
-  const focusedRepetitiveCandidateUrls = new Set();
   let numberingCounter = 0;
   const linksInCounts = new Map();
   const linkEdgeSet = new Set();
@@ -4818,7 +4817,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     );
   };
 
-  const recordFocusedSitemapNumbering = (url, order) => {
+  const recordFocusedSitemapNumbering = (url, orderKey) => {
     const normalized = normalizeUrl(url);
     if (!scanScope.focused || !normalized || !sameOrigin(normalized, origin) || isScanFileUrl(normalized)) return;
     if (isFocusedDiscoveryHelperUrl(normalized, seed)) {
@@ -4842,23 +4841,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (isWithinFocusedPathAlias(normalized)) prefixes.add(normalized);
     prefixes.forEach((prefix) => {
       if (!prefix) return;
-      const existingOrder = sitemapNumberingOrder.get(prefix);
-      if (!Number.isFinite(existingOrder) || order < existingOrder) {
-        sitemapNumberingOrder.set(prefix, order);
+      const existingOrderKey = sitemapNumberingOrder.get(prefix);
+      if (!existingOrderKey || orderKey.localeCompare(existingOrderKey) < 0) {
+        sitemapNumberingOrder.set(prefix, orderKey);
       }
-      recordNumberingDiscovery(prefix, order);
+      recordNumberingDiscovery(prefix);
     });
   };
 
   const compareFocusedRepetitiveEntries = (left, right) => {
-    const getDeclaredOrderKey = (url) => {
-      const listingKey = focusedListingOrder.get(url);
-      if (listingKey) return `listing:${listingKey}`;
-      const sitemapIndex = sitemapNumberingOrder.get(url);
-      return Number.isFinite(sitemapIndex)
-        ? `sitemap:${String(Math.max(0, sitemapIndex)).padStart(12, '0')}`
-        : '';
-    };
+    const getDeclaredOrderKey = (url) => sitemapNumberingOrder.get(url) || '';
     const leftKey = getDeclaredOrderKey(left.url);
     const rightKey = getDeclaredOrderKey(right.url);
     if (leftKey && rightKey && leftKey !== rightKey) return leftKey.localeCompare(rightKey);
@@ -4911,7 +4903,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!normalized || !allowUrl(normalized) || isScanFileUrl(normalized)) return;
     const descriptor = getRepetitiveGroupDescriptor(normalized);
     if (!descriptor) return;
-    if (scanScope.focused) focusedRepetitiveCandidateUrls.add(normalized);
     let group = repetitiveGroupsByKey.get(descriptor.key);
     if (!group) {
       group = {
@@ -4998,13 +4989,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       return false;
     }
     const sourceListingKey = focusedListingOrder.get(normalizedSource);
-    const sourceSitemapOrder = sitemapNumberingOrder.get(normalizedSource);
+    const sourceSitemapOrderKey = sitemapNumberingOrder.get(normalizedSource);
     const sourceKey = normalizedSource === seed
       ? 'listing:0'
       : sourceListingKey
         ? `listing:1:${sourceListingKey}`
-        : Number.isFinite(sourceSitemapOrder)
-          ? `listing:2:sitemap:${String(Math.max(0, sourceSitemapOrder)).padStart(12, '0')}`
+        : sourceSitemapOrderKey
+          ? `listing:2:${sourceSitemapOrderKey}`
           : `listing:3:url:${normalizedSource}`;
     const listingKey = `${sourceKey}:${String(Math.max(0, sourceOrder)).padStart(8, '0')}`;
     const existingListingKey = focusedListingOrder.get(normalized);
@@ -5295,7 +5286,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const MAX_SITEMAPS = 12;
   let focusedRobotsSitemapSucceeded = false;
 
-  const processSitemap = async (sitemapUrl, source = 'sitemap') => {
+  const processSitemap = async (
+    sitemapUrl,
+    source = 'sitemap',
+    sitemapDocumentPath = null
+  ) => {
     const normalizedSitemap = normalizeUrl(sitemapUrl);
     if (!normalizedSitemap) return false;
     if (processedSitemaps.has(normalizedSitemap)) return false;
@@ -5305,7 +5300,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!placement) return false;
 
     processedSitemaps.add(normalizedSitemap);
-    const sitemapDocumentIndex = sitemapDocumentCounter++;
+    const documentPath = Array.isArray(sitemapDocumentPath)
+      ? sitemapDocumentPath
+      : [sitemapDocumentCounter++];
+    const getSitemapEntryOrderKey = (index) => (
+      `sitemap:${[...documentPath, index]
+        .map((part) => String(Math.max(0, Number(part) || 0)).padStart(8, '0'))
+        .join('.')}`
+    );
     if (await pollJobStatus()) return false;
 
     try {
@@ -5322,7 +5324,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           const norm = normalizeUrl(u);
           if (!norm) continue;
           scanDiagnostics.sitemapUrlsFound += 1;
-          recordFocusedSitemapNumbering(norm, sitemapDocumentIndex * 1000000 + index);
+          recordFocusedSitemapNumbering(norm, getSitemapEntryOrderKey(index));
           if (isIgnoredCrawlUtilityUrl(norm)) {
             scanDiagnostics.ignoredUtilityUrls += 1;
             continue;
@@ -5359,7 +5361,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const norm = normalizeUrl(loc);
         if (norm) sitemapPageUrls.push(norm);
         if (norm) scanDiagnostics.sitemapUrlsFound += 1;
-        if (norm) recordFocusedSitemapNumbering(norm, sitemapDocumentIndex * 1000000 + index);
+        if (norm) recordFocusedSitemapNumbering(norm, getSitemapEntryOrderKey(index));
         if (norm && isIgnoredCrawlUtilityUrl(norm)) {
           scanDiagnostics.ignoredUtilityUrls += 1;
           return;
@@ -5390,9 +5392,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         if (loc) subSitemaps.push(loc);
       });
 
-      await runWithConcurrency(subSitemaps, 4, async (loc) => {
+      const orderedSubSitemaps = subSitemaps.map((loc, index) => ({ loc, index }));
+      await runWithConcurrency(orderedSubSitemaps, 4, async ({ loc, index }) => {
         if (await pollJobStatus() || stopRequested) return;
-        await processSitemap(loc, source);
+        await processSitemap(loc, source, [...documentPath, index]);
       });
       return true;
     } catch (error) {
@@ -5585,35 +5588,23 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     return minimum;
   };
 
-  const isFocusedSitemapQueueItem = (item) => (
-    item?.source === 'sitemap' || item?.source === 'robots_sitemap'
-  );
-  const getFocusedQueueSourcePriority = (item) => {
-    if (item?.source === 'crawl') return 0;
-    if (item?.source === 'focused_content' || item?.source === 'rendered') return 1;
-    if (isFocusedSitemapQueueItem(item)) return 2;
-    return 3;
-  };
   const compareFocusedQueueItems = (left, right) => {
     const depthDifference = Number(left?.depth ?? Number.MAX_SAFE_INTEGER)
       - Number(right?.depth ?? Number.MAX_SAFE_INTEGER);
     if (depthDifference !== 0) return depthDifference;
-    const sourceDifference = getFocusedQueueSourcePriority(left) - getFocusedQueueSourcePriority(right);
-    if (sourceDifference !== 0) return sourceDifference;
-    const leftListingKey = focusedListingOrder.get(left.url) || '';
-    const rightListingKey = focusedListingOrder.get(right.url) || '';
-    if (leftListingKey && rightListingKey && leftListingKey !== rightListingKey) {
-      return leftListingKey.localeCompare(rightListingKey);
+    const leftSitemapOrderKey = sitemapNumberingOrder.get(left.url) || '';
+    const rightSitemapOrderKey = sitemapNumberingOrder.get(right.url) || '';
+    if (
+      leftSitemapOrderKey
+      && rightSitemapOrderKey
+      && leftSitemapOrderKey !== rightSitemapOrderKey
+    ) {
+      return leftSitemapOrderKey.localeCompare(rightSitemapOrderKey);
     }
-    if (leftListingKey && !rightListingKey) return -1;
-    if (!leftListingKey && rightListingKey) return 1;
-    const leftSitemapOrder = sitemapNumberingOrder.get(left.url);
-    const rightSitemapOrder = sitemapNumberingOrder.get(right.url);
-    if (Number.isFinite(leftSitemapOrder) && Number.isFinite(rightSitemapOrder)) {
-      if (leftSitemapOrder !== rightSitemapOrder) return leftSitemapOrder - rightSitemapOrder;
-    } else if (Number.isFinite(leftSitemapOrder)) {
+    if (leftSitemapOrderKey && !rightSitemapOrderKey) {
       return -1;
-    } else if (Number.isFinite(rightSitemapOrder)) {
+    }
+    if (!leftSitemapOrderKey && rightSitemapOrderKey) {
       return 1;
     }
     return compareNaturalScanUrls(left.url, right.url);
@@ -5622,19 +5613,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const takeNextQueueItem = () => {
     while (queueIndex < queue.length && (activePageLimit === null || visited.size < activePageLimit)) {
       if (scanScope.focused) {
+        // Finish the site-declared ordering source before a capped focused crawl
+        // spends its page allowance. Otherwise sitemap-vs-crawl response timing
+        // can change both the selected URLs and their final sibling order.
+        if (focusedSitemapDiscoveryPending) return null;
         let preferredIndex = -1;
         for (let index = queueIndex; index < queue.length; index += 1) {
           const candidate = queue[index];
           if (!candidate?.url || visited.has(candidate.url)) continue;
           if (deferredUrlToGroup.has(candidate.url)) continue;
-          if (focusedSitemapDiscoveryPending && isFocusedSitemapQueueItem(candidate)) continue;
-          if (
-            focusedSitemapDiscoveryPending
-            && focusedRepetitiveCandidateUrls.has(candidate.url)
-            && !focusedListingOrder.has(candidate.url)
-          ) {
-            continue;
-          }
           if (
             preferredIndex < 0
             || compareFocusedQueueItems(candidate, queue[preferredIndex]) < 0
@@ -6908,14 +6895,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         parentUrl: focusedContentParentByUrl.get(url)
           || nodes.get(url)?.parentUrl
           || undefined,
-        order: sitemapNumberingOrder.get(url) ?? order,
-        sortKey: focusedListingOrder.get(url)
-          || (
-            sitemapNumberingOrder.has(url)
-              ? `sitemap:${String(sitemapNumberingOrder.get(url)).padStart(12, '0')}`
-              : ''
-          ),
-        exact: focusedListingOrder.has(url) || sitemapNumberingOrder.has(url),
+        order,
+        sortKey: sitemapNumberingOrder.get(url) || '',
+        exact: sitemapNumberingOrder.has(url),
       })),
       seed,
       {
