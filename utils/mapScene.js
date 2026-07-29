@@ -106,6 +106,7 @@ function isPageNode(node) {
 
 function isCapturedPageNode(node) {
   return isPageNode(node)
+    && !node.isStructuralContext
     && !node.isVirtualMissing
     && !node.isEntitlementLocked
     && !node.entitlementLocked;

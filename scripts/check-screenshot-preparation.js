@@ -26,6 +26,10 @@ async function main() {
         <p>Sign in with your password.</p>
         <button aria-label="Close" id="protected-close">×</button>
       </div>
+      <div class="subscription-banner" style="position: fixed; bottom: 0">
+        <p>Sale ends soon. Subscribe today.</p>
+        <button>Subscribe</button>
+      </div>
       <script>
         document.querySelector('#onetrust-accept-btn-handler').addEventListener('click', () => {
           document.querySelector('#onetrust-consent-sdk').remove();
@@ -44,6 +48,11 @@ async function main() {
     assert.equal(await page.locator('#onetrust-consent-sdk').count(), 0);
     assert.equal(await page.locator('[aria-label="Newsletter signup"]').count(), 0);
     assert.equal(await page.locator('[aria-label="Privacy choices"]').count(), 0);
+    assert.equal(
+      await page.locator('.subscription-banner').isVisible(),
+      false,
+      'fixed subscription promotions should be hidden'
+    );
     assert.equal(await page.locator('#protected-close').count(), 1, 'authentication dialogs must remain untouched');
   } finally {
     await browser.close();

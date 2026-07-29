@@ -412,20 +412,6 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
     });
   };
   visit(descriptor.siteRootUrl, '0');
-  const focusNumber = numbers.get(descriptor.seed);
-  if (descriptor.focused && /^X+$/i.test(String(focusNumber || ''))) {
-    const resolvedFocusNumber = `${focusNumber}.1`;
-    numbers.forEach((number, url) => {
-      if (!isUrlWithinFocusedPath(url, descriptor)) return;
-      if (number === focusNumber) {
-        numbers.set(url, resolvedFocusNumber);
-        return;
-      }
-      if (String(number || '').startsWith(`${focusNumber}.`)) {
-        numbers.set(url, `${resolvedFocusNumber}${number.slice(focusNumber.length)}`);
-      }
-    });
-  }
   return numbers;
 }
 

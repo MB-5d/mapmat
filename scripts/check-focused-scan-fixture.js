@@ -348,7 +348,8 @@ async function main() {
     const target = nodes.find((node) => node.url === `${fixtureOrigin}/blog`);
     const placeholder = nodes.find((node) => node.nodeKind === 'deferred-group');
     assert.equal(result.scanScope.focused, true);
-    assert.equal(result.root.nodeKind, 'focus-ghost');
+    assert.equal(result.root.nodeKind, undefined);
+    assert.equal(result.root.httpStatus, 200);
     assert.equal(result.root.url, `${fixtureOrigin}/`);
     assert.equal(result.root.scanNumber, '0');
     assert.ok(target, 'focused target should be present');
@@ -430,9 +431,12 @@ async function main() {
     }, authToken);
     const deepNodes = flattenTree(deepResult.root);
     const deepTarget = deepNodes.find((node) => node.url === `${fixtureOrigin}/blog/post-1`);
-    const deepAncestors = deepNodes.filter((node) => node.nodeKind === 'focus-ghost');
+    const deepAncestors = deepNodes.filter((node) => (
+      [`${fixtureOrigin}/`, `${fixtureOrigin}/blog`].includes(node.url)
+    ));
     assert.deepEqual(deepAncestors.map((node) => node.url), [`${fixtureOrigin}/`, `${fixtureOrigin}/blog`]);
-    assert.equal(deepAncestors.every((node) => node.isMissing === false), true);
+    assert.equal(deepAncestors.every((node) => node.nodeKind !== 'focus-ghost'), true);
+    assert.equal(deepAncestors.every((node) => node.httpStatus === 200), true);
     assert.equal(deepTarget.scanNumber, '3.1');
     assert.notEqual(deepTarget.scanNumber, '0');
 
@@ -443,7 +447,9 @@ async function main() {
     }, authToken);
     const queryNodes = flattenTree(queryResult.root);
     const queryTarget = queryNodes.find((node) => node.url === `${fixtureOrigin}/blog/post-1?edition=gb`);
-    const queryAncestors = queryNodes.filter((node) => node.nodeKind === 'focus-ghost');
+    const queryAncestors = queryNodes.filter((node) => (
+      [`${fixtureOrigin}/`, `${fixtureOrigin}/blog`].includes(node.url)
+    ));
     assert.deepEqual(
       queryAncestors.map((node) => node.url),
       [`${fixtureOrigin}/`, `${fixtureOrigin}/blog`]
@@ -455,6 +461,8 @@ async function main() {
         `${ancestor.url} should appear exactly once`
       );
       assert.equal(ancestor.isMissing, false);
+      assert.equal(ancestor.nodeKind, undefined);
+      assert.equal(ancestor.httpStatus, 200);
     });
     assert.equal(
       queryNodes.some((node) => node.url === `${fixtureOrigin}/blog/post-1`),
@@ -471,11 +479,11 @@ async function main() {
     }, authToken);
     const issueNodes = flattenTree(issueResult.root);
     const unavailableAncestor = issueNodes.find((node) => node.url === `${fixtureOrigin}/archive`);
-    assert.equal(unavailableAncestor.nodeKind, 'focus-ghost');
+    assert.equal(unavailableAncestor.nodeKind, undefined);
     assert.equal(unavailableAncestor.httpStatus, null);
+    assert.equal(unavailableAncestor.contextHttpStatus, 503);
     assert.equal(unavailableAncestor.isError, false);
     assert.equal(unavailableAncestor.scanStatus, 'structural');
-    assert.equal(unavailableAncestor.isMissing, false);
     assert.equal(
       issueNodes.some((node) => node.url === `${fixtureOrigin}/archive/story`),
       false,
@@ -530,31 +538,18 @@ async function main() {
     const paginationTarget = paginationNodes.find(
       (node) => node.url === `${fixtureOrigin}/section/science/space`
     );
-    const paginationPlaceholder = paginationNodes.find((node) => node.nodeKind === 'deferred-group');
-    const capturedPaginationChildren = paginationTarget.children.filter(
-      (node) => node.nodeKind !== 'deferred-group'
-    );
     assert.equal(paginationTarget.nodeKind, undefined);
-    assert.equal(paginationPlaceholder.parentUrl, paginationTarget.url);
-    assert.equal(paginationPlaceholder.remainingCount, 11);
-    assert.equal(capturedPaginationChildren.length, 10);
-    assert.deepEqual(
-      capturedPaginationChildren.map((node) => Number(new URL(node.url).searchParams.get('page'))),
-      Array.from({ length: 10 }, (_, index) => index + 1),
-      'pagination children should render in natural page-number order'
+    assert.equal(
+      paginationNodes.some((node) => (
+        node.url && new URL(node.url).searchParams.has('page')
+      )),
+      false,
+      'pagination helpers should discover content without appearing as map pages'
     );
-    capturedPaginationChildren.forEach((node) => {
-      assert.equal(node.parentUrl, paginationTarget.url);
-      assert.equal(
-        node.scanNumber.split('.').length,
-        paginationTarget.scanNumber.split('.').length + 1,
-        'query pagination should keep the focused page level in its number'
-      );
-    });
     assert.equal(
       paginationResult.pageCountSummary.totalDiscoveredPageCount,
-      22,
-      'focused pagination should retain captured and deferred page totals'
+      1,
+      'discovery helpers must not inflate focused page totals'
     );
 
     // NYT-style dated article hierarchy discovered from month listing pages.
@@ -567,7 +562,10 @@ async function main() {
     const archiveTarget = archiveNodes.find(
       (node) => node.url === `${fixtureOrigin}/section/archive-months`
     );
-    const archiveMonthNodes = archiveTarget.children.filter((node) => (
+    const archiveSectionContext = archiveNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section`
+    );
+    const archiveMonthNodes = archiveNodes.filter((node) => (
       String(node.url || '').startsWith(`${fixtureOrigin}/section/archive-months?date=`)
     ));
     const archivePlaceholder = archiveTarget.children.find(
@@ -577,19 +575,17 @@ async function main() {
       String(node.url || '').startsWith(`${fixtureOrigin}/2026/`)
       && /\/archive-story-\d+$/.test(node.url)
     ));
-    assert.equal(archiveMonthNodes.length, 10);
-    assert.equal(archiveMonthNodes.every((node) => node.isDuplicate !== true), true);
-    assert.equal(
-      archiveMonthNodes.every((node) => node.canonicalUrl === `${fixtureOrigin}/section/archive-months`),
-      true,
-      'archive month pages should retain their declared canonical without being flattened as duplicate URLs'
-    );
+    assert.equal(archiveMonthNodes.length, 0, 'archive query helpers should not appear as pages');
+    assert.equal(archiveSectionContext?.title, 'section');
+    assert.equal(archiveSectionContext?.isVirtualMissing, true);
+    assert.equal(archiveSectionContext?.httpStatus, null);
+    assert.equal(archiveSectionContext?.contextHttpStatus, 404);
     assert.equal(archivePlaceholder?.remainingCount, 11);
     assert.equal(archiveArticleNodes.length, 10);
     assert.equal(
-      archiveArticleNodes.every((node) => /^(?:X|XX)(?:\.\d+){3}$/.test(node.scanNumber)),
+      archiveArticleNodes.every((node) => /^(?:X|XX)(?:\.\d+){2}$/.test(node.scanNumber)),
       true,
-      `listing month and article positions should remain numeric after the unknown full-site prefix: ${archiveArticleNodes
+      `article positions should remain numeric after the unknown full-site prefix: ${archiveArticleNodes
         .map((node) => `${node.scanNumber}:${node.url}`)
         .join(', ')}`
     );
@@ -599,11 +595,10 @@ async function main() {
       'off-path article URL folders must not become structural map nodes'
     );
     archiveArticleNodes.forEach((node) => {
-      const month = Number(node.url.match(/\/2026\/(\d{2})\//)?.[1] || 0);
       assert.equal(
         node.parentUrl,
-        `${fixtureOrigin}/section/archive-months?date=${month}-28-2026`,
-        'off-path articles should remain children of the listing page that declared them'
+        archiveTarget.url,
+        'content discovered through archive helpers should remain children of the focused page'
       );
     });
 
@@ -723,8 +718,8 @@ async function main() {
       `one visible parent should render one combined placeholder (${JSON.stringify(mixedResult.repetitiveGroups)})`
     );
     assert.equal(mixedPlaceholders[0].parentUrl, `${fixtureOrigin}/section/mixed`);
-    assert.equal(mixedPlaceholders[0].capturedCount, 20);
-    assert.equal(mixedPlaceholders[0].remainingCount, 22);
+    assert.equal(mixedPlaceholders[0].capturedCount, 10);
+    assert.equal(mixedPlaceholders[0].remainingCount, 11);
 
     const redirectedResult = await createScan({
       url: `${fixtureOrigin}/jobs-old`,

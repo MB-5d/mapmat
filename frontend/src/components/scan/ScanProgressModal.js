@@ -174,7 +174,7 @@ const ScanProgressModal = ({
             <div className="scan-outcome-note">
               <span>Captured {formatCount(capturedCount)}</span>
               {deferredCount > 0 ? <span>Deferred {formatCount(deferredCount)}</span> : null}
-              {blockedCount > 0 ? <span>Blocked {formatCount(blockedCount)}</span> : null}
+              {blockedCount > 0 ? <span>Scan limited {formatCount(blockedCount)}</span> : null}
               {failedCount > 0 ? <span>Failed {formatCount(failedCount)}</span> : null}
             </div>
           </div>

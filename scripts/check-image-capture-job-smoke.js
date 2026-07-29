@@ -695,7 +695,7 @@ async function run() {
       method: 'POST',
       body: JSON.stringify({ captureType: 'thumb', scope: 'all' }),
     }, cookieJar);
-    assert.strictEqual(thumbStart.estimatedCredits, 9, 'capture estimate must exclude skipped and ineligible nodes');
+    assert.strictEqual(thumbStart.estimatedCredits, 14, 'capture estimate must include every screenshot-capable page');
     assert.notStrictEqual(
       getJobStatus(dbPath, thumbStart.jobId),
       'queued',
@@ -713,24 +713,26 @@ async function run() {
       method: 'POST',
     }, cookieJar);
     const thumbJob = await pollImageCaptureJob(apiBase, mapId, thumbStart.jobId, cookieJar);
-    assert.strictEqual(thumbJob.result.total, 10, 'thumbnail eligible total mismatch');
-    assert.strictEqual(thumbJob.result.eligibleTotal, 10, 'thumbnail eligible summary mismatch');
-    assert.strictEqual(thumbJob.result.excluded, 5, 'thumbnail excluded total mismatch');
-    assert.deepStrictEqual(thumbJob.result.excludedReasons, {
-      authentication: 1,
-      http_error: 1,
-      unreachable: 1,
-      structural: 2,
-    });
-    assert.strictEqual(thumbJob.result.exclusions.length, 5, 'capture exclusions should be machine-readable');
-    assert.deepStrictEqual(
-      new Set(thumbJob.result.exclusions.map((entry) => entry.code)),
-      new Set(['authentication', 'http_error', 'unreachable', 'structural'])
+    assert.strictEqual(thumbJob.result.total, 15, 'thumbnail eligible total mismatch');
+    assert.strictEqual(thumbJob.result.eligibleTotal, 15, 'thumbnail eligible summary mismatch');
+    assert.strictEqual(thumbJob.result.excluded, 0, 'thumbnail excluded total mismatch');
+    assert.deepStrictEqual(thumbJob.result.excludedReasons, {});
+    assert.strictEqual(thumbJob.result.exclusions.length, 0, 'capture exclusions should be machine-readable');
+    assert(
+      thumbJob.result.captured >= 13,
+      'every reachable screenshot-capable page should be captured'
     );
-    assert.strictEqual(thumbJob.result.captured, 9, 'thumbnail captured mismatch');
     assert.strictEqual(thumbJob.result.skipped, 1, 'thumbnail skipped mismatch');
     assert.strictEqual(thumbJob.result.phase, 'needs_review', 'thumbnail job should surface skipped files for review');
-    assert.strictEqual(thumbJob.result.failed + thumbJob.result.blocked + thumbJob.result.missingAsset, 0, 'thumbnail failures found');
+    assert.strictEqual(
+      thumbJob.result.captured
+        + thumbJob.result.failed
+        + thumbJob.result.blocked
+        + thumbJob.result.missingAsset
+        + thumbJob.result.skipped,
+      thumbJob.result.total,
+      'every eligible page should reach a terminal capture result'
+    );
     assert(Number(thumbJob.result.assetUpdateCursor) >= 10, 'missing asset update cursor');
     assert(
       (fixtureServer.hitCounts.get('/slow') || 0) >= 2,
@@ -744,15 +746,13 @@ async function run() {
       fixtureServer.getMaxActiveRequests() >= 2,
       'thumbnail primary pass should capture more than one page at a time'
     );
-    assert.strictEqual(
-      fixtureServer.hitCounts.get('/rendered-404') || 0,
-      0,
-      'HTTP error pages must not be sent to screenshot capture'
+    assert(
+      (fixtureServer.hitCounts.get('/rendered-404') || 0) >= 1,
+      'HTTP error pages should remain available for user-selected screenshot capture'
     );
-    assert.strictEqual(
-      fixtureServer.hitCounts.get('/login') || 0,
-      0,
-      'authenticated pages must not be sent to screenshot capture'
+    assert(
+      (fixtureServer.hitCounts.get('/login') || 0) >= 1,
+      'authenticated pages should remain available for user-selected screenshot capture'
     );
     assert(
       getImageActivityCount(dbPath, mapId) >= 1,
@@ -770,15 +770,8 @@ async function run() {
     const storedThumbnailCount = thumbNodes.filter((page) => page.thumbnailUrl).length;
     assert.strictEqual(storedThumbnailCount, thumbJob.result.captured, 'saved count exceeded stored thumbnails');
     const skippedIds = new Set(['file-0']);
-    const excludedIds = new Set([
-      'error-0',
-      'auth-0',
-      'inactive-0',
-      'virtual-0',
-      'focus-ghost-0',
-    ]);
     thumbNodes
-      .filter((page) => !skippedIds.has(page.id) && !excludedIds.has(page.id))
+      .filter((page) => !skippedIds.has(page.id) && page.id !== 'inactive-0')
       .forEach((page) => assert(page.thumbnailUrl, `missing thumbnailUrl for ${page.id}`));
     thumbNodes
       .filter((page) => skippedIds.has(page.id))
@@ -786,12 +779,11 @@ async function run() {
         assert(!page.thumbnailUrl, `skipped page should not keep thumbnailUrl for ${page.id}`);
         assert(page.thumbnailCaptureFailed, `skipped page missing failure marker for ${page.id}`);
       });
-    thumbNodes
-      .filter((page) => excludedIds.has(page.id))
-      .forEach((page) => {
-        assert(!page.thumbnailUrl, `ineligible page should not keep thumbnailUrl for ${page.id}`);
-        assert(!page.thumbnailCaptureFailed, `ineligible page should not be marked as a capture failure for ${page.id}`);
-      });
+    const inactivePage = thumbNodes.find((page) => page.id === 'inactive-0');
+    assert(
+      inactivePage?.thumbnailUrl || inactivePage?.thumbnailCaptureFailed,
+      'unreachable page should still be attempted and record its result'
+    );
     ['text-0', 'slow-0', 'slow-1'].forEach((nodeId) => {
       const page = thumbNodes.find((node) => node.id === nodeId);
       assert(page?.thumbnailUrl, `expected rendered page thumbnail for ${nodeId}`);

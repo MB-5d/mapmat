@@ -12600,7 +12600,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       clearLoadedMapView();
     }
     if (
-      routeGatePreviewMapLoadedRef.current
+      !isLoggedIn
+      && routeGatePreviewMapLoadedRef.current
       && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
     ) {
       return undefined;

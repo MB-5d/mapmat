@@ -40,7 +40,7 @@ export const getFindingBadgesForNode = (
 
   if (node.isDuplicate && canShowBadge(visibility, 'duplicates')) badges.push('Duplicate');
   if (isVirtualMissingNode(node) && canShowBadge(visibility, 'missing')) badges.push('Missing');
-  if (isScanLimitedNode(node)) badges.push('Blocked');
+  if (isScanLimitedNode(node)) badges.push('Scan limited');
   // Orphan and subdomain are conveyed by page numbering/placement, not node badges.
   if (!isRenderableText && orphanType === 'file' && canShowBadge(visibility, 'files')) badges.push('File');
   if (orphanType === 'broken' && !isOrphanRoot && canShowBadge(visibility, 'brokenLinks')) {

@@ -44,13 +44,13 @@ describe('node finding badges', () => {
     })).toEqual(['Inactive']);
   });
 
-  test('labels blocked scan boundaries explicitly', () => {
+  test('keeps scan-limited pages distinct from authenticated pages', () => {
     expect(getFindingBadgesForNode({
       id: 'blocked',
       url: 'https://example.com/private',
       scanStatus: 'scan_limited',
       isBlocked: true,
       statusCode: 403,
-    })).toEqual(['Blocked']);
+    })).toEqual(['Scan limited']);
   });
 });

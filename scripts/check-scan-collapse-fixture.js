@@ -41,7 +41,9 @@ function countTree(node) {
 
 function countCapturedTree(node) {
   if (!node) return 0;
-  const structural = node.nodeKind === 'focus-ghost' || node.nodeKind === 'deferred-group';
+  const structural = node.isStructuralContext
+    || node.nodeKind === 'focus-ghost'
+    || node.nodeKind === 'deferred-group';
   return (structural ? 0 : 1)
     + (node.children || []).reduce((sum, child) => sum + countCapturedTree(child), 0);
 }
@@ -265,8 +267,9 @@ async function runCheck() {
   await withFixture('one-page', async (base) => {
     const onePageResult = await scan(`${base}/one-page`);
     assert.strictEqual(countCapturedTree(onePageResult.root), 1, 'true one-page scan should keep one captured page');
-    assert.strictEqual(onePageResult.root?.nodeKind, 'focus-ghost', 'deep one-page scan should include ghost homepage context');
-    assert.strictEqual(countTree(onePageResult.root), 2, 'deep one-page scan should render ghost homepage plus target');
+    assert.strictEqual(onePageResult.root?.nodeKind, undefined, 'reachable homepage context should use its real page state');
+    assert.strictEqual(onePageResult.root?.isStructuralContext, true, 'homepage context should stay outside focused page counts');
+    assert.strictEqual(countTree(onePageResult.root), 2, 'deep one-page scan should render homepage context plus target');
     assert.notStrictEqual(onePageResult.partialReason, 'scan_collapsed', 'true one-page scan should not be marked collapsed');
     assert.notStrictEqual(onePageResult.partialReason, 'root_discovery_failed', 'true one-page scan should not be marked discovery failed');
   });
@@ -299,8 +302,13 @@ async function runCheck() {
     );
     assert.strictEqual(
       deniedResult.root?.nodeKind,
-      'focus-ghost',
-      'focused blocked pages should retain ghost ancestor context'
+      undefined,
+      'reachable ancestor context should keep its real page state'
+    );
+    assert.strictEqual(
+      deniedResult.root?.isStructuralContext,
+      true,
+      'ancestor context should remain outside focused page counts'
     );
   });
   console.log('scan collapse fixture ok');

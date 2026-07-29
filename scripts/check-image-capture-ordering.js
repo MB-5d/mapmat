@@ -119,20 +119,24 @@ assert.strictEqual(fullStages[7].records.length, 100, 'last full screenshot stag
 
 assert.strictEqual(getImageCaptureEligibility(node('eligible', [], { httpStatus: 200 })).eligible, true);
 assert.strictEqual(
-  getImageCaptureEligibility(node('virtual', [], { isVirtualMissing: true })).code,
-  'structural'
+  getImageCaptureEligibility(node('virtual', [], { isVirtualMissing: true })).eligible,
+  true
 );
 assert.strictEqual(
-  getImageCaptureEligibility(node('http-error', [], { httpStatus: 404 })).code,
-  'http_error'
+  getImageCaptureEligibility(node('http-error', [], { httpStatus: 404 })).eligible,
+  true
 );
 assert.strictEqual(
-  getImageCaptureEligibility(node('untyped-error', [], { isError: true })).code,
-  'http_error'
+  getImageCaptureEligibility(node('untyped-error', [], { isError: true })).eligible,
+  true
 );
 assert.strictEqual(
-  getImageCaptureEligibility(node('blocked', [], { isBlocked: true })).code,
-  'blocked'
+  getImageCaptureEligibility(node('blocked', [], { isBlocked: true })).eligible,
+  true
+);
+assert.strictEqual(
+  getImageCaptureEligibility(node('ghost', [], { nodeKind: 'focus-ghost' })).eligible,
+  true
 );
 
 console.log(`image capture ordering ok: ${records.length} records, ${phases.length} phases, ${thumbStages.length} large thumbnail stages`);

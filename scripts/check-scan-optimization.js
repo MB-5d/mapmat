@@ -106,10 +106,10 @@ const shuffledStableNumbers = buildPreservedNumberMap(
   [...stableEntries].reverse(),
   'https://example.com/news'
 );
-assert.equal(stableNumbers.get('https://example.com/news'), 'X.1');
-assert.equal(stableNumbers.get('https://example.com/news/1'), 'X.1.1');
-assert.equal(stableNumbers.get('https://example.com/news/2'), 'X.1.2');
-assert.equal(stableNumbers.get('https://example.com/news/10'), 'X.1.3');
+assert.equal(stableNumbers.get('https://example.com/news'), 'X');
+assert.equal(stableNumbers.get('https://example.com/news/1'), 'X.1');
+assert.equal(stableNumbers.get('https://example.com/news/2'), 'X.2');
+assert.equal(stableNumbers.get('https://example.com/news/10'), 'X.3');
 assert.deepEqual(
   Array.from(stableNumbers.entries()),
   Array.from(shuffledStableNumbers.entries())

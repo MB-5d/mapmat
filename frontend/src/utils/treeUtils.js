@@ -34,7 +34,6 @@ const NON_PAGE_NODE_KINDS = new Set([
   'import-container',
   'import-ghost',
   'source-group',
-  'focus-ghost',
   'deferred-group',
 ]);
 
@@ -50,37 +49,14 @@ export const isPageNode = (node) => {
 
 export const isCapturedPageNode = (node) => (
   isPageNode(node)
+  && !node.isStructuralContext
   && !node.isVirtualMissing
   && !node.isEntitlementLocked
   && !node.entitlementLocked
 );
 
 export const getImageCaptureIneligibilityReason = (node) => {
-  const authoritativeCode = String(node?.captureReasonCode || '').trim();
-  if (node?.captureEligible === false && authoritativeCode) return authoritativeCode;
   if (!isPageNode(node)) return 'structural';
-  if (node.isVirtualMissing || node.isMissing) return 'structural';
-  if (node.isEntitlementLocked || node.entitlementLocked) return 'entitlement_locked';
-  if (node.authRequired) return 'authentication';
-  if (
-    node.isBlocked
-    || node.isChallengePage
-    || node.isBlockedBoundary
-    || ['scan_limited', 'blocked', 'auth'].includes(String(node.scanStatus || '').toLowerCase())
-  ) {
-    return 'blocked';
-  }
-  const rawStatus = node.httpStatus ?? node.statusCode ?? node.errorStatus;
-  const status = rawStatus === null || rawStatus === undefined || rawStatus === ''
-    ? null
-    : Number(rawStatus);
-  if (Number.isFinite(status) && status >= 400) return 'http_error';
-  if (node.isError || node.isBroken || node.isViewableError) return 'http_error';
-  if (
-    node.isInactive
-    || ['inactive', 'unreachable', 'failed'].includes(String(node.scanStatus || '').toLowerCase())
-    || (Number.isFinite(status) && status === 0)
-  ) return 'unreachable';
   return '';
 };
 

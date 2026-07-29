@@ -26,10 +26,10 @@ async function dismissScreenshotObstructions(page, {
         const rect = element.getBoundingClientRect();
         return rect.width > 2 && rect.height > 2;
       };
-      const blockedContext = /(?:sign[\s-]?in|log[\s-]?in|password|subscribe|subscription|paywall|purchase|checkout|payment)/i;
+      const blockedContext = /(?:sign[\s-]?in|log[\s-]?in|password|purchase|checkout|payment)/i;
       const consentContext = /(?:cookie|consent|privacy|gdpr|tracking|preference|onetrust|trustarc|quantcast|didomi|cookiebot)/i;
       const acceptAction = /^(?:accept(?: all)?(?: cookies)?|i accept|allow(?: all)?(?: cookies)?|agree|i agree|consent|continue|got it|ok(?:ay)?)$/i;
-      const nuisanceContext = /(?:newsletter|notifications?|promotion|special offer|sign up for updates)/i;
+      const nuisanceContext = /(?:newsletter|notifications?|promotion|special offer|sign up for updates|subscribe|subscription|sale ends)/i;
       const knownConsentSelectors = [
         '#onetrust-accept-btn-handler',
         '#truste-consent-button',
@@ -122,6 +122,32 @@ async function dismissScreenshotObstructions(page, {
           element.style.setProperty('display', 'none', 'important');
           hidden += 1;
         });
+      });
+
+      document.querySelectorAll([
+        '[role="dialog"]',
+        '[aria-modal="true"]',
+        '[class*="banner"]',
+        '[class*="Banner"]',
+        '[class*="popup"]',
+        '[class*="Popup"]',
+        '[class*="modal"]',
+        '[class*="Modal"]',
+        '[class*="overlay"]',
+        '[class*="Overlay"]',
+      ].join(', ')).forEach((element) => {
+        if (!isVisible(element)) return;
+        const style = window.getComputedStyle(element);
+        if (!['fixed', 'sticky'].includes(style.position)) return;
+        const contextText = normalizeText([
+          element.id,
+          element.className,
+          element.getAttribute('aria-label'),
+          element.innerText,
+        ].join(' '));
+        if (blockedContext.test(contextText) || !nuisanceContext.test(contextText)) return;
+        element.style.setProperty('display', 'none', 'important');
+        hidden += 1;
       });
 
       return { clicked, hidden };
