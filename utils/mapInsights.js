@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const { detectChallengePage } = require('./scanPageClassification');
 const { isPageNode } = require('./mapScene');
 
