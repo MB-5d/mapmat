@@ -4,7 +4,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
 const imageAssetStore = require('../stores/imageAssetStore');
