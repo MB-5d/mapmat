@@ -4802,6 +4802,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const repetitiveGroupsByKey = new Map();
   const repetitiveGroupsById = new Map();
   const deferredUrlToGroup = new Map();
+  const focusedRepetitiveCandidateUrls = new Set();
   let numberingCounter = 0;
   const linksInCounts = new Map();
   const linkEdgeSet = new Set();
@@ -4910,6 +4911,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!normalized || !allowUrl(normalized) || isScanFileUrl(normalized)) return;
     const descriptor = getRepetitiveGroupDescriptor(normalized);
     if (!descriptor) return;
+    if (scanScope.focused) focusedRepetitiveCandidateUrls.add(normalized);
     let group = repetitiveGroupsByKey.get(descriptor.key);
     if (!group) {
       group = {
@@ -5311,19 +5313,20 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const processedSitemaps = new Set();
   const MAX_SITEMAPS = 12;
+  let focusedRobotsSitemapSucceeded = false;
 
   const processSitemap = async (sitemapUrl, source = 'sitemap') => {
-    if (await pollJobStatus()) return;
     const normalizedSitemap = normalizeUrl(sitemapUrl);
-    if (!normalizedSitemap) return;
-    if (processedSitemaps.has(normalizedSitemap)) return;
-    if (processedSitemaps.size >= MAX_SITEMAPS) return;
+    if (!normalizedSitemap) return false;
+    if (processedSitemaps.has(normalizedSitemap)) return false;
+    if (processedSitemaps.size >= MAX_SITEMAPS) return false;
 
     const placement = getPlacementForUrl(normalizedSitemap, scanScope);
-    if (!placement) return;
+    if (!placement) return false;
 
     processedSitemaps.add(normalizedSitemap);
     const sitemapDocumentIndex = sitemapDocumentCounter++;
+    if (await pollJobStatus()) return false;
 
     try {
       const sitemapRes = await axios.get(sitemapUrl, {
@@ -5364,7 +5367,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           }
         }
         markCompleteSitemapParents(urls);
-        return;
+        return true;
       }
 
       const $ = cheerio.load(sitemapRes.data, { xmlMode: true });
@@ -5411,9 +5414,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         if (await pollJobStatus() || stopRequested) return;
         await processSitemap(loc, source);
       });
+      return true;
     } catch (error) {
       const status = error?.response?.status || null;
-      if (status === 404 && source !== 'robots_sitemap') return;
+      if (status === 404 && source !== 'robots_sitemap') return false;
       scanDiagnostics.sitemapFetchFailures += 1;
       recordDiscoveryError({
         source,
@@ -5421,6 +5425,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         status,
         message: error?.message || 'sitemap fetch failed',
       });
+      return false;
     }
   };
 
@@ -5439,7 +5444,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         .map((line) => line.trim())
         .map((line) => line.match(/^sitemap:\s*(.+)$/i)?.[1]?.trim())
         .filter(Boolean);
-      for (const sitemapUrl of sitemapUrls) {
+      const focusedSitemapUrls = scanScope.focused
+        ? sitemapUrls.filter((sitemapUrl) => {
+          const normalized = normalizeUrl(sitemapUrl);
+          if (!normalized || !sameOrigin(normalized, origin)) return false;
+          const pathname = new URL(normalized).pathname;
+          return pathname === scanScope.focusPath || pathname.startsWith(`${scanScope.focusPath}/`);
+        })
+        : [];
+      const selectedSitemapUrls = focusedSitemapUrls.length > 0
+        ? focusedSitemapUrls
+        : sitemapUrls;
+      for (const sitemapUrl of selectedSitemapUrls) {
         if (await pollJobStatus()) return;
         const normalizedSitemap = normalizeUrl(sitemapUrl);
         if (!normalizedSitemap) continue;
@@ -5448,7 +5464,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           continue;
         }
         scanDiagnostics.robotsSitemapUrlsFound += 1;
-        await processSitemap(normalizedSitemap, 'robots_sitemap');
+        const succeeded = await processSitemap(normalizedSitemap, 'robots_sitemap');
+        if (succeeded && focusedSitemapUrls.includes(sitemapUrl)) {
+          focusedRobotsSitemapSucceeded = true;
+        }
       }
     } catch (error) {
       const status = error?.response?.status || null;
@@ -5629,6 +5648,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           if (!candidate?.url || visited.has(candidate.url)) continue;
           if (deferredUrlToGroup.has(candidate.url)) continue;
           if (focusedSitemapDiscoveryPending && isFocusedSitemapQueueItem(candidate)) continue;
+          if (
+            focusedSitemapDiscoveryPending
+            && focusedRepetitiveCandidateUrls.has(candidate.url)
+            && !focusedListingOrder.has(candidate.url)
+          ) {
+            continue;
+          }
           if (
             preferredIndex < 0
             || compareFocusedQueueItems(candidate, queue[preferredIndex]) < 0
@@ -6075,10 +6101,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         return;
       }
       await processRobotsSitemaps();
-      await processSitemap(`${origin}/sitemap.xml`);
-      for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
-        if (stopRequested) break;
-        await processSitemap(`${origin}${altSitemap}`);
+      if (!focusedRobotsSitemapSucceeded) {
+        await processSitemap(`${origin}/sitemap.xml`);
+        for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
+          if (stopRequested) break;
+          await processSitemap(`${origin}${altSitemap}`);
+        }
       }
     };
     focusedSitemapDiscoveryPending = scanScope.focused;
