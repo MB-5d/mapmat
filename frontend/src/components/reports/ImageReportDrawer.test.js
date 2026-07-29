@@ -34,16 +34,16 @@ describe('ImageReportDrawer', () => {
   const renderDrawer = (nextProps = {}) => {
     props = {
       isOpen: true,
-      onClose: jest.fn(),
+      onClose: vi.fn(),
       issues,
-      onSelectIssue: jest.fn(),
-      onOpenIssueUrl: jest.fn(),
+      onSelectIssue: vi.fn(),
+      onOpenIssueUrl: vi.fn(),
       selectedNodeIds: new Set(),
-      onSelectionChange: jest.fn(),
-      onCaptureSelectedThumbnails: jest.fn(),
-      onCaptureSelectedScreenshots: jest.fn(),
-      onRetryMissingThumbnails: jest.fn(),
-      onRetryMissingScreenshots: jest.fn(),
+      onSelectionChange: vi.fn(),
+      onCaptureSelectedThumbnails: vi.fn(),
+      onCaptureSelectedScreenshots: vi.fn(),
+      onRetryMissingThumbnails: vi.fn(),
+      onRetryMissingScreenshots: vi.fn(),
       reportTitle: 'QA Report',
       ...nextProps,
     };
@@ -79,7 +79,7 @@ describe('ImageReportDrawer', () => {
   });
 
   test('renders an empty state and closes from the header', () => {
-    const onClose = jest.fn();
+    const onClose = vi.fn();
     renderDrawer({ issues: [], onClose });
 
     expect(container.textContent).toContain('Image report - QA Report');
@@ -116,7 +116,7 @@ describe('ImageReportDrawer', () => {
   });
 
   test('selects rows, supports shift range selection, and selects all visible rows', () => {
-    const onSelectionChange = jest.fn();
+    const onSelectionChange = vi.fn();
     renderDrawer({ onSelectionChange });
 
     const handbookCheckbox = container.querySelector('input[aria-label="Select Handbook"]');
@@ -225,7 +225,7 @@ describe('ImageReportDrawer', () => {
     renderDrawer();
 
     const listShell = container.querySelector('.image-report-list-shell');
-    listShell.scrollTo = jest.fn();
+    listShell.scrollTo = vi.fn();
     listShell.scrollTop = 300;
 
     act(() => {

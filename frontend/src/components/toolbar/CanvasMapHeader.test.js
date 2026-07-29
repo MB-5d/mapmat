@@ -20,7 +20,7 @@ describe('CanvasMapHeader', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('uses the shared input primitive when editing the map name', () => {
@@ -30,10 +30,10 @@ describe('CanvasMapHeader', () => {
           canEdit
           mapName="Alpha Map"
           isEditingMapName
-          onMapNameChange={jest.fn()}
-          onMapNameBlur={jest.fn()}
-          onMapNameKeyDown={jest.fn()}
-          onMapNameClick={jest.fn()}
+          onMapNameChange={vi.fn()}
+          onMapNameBlur={vi.fn()}
+          onMapNameKeyDown={vi.fn()}
+          onMapNameClick={vi.fn()}
           collaborators={[]}
         />
       );

@@ -6,7 +6,6 @@ import './marketing/MarketingPreviewV2.css';
 import RootApp from './RootApp';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConsentProvider } from './contexts/ConsentContext';
-import reportWebVitals from './reportWebVitals';
 import { clearLegacyServiceWorkers } from './utils/legacyServiceWorkerCleanup';
 
 clearLegacyServiceWorkers();
@@ -21,8 +20,3 @@ root.render(
     </ErrorBoundary>
   </React.StrictMode>
 );
-
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();

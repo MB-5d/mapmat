@@ -21,12 +21,12 @@ describe('ScanProgressModal', () => {
     scanProgress: { scanned: 12, queued: 4 },
     scanElapsed: 95,
     urlInput: 'https://example.com',
-    onRequestCancel: jest.fn(),
-    onRequestStop: jest.fn(),
-    onStopScan: jest.fn(),
-    onCancelScan: jest.fn(),
-    onContinueScan: jest.fn(),
-    onDismissScanError: jest.fn(),
+    onRequestCancel: vi.fn(),
+    onRequestStop: vi.fn(),
+    onStopScan: vi.fn(),
+    onCancelScan: vi.fn(),
+    onContinueScan: vi.fn(),
+    onDismissScanError: vi.fn(),
   };
 
   beforeEach(() => {
@@ -42,7 +42,7 @@ describe('ScanProgressModal', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('shows cancel and stop actions while scanning', () => {
