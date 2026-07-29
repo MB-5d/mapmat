@@ -9,6 +9,10 @@ export const CAPTURE_ISSUE_TYPES = Object.freeze({
   missingAsset: 'missing_asset',
   imageLoad: 'image_load',
   lowResolution: 'low_resolution',
+  storage: 'storage_exhausted',
+  structural: 'structural',
+  httpError: 'http_error',
+  blocked: 'blocked',
 });
 
 export const CAPTURE_ISSUE_LABELS = Object.freeze({
@@ -20,10 +24,15 @@ export const CAPTURE_ISSUE_LABELS = Object.freeze({
   [CAPTURE_ISSUE_TYPES.missingAsset]: 'Missing saved asset',
   [CAPTURE_ISSUE_TYPES.imageLoad]: 'Image failed to load',
   [CAPTURE_ISSUE_TYPES.lowResolution]: 'Low-resolution full screenshot',
+  [CAPTURE_ISSUE_TYPES.storage]: 'Capture storage unavailable',
+  [CAPTURE_ISSUE_TYPES.structural]: 'Structural page skipped',
+  [CAPTURE_ISSUE_TYPES.httpError]: 'HTTP error page',
+  [CAPTURE_ISSUE_TYPES.blocked]: 'Blocked page',
 });
 
-export function classifyCaptureIssue({ status, error, node } = {}) {
-  const text = `${status || ''} ${error || ''}`.toLowerCase();
+export function classifyCaptureIssue({ status, code, reasonCode, error, node } = {}) {
+  const normalizedCode = String(code || reasonCode || '').toLowerCase();
+  const text = `${status || ''} ${normalizedCode} ${error || ''}`.toLowerCase();
   const orphanType = String(node?.orphanType || '').toLowerCase();
   const pageType = String(node?.pageType || node?.type || '').toLowerCase();
   const isRenderableText = isRenderableTextUrl(node?.url);
@@ -34,14 +43,28 @@ export function classifyCaptureIssue({ status, error, node } = {}) {
   ) {
     return CAPTURE_ISSUE_TYPES.file;
   }
-  if (status === 'blocked' || text.includes('requires login') || text.includes('requires authentication')) {
+  if (
+    normalizedCode === 'authentication'
+    || text.includes('requires login')
+    || text.includes('requires authentication')
+  ) {
     return CAPTURE_ISSUE_TYPES.auth;
   }
+  if (normalizedCode === 'structural') return CAPTURE_ISSUE_TYPES.structural;
+  if (normalizedCode === 'http_error') return CAPTURE_ISSUE_TYPES.httpError;
+  if (normalizedCode === 'blocked' || status === 'blocked') return CAPTURE_ISSUE_TYPES.blocked;
   if (status === 'missing_asset' || text.includes('missing asset') || text.includes('not found on the map')) {
     return CAPTURE_ISSUE_TYPES.missingAsset;
   }
   if (status === 'low_resolution' || text.includes('resolution')) {
     return CAPTURE_ISSUE_TYPES.lowResolution;
+  }
+  if (
+    status === 'storage_exhausted'
+    || text.includes('no space left on device')
+    || text.includes('storage is temporarily full')
+  ) {
+    return CAPTURE_ISSUE_TYPES.storage;
   }
   if (status === 'image_load' || text.includes('failed to load')) {
     return CAPTURE_ISSUE_TYPES.imageLoad;
@@ -77,6 +100,7 @@ export function normalizeCaptureIssue(issue = {}) {
     label: issue.label || CAPTURE_ISSUE_LABELS[type] || 'Capture issue',
     detail: issue.detail || issue.error || '',
     status: issue.status || '',
+    code: issue.code || issue.reasonCode || '',
   };
 }
 
@@ -87,6 +111,7 @@ export function buildCaptureIssueFromResult(result = {}, node = {}, pageNumber =
     title: node?.title,
     url: node?.url,
     status: result.status,
+    code: result.code || result.reasonCode,
     error: result.error,
     detail: result.error,
     node,
@@ -97,6 +122,7 @@ export function getReconciledCaptureProgress({
   total = 0,
   loadedIds,
   issueCount = 0,
+  unavailable = 0,
   saved,
   verified,
   captured,
@@ -109,7 +135,10 @@ export function getReconciledCaptureProgress({
     loaded,
     saved: savedCount,
     verified: verifiedCount,
-    completed: Math.min(total, savedCount + issueCount),
+    completed: Math.min(
+      total,
+      savedCount + issueCount + Math.max(0, Number(unavailable) || 0)
+    ),
   };
 }
 

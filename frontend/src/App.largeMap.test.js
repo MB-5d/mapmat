@@ -785,4 +785,47 @@ describe('deferred page capture', () => {
     expect(retry.capturedCount).toBe(0);
     expect(retry.root.children[0].children.filter((node) => node.url === replaced.url)).toHaveLength(1);
   });
+
+  test('removes terminal deferred pages instead of offering an endless retry', () => {
+    const placeholder = {
+      id: 'placeholder-blog',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'blog-group',
+      capturedCount: 10,
+      remainingCount: 2,
+      deferredEntries: [
+        { url: 'https://example.com/blog/post-11', scanNumber: '2.11', order: 10 },
+        { url: 'https://example.com/blog/post-12', scanNumber: '2.12', order: 11 },
+      ],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [{
+        id: 'blog',
+        url: 'https://example.com/blog',
+        children: [placeholder],
+      }],
+    };
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      placeholderNode: placeholder,
+      captureResult: {
+        root: { id: 'capture-root', url: 'https://example.com/', children: [] },
+        captureSummary: {
+          successfulEntries: [],
+          terminalEntries: [
+            { url: 'https://example.com/blog/post-11', status: 404, reason: 'http_error' },
+            { url: 'https://example.com/blog/post-12', status: 403, reason: 'blocked' },
+          ],
+        },
+      },
+    });
+
+    expect(applied.capturedCount).toBe(0);
+    expect(applied.terminalCount).toBe(2);
+    expect(applied.remainingCount).toBe(0);
+    expect(applied.root.children[0].children).toHaveLength(0);
+  });
 });

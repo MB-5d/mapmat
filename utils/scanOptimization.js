@@ -2,6 +2,10 @@ const crypto = require('crypto');
 
 const REPETITIVE_GROUP_THRESHOLD = 20;
 const REPETITIVE_GROUP_CAPTURE_LIMIT = 10;
+const NATURAL_SCAN_COLLATOR = new Intl.Collator('en', {
+  numeric: true,
+  sensitivity: 'base',
+});
 
 function normalizeScanUrl(raw) {
   try {
@@ -26,6 +30,52 @@ function getPathSegments(url) {
   } catch {
     return [];
   }
+}
+
+function compareNaturalScanUrls(left, right) {
+  const getComparable = (value) => {
+    try {
+      const parsed = new URL(value);
+      return `${decodeURIComponent(parsed.pathname)}${parsed.search}`;
+    } catch {
+      return String(value || '');
+    }
+  };
+  return NATURAL_SCAN_COLLATOR.compare(getComparable(left), getComparable(right));
+}
+
+function compareScanNumberStrings(leftValue, rightValue) {
+  const parse = (value) => String(value || '').trim().split('.').filter(Boolean).map((part) => {
+    if (/^\d+$/.test(part)) return { type: 'number', value: Number(part) };
+    if (/^X+$/i.test(part)) return { type: 'unknown', value: 0 };
+    return { type: 'text', value: part };
+  });
+  const left = parse(leftValue);
+  const right = parse(rightValue);
+  if (left.length === 0 || right.length === 0) return 0;
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = left[index];
+    const rightPart = right[index];
+    if (!leftPart || !rightPart) return left.length - right.length;
+    if (leftPart.type === 'unknown' && rightPart.type === 'unknown') continue;
+    if (leftPart.type === 'number' && rightPart.type === 'number') {
+      if (leftPart.value !== rightPart.value) return leftPart.value - rightPart.value;
+      continue;
+    }
+    if (leftPart.type !== rightPart.type) {
+      if (leftPart.type === 'number') return -1;
+      if (rightPart.type === 'number') return 1;
+      if (leftPart.type === 'unknown') return -1;
+      if (rightPart.type === 'unknown') return 1;
+    }
+    const difference = NATURAL_SCAN_COLLATOR.compare(
+      String(leftPart.value),
+      String(rightPart.value)
+    );
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 function getSiteRootUrl(url) {
@@ -218,28 +268,42 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
     }
     return getParentUrl(url);
   };
-  const addRecord = (rawUrl, order = Number.POSITIVE_INFINITY, exact = false) => {
+  const getOrderKey = (order, exact, sortKey = '') => {
+    const normalizedSortKey = String(sortKey || '').trim();
+    if (normalizedSortKey) return normalizedSortKey;
+    if (!exact || !Number.isFinite(order)) return '';
+    return `sitemap:${String(Math.max(0, Math.floor(order))).padStart(12, '0')}`;
+  };
+  const addRecord = (
+    rawUrl,
+    order = Number.POSITIVE_INFINITY,
+    exact = false,
+    sortKey = ''
+  ) => {
     const url = normalizeScanUrl(rawUrl);
     if (!url) return;
     const parsed = new URL(url);
     if (parsed.origin !== descriptor.origin) return;
+    const orderKey = getOrderKey(order, exact, sortKey);
     const current = records.get(url);
     if (!current) {
       records.set(url, {
         url,
-        order: Number.isFinite(order) ? order : Number.POSITIVE_INFINITY,
-        exact: Boolean(exact),
+        orderKey,
+        exact: Boolean(exact || orderKey),
       });
-    } else if (Number.isFinite(order)) {
-      current.order = Math.min(current.order, order);
-      current.exact = current.exact || Boolean(exact);
+    } else {
+      if (orderKey && (!current.orderKey || orderKey.localeCompare(current.orderKey) < 0)) {
+        current.orderKey = orderKey;
+      }
+      current.exact = current.exact || Boolean(exact || orderKey);
     }
     let parentUrl = getNumberingParentUrl(url);
     while (parentUrl) {
       if (!records.has(parentUrl)) {
         records.set(parentUrl, {
           url: parentUrl,
-          order: Number.POSITIVE_INFINITY,
+          orderKey: '',
           exact: false,
         });
       }
@@ -249,9 +313,19 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
 
   (Array.isArray(urlEntries) ? urlEntries : []).forEach((entry, index) => {
     if (typeof entry === 'string') addRecord(entry, index);
-    else addRecord(entry?.url, Number(entry?.order ?? index), entry?.exact === true);
+    else {
+      addRecord(
+        entry?.url,
+        Number(entry?.order ?? index),
+        entry?.exact === true,
+        entry?.sortKey
+      );
+    }
   });
-  getFocusedAncestorUrls(descriptor.seed).forEach((url) => addRecord(url));
+  const focusedAncestorUrls = getFocusedAncestorUrls(descriptor.seed)
+    .map(normalizeScanUrl)
+    .filter(Boolean);
+  focusedAncestorUrls.forEach((url) => addRecord(url));
   addRecord(descriptor.seed);
 
   const childrenByParent = new Map();
@@ -262,29 +336,41 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
     childrenByParent.get(parentUrl).push(record.url);
   });
 
-  const getMinimumOrder = (url, visiting = new Set()) => {
+  const getMinimumOrderKey = (url, visiting = new Set()) => {
     const record = records.get(url);
-    if (!record || visiting.has(url)) return Number.POSITIVE_INFINITY;
-    if (Number.isFinite(record.minimumOrder)) return record.minimumOrder;
+    if (!record || visiting.has(url)) return '';
+    if (record.minimumOrderResolved) return record.minimumOrderKey;
     visiting.add(url);
-    let minimum = record.order;
+    let minimum = record.orderKey || '';
     (childrenByParent.get(url) || []).forEach((childUrl) => {
-      minimum = Math.min(minimum, getMinimumOrder(childUrl, visiting));
+      const childMinimum = getMinimumOrderKey(childUrl, visiting);
+      if (childMinimum && (!minimum || childMinimum.localeCompare(minimum) < 0)) {
+        minimum = childMinimum;
+      }
     });
     visiting.delete(url);
-    record.minimumOrder = minimum;
+    record.minimumOrderKey = minimum;
+    record.minimumOrderResolved = true;
     return minimum;
   };
 
   childrenByParent.forEach((children) => {
     children.sort((left, right) => {
-      const orderDifference = getMinimumOrder(left) - getMinimumOrder(right);
-      if (Number.isFinite(orderDifference) && orderDifference !== 0) return orderDifference;
-      return left.localeCompare(right);
+      const leftOrder = getMinimumOrderKey(left);
+      const rightOrder = getMinimumOrderKey(right);
+      if (leftOrder && rightOrder && leftOrder !== rightOrder) {
+        return leftOrder.localeCompare(rightOrder);
+      }
+      if (leftOrder && !rightOrder) return -1;
+      if (!leftOrder && rightOrder) return 1;
+      return compareNaturalScanUrls(left, right);
     });
   });
 
   const numbers = new Map([[descriptor.siteRootUrl, '0']]);
+  const focusedAncestorParentSet = new Set(
+    focusedAncestorUrls.filter((url) => url !== descriptor.siteRootUrl)
+  );
   const visit = (parentUrl, parentNumber) => {
     const children = childrenByParent.get(parentUrl) || [];
     const hasCompleteOrder = completeParents.has(parentUrl)
@@ -295,6 +381,7 @@ function buildPreservedNumberMap(urlEntries, startUrl, {
       || parentPath.startsWith(`${descriptor.focusPath}/`);
     const hasKnownLocalOrder = hasCompleteOrder
       || knownParents.has(parentUrl)
+      || focusedAncestorParentSet.has(parentUrl)
       || isKnownFocusedParent;
     const unknownSegment = children.length >= 10 ? 'XX' : 'X';
     children.forEach((childUrl, index) => {
@@ -324,6 +411,8 @@ module.exports = {
   REPETITIVE_GROUP_THRESHOLD,
   buildPreservedNumberMap,
   buildRepetitiveGroups,
+  compareNaturalScanUrls,
+  compareScanNumberStrings,
   createFocusedScanDescriptor,
   getFocusedAncestorUrls,
   getParentUrl,

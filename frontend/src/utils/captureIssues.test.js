@@ -78,6 +78,39 @@ describe('captureIssues', () => {
       label: 'Image failed to load',
       type: CAPTURE_ISSUE_TYPES.imageLoad,
     });
+
+    expect(buildCaptureIssueFromResult(
+      {
+        nodeId: 'n8',
+        status: 'storage_exhausted',
+        error: 'Screenshot storage is temporarily full.',
+      },
+      { id: 'n8', title: 'Storage failure', url: 'https://example.com/page' },
+      '88'
+    )).toMatchObject({
+      label: 'Capture storage unavailable',
+      type: CAPTURE_ISSUE_TYPES.storage,
+    });
+
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n9', status: 'not_eligible', code: 'structural', error: 'Structural page' },
+      { id: 'n9', title: 'Context', url: 'https://example.com/section' },
+      'X'
+    )).toMatchObject({
+      label: 'Structural page skipped',
+      type: CAPTURE_ISSUE_TYPES.structural,
+      code: 'structural',
+    });
+
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n10', status: 'not_eligible', code: 'http_error', error: 'HTTP 404' },
+      { id: 'n10', title: 'Missing', url: 'https://example.com/missing', httpStatus: 404 },
+      '10'
+    )).toMatchObject({
+      label: 'HTTP error page',
+      type: CAPTURE_ISSUE_TYPES.httpError,
+      code: 'http_error',
+    });
   });
 
   test('reconciled progress never exceeds loaded images plus issues', () => {
@@ -90,6 +123,17 @@ describe('captureIssues', () => {
     expect(progress.loaded).toBe(3);
     expect(progress.completed).toBe(5);
     expect(progress.total).toBe(918);
+  });
+
+  test('reconciles storage-unavailable pages without waiting for doomed retries', () => {
+    const progress = getReconciledCaptureProgress({
+      total: 100,
+      saved: 4,
+      issueCount: 1,
+      unavailable: 95,
+    });
+
+    expect(progress.completed).toBe(100);
   });
 
   test('keeps progress visible until saved assets and issues cover the job total', () => {

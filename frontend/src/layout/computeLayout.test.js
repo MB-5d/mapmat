@@ -113,6 +113,22 @@ describe('computeLayout orientation', () => {
     expect(layout.nodes.get('target').number).not.toBe('0');
   });
 
+  test('lays out unknown-prefix siblings in their numeric suffix order', () => {
+    const focused = {
+      id: 'root',
+      scanNumber: '0',
+      children: [
+        { id: 'ten', scanNumber: 'XX.10', children: [] },
+        { id: 'two', scanNumber: 'XX.2', children: [] },
+        { id: 'one', scanNumber: 'XX.1', children: [] },
+      ],
+    };
+
+    const layout = computeLayout(focused, [], false);
+    expect(layout.nodes.get('one').x).toBeLessThan(layout.nodes.get('two').x);
+    expect(layout.nodes.get('two').x).toBeLessThan(layout.nodes.get('ten').x);
+  });
+
   test('keeps deferred pages inside the existing stack count', () => {
     const posts = Array.from({ length: 10 }, (_, index) => ({
       id: `post-${index + 1}`,

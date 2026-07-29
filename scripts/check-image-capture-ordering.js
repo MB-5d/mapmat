@@ -8,6 +8,7 @@ const {
   buildImageCaptureStages,
   getImageCaptureScaleTier,
   getImageCaptureStageSize,
+  getImageCaptureEligibility,
 } = require('../utils/imageCapturePlan');
 
 function node(id, children = [], extra = {}) {
@@ -115,5 +116,23 @@ const fullStages = buildImageCaptureStages(makeRecords(800), 'full');
 assert.strictEqual(fullStages.length, 8, '800 full screenshots should plan 8 stages');
 assert.strictEqual(fullStages[0].records.length, 100, 'first full screenshot stage size mismatch');
 assert.strictEqual(fullStages[7].records.length, 100, 'last full screenshot stage size mismatch');
+
+assert.strictEqual(getImageCaptureEligibility(node('eligible', [], { httpStatus: 200 })).eligible, true);
+assert.strictEqual(
+  getImageCaptureEligibility(node('virtual', [], { isVirtualMissing: true })).code,
+  'structural'
+);
+assert.strictEqual(
+  getImageCaptureEligibility(node('http-error', [], { httpStatus: 404 })).code,
+  'http_error'
+);
+assert.strictEqual(
+  getImageCaptureEligibility(node('untyped-error', [], { isError: true })).code,
+  'http_error'
+);
+assert.strictEqual(
+  getImageCaptureEligibility(node('blocked', [], { isBlocked: true })).code,
+  'blocked'
+);
 
 console.log(`image capture ordering ok: ${records.length} records, ${phases.length} phases, ${thumbStages.length} large thumbnail stages`);

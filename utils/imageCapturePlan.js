@@ -21,6 +21,16 @@ const IMAGE_CAPTURE_STAGE_SIZES = Object.freeze({
   full: 100,
 });
 
+const IMAGE_CAPTURE_INELIGIBILITY_CODES = Object.freeze({
+  structural: 'structural',
+  entitlementLocked: 'entitlement_locked',
+  authentication: 'authentication',
+  blocked: 'blocked',
+  httpError: 'http_error',
+  unreachable: 'unreachable',
+  invalidUrl: 'invalid_url',
+});
+
 const IMAGE_CAPTURE_SCALE_LIMITS = Object.freeze({
   thumb: Object.freeze({
     smallMax: 250,
@@ -39,6 +49,93 @@ function normalizeId(value) {
 
 function normalizeCaptureType(value) {
   return String(value || '').trim().toLowerCase() === 'full' ? 'full' : 'thumb';
+}
+
+function getImageCaptureEligibility(node) {
+  const nodeKind = String(node?.nodeKind || '').trim().toLowerCase();
+  if (
+    !node
+    || ['import-container', 'import-ghost', 'source-group', 'focus-ghost', 'deferred-group'].includes(nodeKind)
+    || node.isFocusAncestor
+    || node.isVirtualMissing
+    || node.isMissing
+  ) {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.structural,
+      reason: 'Structural page',
+    };
+  }
+  if (node.isEntitlementLocked || node.entitlementLocked) {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.entitlementLocked,
+      reason: 'Locked page',
+    };
+  }
+  if (node.authRequired) {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.authentication,
+      reason: 'Requires login',
+    };
+  }
+  if (
+    node.isBlocked
+    || node.isChallengePage
+    || node.isBlockedBoundary
+    || ['scan_limited', 'blocked', 'auth'].includes(String(node.scanStatus || '').toLowerCase())
+  ) {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.blocked,
+      reason: 'Blocked page',
+    };
+  }
+  const rawStatus = node.httpStatus ?? node.statusCode ?? node.errorStatus;
+  const status = rawStatus === null || rawStatus === undefined || rawStatus === ''
+    ? null
+    : Number(rawStatus);
+  if (Number.isFinite(status) && status >= 400) {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.httpError,
+      reason: `HTTP ${status}`,
+    };
+  }
+  if (node.isError || node.isBroken || node.isViewableError) {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.httpError,
+      reason: 'HTTP error page',
+    };
+  }
+  if (
+    node.isInactive
+    || ['inactive', 'unreachable', 'failed'].includes(String(node.scanStatus || '').toLowerCase())
+    || (Number.isFinite(status) && status === 0)
+  ) {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.unreachable,
+      reason: 'Unreachable page',
+    };
+  }
+  try {
+    const parsed = new URL(String(node.url || '').trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Invalid protocol');
+  } catch {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.invalidUrl,
+      reason: 'Invalid URL',
+    };
+  }
+  return {
+    eligible: true,
+    code: '',
+    reason: '',
+  };
 }
 
 function getImageCaptureScaleTier(captureType, count) {
@@ -209,6 +306,7 @@ function buildImageCaptureStages(records, captureType = 'thumb') {
 
 module.exports = {
   TREE_TYPES,
+  IMAGE_CAPTURE_INELIGIBILITY_CODES,
   IMAGE_CAPTURE_SCALE_TIERS,
   IMAGE_CAPTURE_STAGE_SIZES,
   collectImageCaptureRecords,
@@ -217,5 +315,6 @@ module.exports = {
   compareCaptureRecords,
   getImageCaptureScaleTier,
   getImageCaptureStageSize,
+  getImageCaptureEligibility,
   normalizeCaptureType,
 };

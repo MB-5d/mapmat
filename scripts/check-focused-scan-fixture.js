@@ -73,6 +73,11 @@ function createFixtureServer() {
       return;
     }
     if (postMatch) {
+      if (postMatch[1] === '21') {
+        res.writeHead(404, { 'content-type': 'text/html' });
+        res.end('<html><head><title>Post unavailable</title></head><body>Unavailable</body></html>');
+        return;
+      }
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>Post ${postMatch[1]}</title><meta property="og:type" content="article"></head><body><article><h1>Post ${postMatch[1]}</h1></article></body></html>`);
       return;
@@ -149,7 +154,7 @@ function createFixtureServer() {
     }
     if (url.pathname === '/section/editorial') {
       const articleLinks = Array.from({ length: 25 }, (_, index) => (
-        `<article><h2><a href="/section/editorial/articles/article-${index + 1}">Article ${index + 1}</a></h2></article>`
+        `<article><a href="/section/unrelated">Unrelated category</a><h2><a href="/section/editorial/articles/article-${index + 1}">Article ${index + 1}</a></h2></article>`
       )).join('');
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>Editorial</title></head><body><nav><a href="/pricing">Pricing</a><a href="/stories/off-path">Off path</a></nav><main>${articleLinks}</main></body></html>`);
@@ -158,6 +163,11 @@ function createFixtureServer() {
     if (url.pathname === '/section/editorial/articles') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end('<html><head><title>Editorial articles</title></head><body><h1>Articles</h1></body></html>');
+      return;
+    }
+    if (url.pathname === '/section/unrelated') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Unrelated category</title></head><body><h1>Unrelated</h1></body></html>');
       return;
     }
     if (/^\/section\/editorial\/articles\/article-\d+$/.test(url.pathname)) {
@@ -384,7 +394,10 @@ async function main() {
       authToken
     );
     assert.equal(captureResult.captureSummary.groupId, placeholder.deferredGroupId);
-    assert.equal(captureResult.captureSummary.capturedCount, 11);
+    assert.equal(captureResult.captureSummary.capturedCount, 10);
+    assert.equal(captureResult.captureSummary.terminalCount, 1);
+    assert.equal(captureResult.captureSummary.terminalEntries[0].url, `${fixtureOrigin}/blog/post-21`);
+    assert.equal(captureResult.captureSummary.terminalEntries[0].status, 404);
     assert.equal(captureResult.captureSummary.remainingEntries.length, 0);
 
     const limitedResult = await createScan({
@@ -459,8 +472,9 @@ async function main() {
     const issueNodes = flattenTree(issueResult.root);
     const unavailableAncestor = issueNodes.find((node) => node.url === `${fixtureOrigin}/archive`);
     assert.equal(unavailableAncestor.nodeKind, 'focus-ghost');
-    assert.equal(unavailableAncestor.httpStatus, 503);
-    assert.equal(unavailableAncestor.isError, true);
+    assert.equal(unavailableAncestor.httpStatus, null);
+    assert.equal(unavailableAncestor.isError, false);
+    assert.equal(unavailableAncestor.scanStatus, 'structural');
     assert.equal(unavailableAncestor.isMissing, false);
     assert.equal(
       issueNodes.some((node) => node.url === `${fixtureOrigin}/archive/story`),
@@ -543,6 +557,7 @@ async function main() {
       'focused pagination should retain captured and deferred page totals'
     );
 
+    // NYT-style dated article hierarchy discovered from month listing pages.
     const archiveResult = await createScan({
       url: `${fixtureOrigin}/section/archive-months`,
       maxPages: 100,
@@ -577,10 +592,16 @@ async function main() {
       'known local date/article positions should remain numeric after the unknown full-site prefix'
     );
     assert.ok(
-      archiveNodes.some((node) => node.url === `${fixtureOrigin}/2026` && node.isVirtualMissing),
-      'off-path focused content should retain its normalized URL ancestor chain'
+      archiveNodes.some((node) => (
+        node.url === `${fixtureOrigin}/2026`
+        && node.nodeKind === 'focus-ghost'
+        && !node.isVirtualMissing
+        && !node.isMissing
+      )),
+      'off-path focused content should retain a structural URL ancestor chain without Missing findings'
     );
 
+    // NPR-style editorial cards with category crosslinks beside primary story links.
     const editorialResult = await createScan({
       url: `${fixtureOrigin}/section/editorial`,
       maxPages: 100,
@@ -600,6 +621,11 @@ async function main() {
       false,
       'crosslinks outside the focused URL path must not become structural children'
     );
+    assert.equal(
+      editorialNodes.some((node) => node.url === `${fixtureOrigin}/section/unrelated`),
+      false,
+      'category metadata links inside content cards must not become focused pages'
+    );
     const editorialArticlesParent = editorialNodes.find(
       (node) => node.url === `${fixtureOrigin}/section/editorial/articles`
     );
@@ -618,6 +644,33 @@ async function main() {
     );
     assert.equal(editorialResult.pageCountSummary.totalDiscoveredPageCount, 27);
 
+    const repeatedEditorialResult = await createScan({
+      url: `${fixtureOrigin}/section/editorial`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const getNumberingSnapshot = (scanResult) => flattenTree(scanResult.root).map((node) => ({
+      url: node.url || '',
+      scanNumber: node.scanNumber || '',
+      children: (node.children || []).map((child) => child.url || child.nodeKind || ''),
+    }));
+    assert.deepEqual(
+      getNumberingSnapshot(repeatedEditorialResult),
+      getNumberingSnapshot(editorialResult),
+      'repeated NPR-style scans should produce identical numbering and child order'
+    );
+    const repeatedArchiveResult = await createScan({
+      url: `${fixtureOrigin}/section/archive-months`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    assert.deepEqual(
+      getNumberingSnapshot(repeatedArchiveResult),
+      getNumberingSnapshot(archiveResult),
+      'repeated NYT-style dated scans should produce identical numbering and child order'
+    );
+
+    // Apple-style newsroom archive with a dated category parent required by a captured detail page.
     const catalogResult = await createScan({
       url: `${fixtureOrigin}/section/catalog`,
       maxPages: 100,
@@ -640,6 +693,16 @@ async function main() {
     assert.equal(catalogPlaceholder?.capturedCount, 11);
     assert.equal(catalogPlaceholder?.remainingCount, 10);
     assert.equal(catalogResult.scanDiagnostics?.promotedDeferredAncestorCount, 1);
+    const repeatedCatalogResult = await createScan({
+      url: `${fixtureOrigin}/section/catalog`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    assert.deepEqual(
+      getNumberingSnapshot(repeatedCatalogResult),
+      getNumberingSnapshot(catalogResult),
+      'repeated Apple-style archive scans should produce identical numbering and child order'
+    );
 
     const mixedResult = await createScan({
       url: `${fixtureOrigin}/section/mixed`,

@@ -1,5 +1,11 @@
 import { computeLayout } from '../layout/computeLayout';
-import { countPageNodes, isPageNode, shouldStackChildren } from './treeUtils';
+import {
+  compareScanNumberStrings,
+  countPageNodes,
+  isImageCaptureEligibleNode,
+  isPageNode,
+  shouldStackChildren,
+} from './treeUtils';
 import { STACK_THRESHOLD } from './constants';
 
 const makeNode = (id, overrides = {}) => ({
@@ -105,5 +111,19 @@ describe('page node contract', () => {
 
     expect(isPageNode(root.children[1])).toBe(true);
     expect(countPageNodes(root)).toBe(2);
+  });
+
+  test('excludes structural, blocked, and HTTP error nodes from image capture', () => {
+    expect(isImageCaptureEligibleNode(makeNode('ok', { httpStatus: 200 }))).toBe(true);
+    expect(isImageCaptureEligibleNode(makeNode('virtual', { isVirtualMissing: true }))).toBe(false);
+    expect(isImageCaptureEligibleNode(makeNode('ghost', { nodeKind: 'focus-ghost' }))).toBe(false);
+    expect(isImageCaptureEligibleNode(makeNode('blocked', { isBlocked: true }))).toBe(false);
+    expect(isImageCaptureEligibleNode(makeNode('error', { httpStatus: 404 }))).toBe(false);
+    expect(isImageCaptureEligibleNode(makeNode('untyped-error', { isError: true }))).toBe(false);
+  });
+
+  test('compares numeric suffixes after unknown focused prefixes', () => {
+    expect(compareScanNumberStrings('XX.4.3.5', 'XX.4.3.10')).toBeLessThan(0);
+    expect(compareScanNumberStrings('X.1.2', 'XX.1.10')).toBeLessThan(0);
   });
 });

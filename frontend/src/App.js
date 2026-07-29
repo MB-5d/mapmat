@@ -120,6 +120,7 @@ import {
   findNodeById,
   findParent,
   isCapturedPageNode,
+  isImageCaptureEligibleNode,
   isPageNode,
   isDescendantOf,
   shouldStackChildren,
@@ -3122,14 +3123,28 @@ const mergeRescanResults = ({
 
 const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNode }) => {
   if (!existingRoot || !captureResult?.root || !placeholderNode?.deferredGroupId) {
-    return { root: existingRoot, capturedCount: 0, remainingCount: placeholderNode?.remainingCount || 0 };
+    return {
+      root: existingRoot,
+      capturedCount: 0,
+      terminalCount: 0,
+      remainingCount: placeholderNode?.remainingCount || 0,
+    };
   }
   const successfulEntries = Array.isArray(captureResult.captureSummary?.successfulEntries)
     ? captureResult.captureSummary.successfulEntries
     : [];
+  const terminalEntries = Array.isArray(captureResult.captureSummary?.terminalEntries)
+    ? captureResult.captureSummary.terminalEntries
+    : [];
   const successfulUrls = new Set(successfulEntries.map((entry) => normalizeUrlForCompare(entry?.url)).filter(Boolean));
-  if (successfulUrls.size === 0) {
-    return { root: existingRoot, capturedCount: 0, remainingCount: placeholderNode?.remainingCount || 0 };
+  const terminalUrls = new Set(terminalEntries.map((entry) => normalizeUrlForCompare(entry?.url)).filter(Boolean));
+  if (successfulUrls.size === 0 && terminalUrls.size === 0) {
+    return {
+      root: existingRoot,
+      capturedCount: 0,
+      terminalCount: 0,
+      remainingCount: placeholderNode?.remainingCount || 0,
+    };
   }
 
   const capturedNodesByUrl = new Map();
@@ -3184,6 +3199,7 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
       .filter(Boolean)
   );
   let remainingCount = Math.max(0, Number(placeholderNode.remainingCount || 0) || 0);
+  let terminalCount = 0;
 
   const updateParent = (parent) => {
     if (!Array.isArray(parent?.children)) return false;
@@ -3211,7 +3227,11 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
       });
       const remainingEntries = originalEntries.filter((entry) => (
         !successfulUrls.has(normalizeUrlForCompare(entry?.url))
+        && !terminalUrls.has(normalizeUrlForCompare(entry?.url))
       ));
+      terminalCount += originalEntries.filter((entry) => (
+        terminalUrls.has(normalizeUrlForCompare(entry?.url))
+      )).length;
       remainingCount = remainingEntries.length;
       const nextChildren = [
         ...parent.children.slice(0, placeholderIndex),
@@ -3234,18 +3254,26 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
   };
 
   updateParent(rootWithCapturedAncestors);
-  return { root: rootWithCapturedAncestors, capturedCount, remainingCount };
+  return {
+    root: rootWithCapturedAncestors,
+    capturedCount,
+    terminalCount,
+    remainingCount,
+  };
 };
 
 const reconcileDeferredCaptureScanMeta = ({
   current,
   groupId,
   capturedCount,
+  removedCount = 0,
   remainingCount,
   visiblePageCount,
 }) => {
   const currentSummary = current?.pageCountSummary || {};
   const normalizedCapturedCount = Math.max(0, Number(capturedCount || 0) || 0);
+  const normalizedRemovedCount = Math.max(0, Number(removedCount || 0) || 0);
+  const normalizedResolvedCount = normalizedCapturedCount + normalizedRemovedCount;
   const normalizedRemainingCount = Math.max(0, Number(remainingCount || 0) || 0);
   const normalizedVisiblePageCount = Math.max(0, Number(visiblePageCount || 0) || 0);
   const entitlementVisibleLimit = getReportEntitlementVisibleLimit(current);
@@ -3261,7 +3289,7 @@ const reconcileDeferredCaptureScanMeta = ({
         totalCount: Math.max(0, Number(group.totalCount || 0) || 0),
       }
       : group
-  ));
+  )).filter((group) => Math.max(0, Number(group?.deferredCount || 0) || 0) > 0);
 
   return {
     ...current,
@@ -3277,11 +3305,11 @@ const reconcileDeferredCaptureScanMeta = ({
         + normalizedCapturedCount,
       deferredPageCount: Math.max(
         0,
-        Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0) - normalizedCapturedCount
+        Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0) - normalizedResolvedCount
       ),
       estimatedRemainingPageCount: Math.max(
         0,
-        Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0) - normalizedCapturedCount
+        Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0) - normalizedResolvedCount
       ),
       totalDiscoveredPageCount: Math.max(
         Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0),
@@ -10181,7 +10209,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           ...(cachedNode || visibleNode || {}),
           url: cachedNode?.url || visibleNode?.url || '',
         };
-      }).filter(isPageNode);
+      }).filter(isImageCaptureEligibleNode);
       return {
         targetIds: new Set(candidates.map((node) => node.id)),
         candidates,
@@ -10196,7 +10224,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => baseIds.has(node.id))
       : allNodes;
-    const targetNodes = scopedNodes.filter(isPageNode);
+    const targetNodes = scopedNodes.filter(isImageCaptureEligibleNode);
     const orderedTargets = orderThumbnailNodes(targetNodes);
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
@@ -10369,6 +10397,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       captured: Number(payload.captured || savedCount),
       loadedIds: thumbnailLoadedRef.current,
       issueCount,
+      unavailable: Number(payload.unavailable || 0),
     });
     const completed = progress.completed;
     const elapsed = Number(payload.elapsedMs || (thumbnailElapsedStartRef.current ? Date.now() - thumbnailElapsedStartRef.current : 0));
@@ -11035,7 +11064,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => scopedIds.has(node.id))
       : allNodes;
-    const orderedTargets = orderThumbnailNodes(scopedNodes.filter(isPageNode));
+    const orderedTargets = orderThumbnailNodes(scopedNodes.filter(isImageCaptureEligibleNode));
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
     let candidates = [];
@@ -13887,7 +13916,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         captureResult: completedJob.result,
         placeholderNode,
       });
-      if (applied.capturedCount <= 0) {
+      if (applied.capturedCount <= 0 && applied.terminalCount <= 0) {
         showToast('No additional pages could be captured. You can retry this group.', 'warning');
         return;
       }
@@ -13900,6 +13929,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         current,
         groupId,
         capturedCount: applied.capturedCount,
+        removedCount: applied.terminalCount,
         remainingCount: applied.remainingCount,
         visiblePageCount,
       }));
@@ -13913,10 +13943,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       setLastScanAt(new Date().toISOString());
       setLargeMapSceneRefreshKey((value) => value + 1);
       showToast(
-        applied.remainingCount > 0
-          ? `Captured ${applied.capturedCount.toLocaleString()} pages. ${applied.remainingCount.toLocaleString()} can be retried.`
-          : `Captured ${applied.capturedCount.toLocaleString()} pages.`,
-        applied.remainingCount > 0 ? 'warning' : 'success'
+        applied.capturedCount > 0
+          ? (
+            applied.remainingCount > 0
+              ? `Captured ${applied.capturedCount.toLocaleString()} pages. ${applied.remainingCount.toLocaleString()} can be retried.`
+              : `Captured ${applied.capturedCount.toLocaleString()} pages.`
+          )
+          : `${applied.terminalCount.toLocaleString()} unavailable pages were removed from this group.`,
+        applied.remainingCount > 0 || applied.capturedCount === 0 ? 'warning' : 'success'
       );
       refreshCurrentUser();
     } catch (error) {

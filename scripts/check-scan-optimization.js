@@ -2,6 +2,8 @@ const assert = require('assert');
 const {
   buildPreservedNumberMap,
   buildRepetitiveGroups,
+  compareNaturalScanUrls,
+  compareScanNumberStrings,
   createFocusedScanDescriptor,
   getFocusedAncestorUrls,
   isUrlWithinFocusedPath,
@@ -74,8 +76,8 @@ const unknownNumbers = buildPreservedNumberMap([
   { url: 'https://example.com/blog/post-1/comments', order: 20 },
 ], 'https://example.com/blog/post-1');
 assert.equal(unknownNumbers.get('https://example.com/blog'), 'X');
-assert.equal(unknownNumbers.get('https://example.com/blog/post-1'), 'X.XX');
-assert.equal(unknownNumbers.get('https://example.com/blog/post-1/comments'), 'X.XX.1');
+assert.equal(unknownNumbers.get('https://example.com/blog/post-1'), 'X.1');
+assert.equal(unknownNumbers.get('https://example.com/blog/post-1/comments'), 'X.1.1');
 
 const offPathNumbers = buildPreservedNumberMap([
   { url: 'https://example.com/section/art-design', order: 0 },
@@ -89,6 +91,29 @@ const offPathNumbers = buildPreservedNumberMap([
 assert.equal(offPathNumbers.get('https://example.com/2026'), 'X');
 assert.equal(offPathNumbers.get('https://example.com/2026/07'), 'X.1');
 assert.equal(offPathNumbers.get('https://example.com/2026/07/story'), 'X.1.1');
+
+const stableEntries = [
+  { url: 'https://example.com/news/10', order: 99 },
+  { url: 'https://example.com/news/2', order: 0 },
+  { url: 'https://example.com/news/1', order: 50 },
+];
+const stableNumbers = buildPreservedNumberMap(
+  stableEntries,
+  'https://example.com/news'
+);
+const shuffledStableNumbers = buildPreservedNumberMap(
+  [...stableEntries].reverse(),
+  'https://example.com/news'
+);
+assert.equal(stableNumbers.get('https://example.com/news/1'), 'X.1');
+assert.equal(stableNumbers.get('https://example.com/news/2'), 'X.2');
+assert.equal(stableNumbers.get('https://example.com/news/10'), 'X.3');
+assert.deepEqual(
+  Array.from(stableNumbers.entries()),
+  Array.from(shuffledStableNumbers.entries())
+);
+assert.equal(compareNaturalScanUrls('https://example.com/03', 'https://example.com/10') < 0, true);
+assert.equal(compareScanNumberStrings('XX.4.3.5', 'XX.4.3.10') < 0, true);
 
 const twentyUrls = Array.from({ length: 20 }, (_, index) => `https://example.com/threshold/item-${index + 1}`);
 assert.equal(buildRepetitiveGroups(twentyUrls).length, 0);

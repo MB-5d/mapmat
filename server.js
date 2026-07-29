@@ -71,6 +71,7 @@ const {
   REPETITIVE_GROUP_CAPTURE_LIMIT,
   REPETITIVE_GROUP_THRESHOLD,
   buildPreservedNumberMap,
+  compareScanNumberStrings,
   createFocusedScanDescriptor,
   getFocusedAncestorUrls,
   getRepetitiveGroupDescriptor,
@@ -83,6 +84,7 @@ const {
   collectImageCaptureRecords,
   buildImageCapturePhases,
   buildImageCaptureStages,
+  getImageCaptureEligibility,
   getImageCaptureScaleTier,
   getImageCaptureStageSize,
 } = require('./utils/imageCapturePlan');
@@ -100,6 +102,11 @@ const {
   saveScreenshotObject,
   statScreenshotObject,
 } = require('./utils/screenshotStorage');
+const {
+  createScreenshotWorkspace,
+  normalizeScreenshotStorageError,
+  removeScreenshotWorkspace,
+} = require('./utils/screenshotWorkspace');
 const {
   ACTIVITY_SCOPES,
   ACTIVITY_TYPES,
@@ -2287,6 +2294,14 @@ function isRenderableTextContentType(contentType) {
 }
 
 function getImageCaptureSkipReason(node) {
+  const eligibility = getImageCaptureEligibility(node);
+  if (!eligibility.eligible) {
+    return {
+      status: 'not_eligible',
+      code: eligibility.code,
+      reason: eligibility.reason,
+    };
+  }
   const orphanType = String(node?.orphanType || '').toLowerCase();
   const pageType = String(node?.pageType || node?.type || '').toLowerCase();
   const extension = getUrlExtension(node?.url);
@@ -2305,6 +2320,7 @@ function getImageCaptureSkipReason(node) {
   ) {
     return {
       status: 'skipped',
+      code: 'file',
       reason: extension ? `${extension.toUpperCase()} file` : 'File link',
     };
   }
@@ -2414,6 +2430,7 @@ async function buildImageCaptureTargets({
 
   let cached = 0;
   let unavailable = 0;
+  const excludedRecords = [];
   const skippedRecords = [];
   const captureRecords = [];
   const recaptureCapturedOnly = targetMode === IMAGE_CAPTURE_TARGET_MODES.captured;
@@ -2427,6 +2444,10 @@ async function buildImageCaptureTargets({
     }
     const skipReason = getImageCaptureSkipReason(record.node);
     if (skipReason) {
+      if (skipReason.status === 'not_eligible') {
+        excludedRecords.push({ ...record, skipReason });
+        continue;
+      }
       if (recaptureCapturedOnly) {
         continue;
       }
@@ -2448,11 +2469,22 @@ async function buildImageCaptureTargets({
     captureRecords.push(record);
   }
 
+  const excludedNodeIds = new Set(excludedRecords.map((record) => record.nodeId));
+  const eligibleScopedRecords = targetScopedRecords.filter(
+    (record) => !excludedNodeIds.has(record.nodeId)
+  );
+  const excludedReasons = excludedRecords.reduce((counts, record) => {
+    const code = record.skipReason?.code || 'not_eligible';
+    counts[code] = (counts[code] || 0) + 1;
+    return counts;
+  }, {});
   return {
     records,
-    scopedRecords: targetScopedRecords,
+    scopedRecords: eligibleScopedRecords,
     captureRecords,
     skippedRecords,
+    excludedRecords,
+    excludedReasons,
     workRecords: [...captureRecords, ...skippedRecords].sort(compareImageCaptureWorkRecords),
     phases: buildImageCapturePhases(captureRecords),
     cached,
@@ -2562,6 +2594,14 @@ async function runImageCaptureJob(jobId, payload) {
     stageSize,
     total: targetPlan.scopedRecords.length,
     eligibleTotal: targetPlan.scopedRecords.length,
+    excluded: targetPlan.excludedRecords.length,
+    excludedReasons: targetPlan.excludedReasons,
+    exclusions: targetPlan.excludedRecords.slice(0, IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT).map((record) => ({
+      nodeId: record.nodeId,
+      status: 'not_eligible',
+      code: record.skipReason?.code || 'not_eligible',
+      error: record.skipReason?.reason || 'Page is not eligible for capture',
+    })),
     cached: targetPlan.cached,
     unavailable: targetPlan.unavailable,
     completed: targetPlan.cached + targetPlan.unavailable,
@@ -2712,6 +2752,7 @@ async function runImageCaptureJob(jobId, payload) {
       result: {
         nodeId: record.nodeId,
         status,
+        code: record.skipReason?.code || 'skipped',
         error: reason,
       },
     });
@@ -2737,8 +2778,22 @@ async function runImageCaptureJob(jobId, payload) {
     };
   };
 
-  const getNonRecoverableCaptureFailure = (message) => {
-    const text = String(message || '').toLowerCase();
+  const getNonRecoverableCaptureFailure = (error) => {
+    const message = error?.message || String(error || '');
+    const code = String(error?.code || '').toLowerCase();
+    const text = message.toLowerCase();
+    if (
+      code === 'storage_exhausted'
+      || code === 'enospc'
+      || text.includes('no space left on device')
+      || text.includes('screenshot storage is temporarily full')
+    ) {
+      return {
+        status: 'storage_exhausted',
+        code: 'storage_exhausted',
+        error: 'Screenshot storage is temporarily full. Please retry after the worker recovers.',
+      };
+    }
     if (
       text.includes('invalid url')
       || text.includes('invalid url protocol')
@@ -2746,6 +2801,7 @@ async function runImageCaptureJob(jobId, payload) {
     ) {
       return {
         status: 'skipped',
+        code: 'invalid_url',
         error: message || 'URL unavailable',
       };
     }
@@ -2797,7 +2853,7 @@ async function runImageCaptureJob(jobId, payload) {
       return { status: 'saved', retryable: false };
     } catch (error) {
       const message = error?.message || 'Image capture failed';
-      const nonRecoverable = getNonRecoverableCaptureFailure(message);
+      const nonRecoverable = getNonRecoverableCaptureFailure(error);
       if (nonRecoverable) {
         return {
           ...nonRecoverable,
@@ -2812,7 +2868,7 @@ async function runImageCaptureJob(jobId, payload) {
     }
   };
 
-  const finalizeCaptureFailure = async (record, status, message) => {
+  const finalizeCaptureFailure = async (record, status, message, code = '') => {
     const normalizedStatus = status || 'failed';
     const errorMessage = message || 'Image capture failed';
     const assetUpdates = normalizedStatus === 'skipped'
@@ -2829,6 +2885,7 @@ async function runImageCaptureJob(jobId, payload) {
         result: {
           nodeId: record.nodeId,
           status: normalizedStatus,
+          code: code || normalizedStatus,
           error: errorMessage,
         },
       });
@@ -2837,10 +2894,13 @@ async function runImageCaptureJob(jobId, payload) {
     recordCompletedResult({
       nodeId: record.nodeId,
       status: normalizedStatus,
+      code: code || normalizedStatus,
       error: errorMessage,
     });
   };
 
+  let storageCaptureCircuitOpen = false;
+  let storageFailure = null;
   const runRecordAttempts = async (record, {
     phaseName,
     maxAttempts,
@@ -2859,6 +2919,14 @@ async function runImageCaptureJob(jobId, payload) {
       }
       lastOutcome = await captureRecordOnce(record, phaseName);
       if (lastOutcome.status === 'saved') return { status: 'saved' };
+      if (lastOutcome.status === 'storage_exhausted') {
+        storageCaptureCircuitOpen = true;
+        storageFailure = {
+          status: 'storage_exhausted',
+          code: 'storage_exhausted',
+          error: lastOutcome.error,
+        };
+      }
       if (!lastOutcome.retryable) break;
       if (attempt < maxAttempts - 1) {
         await sleep(Math.min(IMAGE_CAPTURE_RETRY_BASE_DELAY_MS * (attempt + 1), 15000));
@@ -2873,9 +2941,15 @@ async function runImageCaptureJob(jobId, payload) {
       };
     }
 
-    await finalizeCaptureFailure(record, lastOutcome.status, lastOutcome.error);
+    await finalizeCaptureFailure(
+      record,
+      lastOutcome.status,
+      lastOutcome.error,
+      lastOutcome.code
+    );
     return {
       status: lastOutcome.status,
+      code: lastOutcome.code,
       error: lastOutcome.error,
     };
   };
@@ -2911,7 +2985,7 @@ async function runImageCaptureJob(jobId, payload) {
       const records = capturePhase.records || [];
       const workerCount = Math.min(concurrency, records.length);
       const workers = Array.from({ length: workerCount }, async () => {
-        while (!summary.stopped) {
+        while (!summary.stopped && !storageCaptureCircuitOpen) {
           const recordIndex = nextRecordIndex;
           nextRecordIndex += 1;
           if (recordIndex >= records.length) return;
@@ -2941,14 +3015,14 @@ async function runImageCaptureJob(jobId, payload) {
       await Promise.all(workers);
       await flushAssetSaves();
       await publishProgress({ force: true });
-      if (summary.stopped) break;
+      if (summary.stopped || storageCaptureCircuitOpen) break;
     }
 
     return deferred;
   };
 
   for (const stage of stages) {
-    if (summary.stopped) break;
+    if (summary.stopped || storageCaptureCircuitOpen) break;
     summary.stageIndex = stage.stageIndex;
     summary.stageTotal = stage.stageTotal;
     summary.stageSize = stage.stageSize;
@@ -2962,7 +3036,10 @@ async function runImageCaptureJob(jobId, payload) {
 
     for (
       let recoveryPass = 1;
-      !summary.stopped && recoveryRecords.length > 0 && recoveryPass <= IMAGE_CAPTURE_RECOVERY_MAX_PASSES;
+      !summary.stopped
+        && !storageCaptureCircuitOpen
+        && recoveryRecords.length > 0
+        && recoveryPass <= IMAGE_CAPTURE_RECOVERY_MAX_PASSES;
       recoveryPass += 1
     ) {
       recoveryRecords = await processCapturePhases({
@@ -2975,6 +3052,13 @@ async function runImageCaptureJob(jobId, payload) {
     }
   }
 
+  if (storageCaptureCircuitOpen) {
+    const unresolvedCount = Math.max(0, summary.total - summary.completed);
+    summary.storageUnavailable = unresolvedCount;
+    summary.storageFailure = storageFailure;
+    summary.unavailable += unresolvedCount;
+    summary.completed += unresolvedCount;
+  }
   summary.currentNodeId = null;
   const reviewCount = summary.failed + summary.blocked + summary.missingAsset + summary.skipped + summary.unavailable;
   summary.phase = summary.stopped ? summary.phase : (reviewCount > 0 ? 'needs_review' : 'complete');
@@ -4345,28 +4429,57 @@ function extractLinks(html, baseUrl) {
 }
 
 const FOCUSED_CONTENT_LINK_SELECTOR = [
-  'article a[href]',
-  'h1 a[href]',
-  'h2 a[href]',
-  'h3 a[href]',
-  'h4 a[href]',
-  'main li a[href]',
-  'main [role="listitem"] a[href]',
-  '[class*="card"] a[href]',
-  '[class*="Card"] a[href]',
-  '[class*="tile"] a[href]',
-  '[class*="Tile"] a[href]',
-  '[class*="teaser"] a[href]',
-  '[class*="Teaser"] a[href]',
-  '[class*="story"] a[href]',
-  '[class*="Story"] a[href]',
+  'article h1 a[href]',
+  'article h2 a[href]',
+  'article h3 a[href]',
+  'article h4 a[href]',
+  'main li h1 a[href]',
+  'main li h2 a[href]',
+  'main li h3 a[href]',
+  'main li h4 a[href]',
+  'main [role="listitem"] h1 a[href]',
+  'main [role="listitem"] h2 a[href]',
+  'main [role="listitem"] h3 a[href]',
+  'main [role="listitem"] h4 a[href]',
+  '[class*="card"] h1 a[href]',
+  '[class*="card"] h2 a[href]',
+  '[class*="card"] h3 a[href]',
+  '[class*="card"] h4 a[href]',
+  '[class*="Card"] h1 a[href]',
+  '[class*="Card"] h2 a[href]',
+  '[class*="Card"] h3 a[href]',
+  '[class*="Card"] h4 a[href]',
+  '[class*="tile"] h1 a[href]',
+  '[class*="tile"] h2 a[href]',
+  '[class*="tile"] h3 a[href]',
+  '[class*="tile"] h4 a[href]',
+  '[class*="teaser"] h1 a[href]',
+  '[class*="teaser"] h2 a[href]',
+  '[class*="teaser"] h3 a[href]',
+  '[class*="teaser"] h4 a[href]',
+  '[class*="story"] h1 a[href]',
+  '[class*="story"] h2 a[href]',
+  '[class*="story"] h3 a[href]',
+  '[class*="story"] h4 a[href]',
 ].join(', ');
 
 function extractFocusedContentLinks(html, baseUrl) {
   const $ = cheerio.load(html);
   const links = new Set();
-
-  $(FOCUSED_CONTENT_LINK_SELECTOR).each((_, el) => {
+  const containerSelector = [
+    'article',
+    'main li',
+    'main [role="listitem"]',
+    '[class*="card"]',
+    '[class*="Card"]',
+    '[class*="tile"]',
+    '[class*="Tile"]',
+    '[class*="teaser"]',
+    '[class*="Teaser"]',
+    '[class*="story"]',
+    '[class*="Story"]',
+  ].join(', ');
+  const addLink = (el) => {
     const $link = $(el);
     if ($link.closest('header, nav, footer, aside, [role="navigation"]').length > 0) return;
     const href = ($link.attr('href') || '').trim();
@@ -4377,6 +4490,28 @@ function extractFocusedContentLinks(html, baseUrl) {
     } catch {
       // Ignore malformed content links.
     }
+  };
+
+  $(containerSelector).each((_, container) => {
+    const $container = $(container);
+    if ($container.parents(containerSelector).length > 0) return;
+    const headingLink = $container.find('h1 a[href], h2 a[href], h3 a[href], h4 a[href]').first();
+    if (headingLink.length > 0) {
+      addLink(headingLink.get(0));
+      return;
+    }
+    const directLink = $container.children('a[href]').first();
+    if (directLink.length > 0) {
+      addLink(directLink.get(0));
+      return;
+    }
+    const fallbackLink = $container.find('a[href]').first();
+    if (fallbackLink.length > 0) addLink(fallbackLink.get(0));
+  });
+
+  $(FOCUSED_CONTENT_LINK_SELECTOR).each((_, el) => {
+    if ($(el).parents(containerSelector).length > 0) return;
+    addLink(el);
   });
 
   return Array.from(links);
@@ -4635,6 +4770,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const discoverySourceByUrl = new Map();
   const numberingDiscoveryOrder = new Map();
+  const focusedListingOrder = new Map();
   const scopedDiscoveredUrls = new Set([seed]);
   const deferredOutcomeUrls = new Set();
   const blockedOutcomeUrls = new Set();
@@ -4766,7 +4902,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
-  const registerFocusedContentLink = (candidate, sourceUrl) => {
+  const registerFocusedContentLink = (candidate, sourceUrl, sourceOrder = 0) => {
     if (!scanScope.focused) return false;
     const normalized = normalizeUrl(candidate);
     if (!normalized || !sameOrigin(normalized, origin)) return false;
@@ -4778,6 +4914,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       || new URL(normalized).pathname === scanScope.focusPath
     ) {
       return false;
+    }
+    const sourceKey = normalizedSource === seed
+      ? 'listing:0'
+      : `listing:1:${normalizedSource}`;
+    const listingKey = `${sourceKey}:${String(Math.max(0, sourceOrder)).padStart(8, '0')}`;
+    const existingListingKey = focusedListingOrder.get(normalized);
+    if (!existingListingKey || listingKey.localeCompare(existingListingKey) < 0) {
+      focusedListingOrder.set(normalized, listingKey);
     }
     focusedListingUrls.add(normalized);
     if (!isWithinFocusedPathAlias(normalized) && !focusedContentUrls.has(normalized)) {
@@ -5624,8 +5768,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       && !suppressLinkDiscovery
       && classification.shouldExtractLinks
     ) {
-      extractFocusedContentLinks(html, finalUrl || url).forEach((link) => {
-        registerFocusedContentLink(link, url);
+      extractFocusedContentLinks(html, finalUrl || url).forEach((link, index) => {
+        registerFocusedContentLink(link, url, index);
         if (!links.includes(link)) links.push(link);
       });
     }
@@ -5855,8 +5999,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     rendered.contentLinks
       .map((link) => normalizeUrl(link))
       .filter(Boolean)
-      .forEach((link) => {
-        registerFocusedContentLink(link, seed);
+      .forEach((link, index) => {
+        registerFocusedContentLink(link, seed, index);
         if (!normalizedRenderedLinks.includes(link)) normalizedRenderedLinks.push(link);
       });
     const allowedRenderedLinks = normalizedRenderedLinks.filter((link) => allowPageUrl(link));
@@ -6058,15 +6202,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   reportScanProgress({ phase: 'finalizing' });
 
-  if (scanScope.focused && !targetedGroupCapture && !stopRequested) {
-    const ancestorUrls = getFocusedAncestorUrls(seed)
-      .map((url) => normalizeUrl(url))
-      .filter((url) => url && url !== seed);
-    const inspectedAncestors = await Promise.all(
-      ancestorUrls.map(async (url) => [url, await inspectFocusedAncestor(url)])
-    );
-    inspectedAncestors.forEach(([url, meta]) => focusedAncestorMetaByUrl.set(url, meta));
-    scanDiagnostics.focusedAncestorInspectedCount = inspectedAncestors.length;
+  if (scanScope.focused && !targetedGroupCapture) {
+    scanDiagnostics.focusedAncestorInspectedCount = 0;
   }
 
   if (scanOptions.brokenLinks && brokenLinkCandidates.length && !stopRequested) {
@@ -6218,6 +6355,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (scanScope.focused && !allowUrl(parentUrl) && !allowFocusedContentAncestors) break;
       const canonicalMatch = canonicalToUrl.get(getCanonicalKey(parentUrl));
       if (canonicalMatch) return;
+      const isFocusedStructuralContext = scanScope.focused && allowFocusedContentAncestors;
       nodes.set(parentUrl, {
         id: safeIdFromUrl(parentUrl),
         url: parentUrl,
@@ -6226,9 +6364,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         referrerUrl: null,
         authRequired: false,
         thumbnailUrl: undefined,
-        isMissing: true,
-        isVirtualMissing: true,
-        scanStatus: 'missing',
+        nodeKind: isFocusedStructuralContext ? 'focus-ghost' : undefined,
+        isFocusAncestor: isFocusedStructuralContext,
+        isStructuralContext: isFocusedStructuralContext,
+        isMissing: !isFocusedStructuralContext,
+        isVirtualMissing: !isFocusedStructuralContext,
+        scanStatus: isFocusedStructuralContext ? 'structural' : 'missing',
+        metadataAvailable: false,
         children: [],
       });
       const key = getCanonicalKey(parentUrl);
@@ -6498,10 +6640,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     ? buildPreservedNumberMap(
       Array.from(numberingDiscoveryOrder.entries()).map(([url, order]) => ({
         url,
-        order: sitemapNumberingOrder.has(url)
-          ? sitemapNumberingOrder.get(url)
-          : sitemapNumberingOrder.size + order,
-        exact: sitemapNumberingOrder.has(url),
+        order: sitemapNumberingOrder.get(url) ?? order,
+        sortKey: focusedListingOrder.get(url)
+          || (
+            sitemapNumberingOrder.has(url)
+              ? `sitemap:${String(sitemapNumberingOrder.get(url)).padStart(12, '0')}`
+              : ''
+          ),
+        exact: focusedListingOrder.has(url) || sitemapNumberingOrder.has(url),
       })),
       seed,
       {
@@ -6633,17 +6779,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (a._treeSize !== b._treeSize) return b._treeSize - a._treeSize;
     return compareAlpha(a, b);
   };
-  const compareScanNumbers = (a, b) => {
-    const left = String(a?.scanNumber || '').split('.').map(Number);
-    const right = String(b?.scanNumber || '').split('.').map(Number);
-    if (!left.length || !right.length || left.some(Number.isNaN) || right.some(Number.isNaN)) return 0;
-    const length = Math.max(left.length, right.length);
-    for (let index = 0; index < length; index += 1) {
-      const difference = (left[index] ?? -1) - (right[index] ?? -1);
-      if (difference !== 0) return difference;
-    }
-    return 0;
-  };
+  const compareScanNumbers = (a, b) => (
+    compareScanNumberStrings(a?.scanNumber, b?.scanNumber)
+  );
 
   const computeStats = (node) => {
     if (!node) return { depth: 0, size: 0 };
@@ -6761,44 +6899,41 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       focusedTree = {
         id: safeIdFromUrl(`focus:${ancestorUrl}`),
         url: ancestorUrl,
-        finalUrl: inspectedMeta.finalUrl || ancestorUrl,
-        canonicalUrl: inspectedMeta.canonicalUrl || null,
-        title: inspectedMeta.title || (isSiteRoot ? new URL(ancestorUrl).hostname : getTitleFromUrl(ancestorUrl)),
+        finalUrl: ancestorUrl,
+        canonicalUrl: null,
+        title: isSiteRoot ? new URL(ancestorUrl).hostname : getTitleFromUrl(ancestorUrl),
         pageType: isSiteRoot ? PAGE_TYPE_HOME : PAGE_TYPE_PAGE,
-        description: inspectedMeta.description || '',
-        metaTags: inspectedMeta.metaTags || '',
-        seoMetadata: inspectedMeta.seoMetadata || {},
+        description: '',
+        metaTags: '',
+        seoMetadata: {},
         nodeKind: 'focus-ghost',
         isFocusAncestor: true,
-        isBlockedBoundary: Boolean(
-          inspectedMeta.isBlocked
-          || inspectedMeta.isChallengePage
-          || inspectedMeta.scanStatus === 'scan_limited'
-        ),
+        isBlockedBoundary: false,
         scanNumber: preservedNumberMap.get(ancestorUrl) || (isSiteRoot ? '0' : ''),
         parentUrl: getParentUrl(ancestorUrl),
-        authRequired: Boolean(inspectedMeta.authRequired),
-        httpStatus: inspectedMeta.httpStatus ?? null,
-        statusCode: inspectedMeta.statusCode ?? inspectedMeta.httpStatus ?? null,
-        errorStatus: inspectedMeta.errorStatus ?? null,
-        isError: Boolean(inspectedMeta.isError),
-        isInactive: Boolean(inspectedMeta.isInactive),
-        isFile: Boolean(inspectedMeta.isFile),
-        fileType: inspectedMeta.fileType || null,
-        httpErrorType: inspectedMeta.httpErrorType || null,
-        httpErrorLabel: inspectedMeta.httpErrorLabel || null,
-        isViewableError: Boolean(inspectedMeta.isViewableError),
-        wasRedirect: Boolean(inspectedMeta.wasRedirect),
-        redirectTarget: inspectedMeta.redirectTarget || null,
-        responseTime: inspectedMeta.responseTime ?? null,
-        titleSource: inspectedMeta.titleSource || 'url_fallback',
-        blockedReason: inspectedMeta.blockedReason || null,
-        isChallengePage: Boolean(inspectedMeta.isChallengePage),
-        isBlocked: Boolean(inspectedMeta.isBlocked),
+        authRequired: false,
+        contextHttpStatus: inspectedMeta.httpStatus ?? null,
+        httpStatus: null,
+        statusCode: null,
+        errorStatus: null,
+        isError: false,
+        isInactive: false,
+        isFile: false,
+        fileType: null,
+        httpErrorType: null,
+        httpErrorLabel: null,
+        isViewableError: false,
+        wasRedirect: false,
+        redirectTarget: null,
+        responseTime: null,
+        titleSource: 'url_fallback',
+        blockedReason: null,
+        isChallengePage: false,
+        isBlocked: false,
         isMissing: false,
         isVirtualMissing: false,
-        scanStatus: inspectedMeta.scanStatus || null,
-        metadataAvailable: inspectedMeta.metadataAvailable !== false,
+        scanStatus: 'structural',
+        metadataAvailable: false,
         children: [focusedTree],
       };
     }
@@ -7057,12 +7192,45 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         return isSuccessfulCapturedPageMeta(pageMap.get(entry.url));
       });
       const successfulUrlSet = new Set(successfulEntries.map((entry) => entry.url));
+      const terminalEntries = repetitiveCapture.entries
+        .filter((entry) => !successfulUrlSet.has(entry.url))
+        .map((entry) => {
+          const meta = pageMap.get(entry.url);
+          if (!meta) return null;
+          const status = Number(meta.httpStatus || 0);
+          const terminal = (
+            status >= 400
+            || status === 0
+            || meta.metadataAvailable === false
+            || meta.isBlocked
+            || meta.isChallengePage
+            || meta.isInactive
+          );
+          if (!terminal) return null;
+          return {
+            ...entry,
+            status: status || null,
+            reason: meta.authRequired
+              ? 'authentication'
+              : (
+                meta.isBlocked || meta.isChallengePage
+                  ? 'blocked'
+                  : (status >= 400 ? 'http_error' : 'unreachable')
+              ),
+          };
+        })
+        .filter(Boolean);
+      const terminalUrlSet = new Set(terminalEntries.map((entry) => entry.url));
       return {
         groupId: repetitiveCapture.groupId,
         requestedCount: repetitiveCapture.entries.length,
         capturedCount: successfulEntries.length,
         successfulEntries,
-        remainingEntries: repetitiveCapture.entries.filter((entry) => !successfulUrlSet.has(entry.url)),
+        terminalCount: terminalEntries.length,
+        terminalEntries,
+        remainingEntries: repetitiveCapture.entries.filter((entry) => (
+          !successfulUrlSet.has(entry.url) && !terminalUrlSet.has(entry.url)
+        )),
       };
     })()
     : null;
@@ -7287,7 +7455,12 @@ function buildBrowserErrorCaptureHtml(safeUrl, error) {
 </html>`;
 }
 
-async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options = {}) {
+async function captureScreenshotInWorkspace(
+  safeUrl,
+  type = SCREENSHOT_TYPES.full,
+  options = {},
+  workspaceDirectory = SCREENSHOT_DIR
+) {
   const normalizedType = normalizeScreenshotType(type);
   if (!normalizedType) {
     throw new Error('Invalid screenshot type. Use full or thumb.');
@@ -7308,13 +7481,13 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
   const thumbSmallFilename = `${urlHash}_thumb_small_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
   const fullSmallFilename = `${urlHash}_full_thumb_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
   const fullViewportTempFilename = `${urlHash}_full_viewport_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
-  const filepath = path.join(SCREENSHOT_DIR, filename);
-  const thumbPreviewPath = path.join(SCREENSHOT_DIR, thumbPreviewFilename);
-  const thumbSmallPath = path.join(SCREENSHOT_DIR, thumbSmallFilename);
-  const fullSmallPath = path.join(SCREENSHOT_DIR, fullSmallFilename);
-  const fullViewportTempPath = path.join(SCREENSHOT_DIR, fullViewportTempFilename);
+  const filepath = path.join(workspaceDirectory, filename);
+  const thumbPreviewPath = path.join(workspaceDirectory, thumbPreviewFilename);
+  const thumbSmallPath = path.join(workspaceDirectory, thumbSmallFilename);
+  const fullSmallPath = path.join(workspaceDirectory, fullSmallFilename);
+  const fullViewportTempPath = path.join(workspaceDirectory, fullViewportTempFilename);
   const primaryPath = normalizedType === SCREENSHOT_TYPES.thumb ? thumbSmallPath : filepath;
-  const metaPath = path.join(SCREENSHOT_DIR, `${path.basename(primaryPath)}${SCREENSHOT_META_SUFFIX}`);
+  const metaPath = path.join(workspaceDirectory, `${path.basename(primaryPath)}${SCREENSHOT_META_SUFFIX}`);
   const baseUrl = getBaseUrl();
   const publicUrl = (name) => buildPublicUrl(name, baseUrl);
   const storageProvider = getScreenshotStorageProvider();
@@ -7721,6 +7894,30 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
     result.thumbnailUrl = fullSmallAsset.url;
   }
   return result;
+}
+
+async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options = {}) {
+  let workspace = null;
+  try {
+    workspace = await createScreenshotWorkspace({
+      provider: getScreenshotStorageProvider(),
+      localDirectory: SCREENSHOT_DIR,
+    });
+    return await captureScreenshotInWorkspace(
+      safeUrl,
+      type,
+      options,
+      workspace.directory
+    );
+  } catch (error) {
+    throw normalizeScreenshotStorageError(error);
+  } finally {
+    if (workspace?.transient) {
+      await removeScreenshotWorkspace(workspace).catch((error) => {
+        console.warn('Screenshot workspace cleanup error:', error.message);
+      });
+    }
+  }
 }
 
 async function processJob(job) {
@@ -9004,6 +9201,12 @@ app.get('/screenshot', authMiddleware, requireAuth, requireApiKey, enforceUsageL
     }
     if (e.message?.includes('Screenshot queue full')) {
       return res.status(429).json({ error: 'Screenshot queue full' });
+    }
+    if (e.code === 'storage_exhausted') {
+      return res.status(507).json({
+        error: e.message,
+        code: 'storage_exhausted',
+      });
     }
     if (e.code === 'ENTITLEMENT_REQUIRED') {
       return res.status(e.status || 402).json({ error: e.message || 'Plan limit reached', code: e.code });
