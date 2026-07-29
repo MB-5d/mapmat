@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   experimental: {
     externalDir: true,
+    useTypeScriptCli: true,
   },
   env: {
     REACT_APP_API_BASE: process.env.NEXT_PUBLIC_API_ORIGIN,
