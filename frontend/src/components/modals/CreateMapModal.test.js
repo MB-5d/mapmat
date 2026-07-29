@@ -20,13 +20,13 @@ describe('CreateMapModal', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('uses shared option cards and preserves create-map actions', () => {
-    const onClose = vi.fn();
-    const onStartFromScratch = vi.fn();
-    const onImportFromFile = vi.fn();
+    const onClose = jest.fn();
+    const onStartFromScratch = jest.fn();
+    const onImportFromFile = jest.fn();
 
     act(() => {
       root.render(

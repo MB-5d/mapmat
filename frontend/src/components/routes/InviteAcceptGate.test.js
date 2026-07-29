@@ -20,19 +20,19 @@ describe('InviteAcceptGate', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('routes auth-required users into sign in', () => {
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
 
     act(() => {
       root.render(
         <InviteAcceptGate
           status="auth_required"
           onLogin={onLogin}
-          onGoHome={vi.fn()}
-          onShowInvites={vi.fn()}
+          onGoHome={jest.fn()}
+          onShowInvites={jest.fn()}
         />
       );
     });

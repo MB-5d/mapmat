@@ -24,7 +24,7 @@ describe('CanvasToolbar', () => {
     container.remove();
     container = null;
     root = null;
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   test('composes toolbar actions from shared icon buttons', () => {
@@ -36,44 +36,44 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           hasUnreadCommentMentions
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu={false}
           imageMenuRef={{ current: null }}
           hasSelection={false}
           canUndo={false}
           canRedo={false}
           undoRedoDisabledReason="Live editing is syncing"
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           canOpenShare
           hasMap
           hasSavedMap={false}
           showVersionHistory={false}
           shareDisabledReason="Save before sharing"
-          onBlockedShareAttempt={vi.fn()}
+          onBlockedShareAttempt={jest.fn()}
         />
       );
     });
@@ -100,13 +100,13 @@ describe('CanvasToolbar', () => {
           activeTool="select"
           connectionTool={null}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
           showLayersMenu={false}
           layersMenuRef={{ current: null }}
           showLegendMenu={false}
           legendMenuRef={{ current: null }}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu={false}
           imageMenuRef={{ current: null }}
           hasSelection={false}
@@ -131,38 +131,38 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           hasUnreadCommentMentions
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu={false}
           imageMenuRef={{ current: null }}
           hasSelection={false}
           canUndo
           canRedo
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
-          onCollaborate={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          onCollaborate={jest.fn()}
           canOpenShare
           canOpenCollaborate
           hasMap
@@ -214,36 +214,36 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu={false}
           imageMenuRef={{ current: null }}
           hasSelection={false}
           canUndo
           canRedo
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           canOpenShare
           hasMap
           hasSavedMap={false}
@@ -284,37 +284,37 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu={false}
           imageMenuRef={{ current: null }}
           hasSelection={false}
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
           isSavingMap
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap={false}
           showVersionHistory={false}
@@ -344,7 +344,7 @@ describe('CanvasToolbar', () => {
           layersMenuRef={{ current: null }}
           showLegendMenu={false}
           legendMenuRef={{ current: null }}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu={false}
           imageMenuRef={{ current: null }}
           hasSelection={false}
@@ -363,9 +363,9 @@ describe('CanvasToolbar', () => {
   });
 
   test('uses combined image download actions', () => {
-    const onDownloadImagesAll = vi.fn();
-    const onDownloadImagesSelected = vi.fn();
-    const onAddScreenshotCredits = vi.fn();
+    const onDownloadImagesAll = jest.fn();
+    const onDownloadImagesSelected = jest.fn();
+    const onAddScreenshotCredits = jest.fn();
 
     act(() => {
       root.render(
@@ -375,27 +375,27 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
-          onGetThumbnailsAll={vi.fn()}
-          onGetThumbnailsSelected={vi.fn()}
-          onGetFullScreenshotsAll={vi.fn()}
-          onGetFullScreenshotsSelected={vi.fn()}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
           onDownloadImagesAll={onDownloadImagesAll}
           onDownloadImagesSelected={onDownloadImagesSelected}
           screenshotCreditsLabel="24"
@@ -407,14 +407,14 @@ describe('CanvasToolbar', () => {
           hasDownloadableSelectedImages
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -485,36 +485,36 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu
           imageMenuRef={{ current: null }}
           hasSelection={false}
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -541,52 +541,52 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu
           imageMenuRef={{ current: null }}
           canUseImageTools={false}
           hasAnyThumbnails
           showThumbnails
-          onToggleThumbnails={vi.fn()}
-          onGetThumbnailsAll={vi.fn()}
-          onGetThumbnailsSelected={vi.fn()}
-          onUpdateCapturedThumbnails={vi.fn()}
-          onGetFullScreenshotsAll={vi.fn()}
-          onGetFullScreenshotsSelected={vi.fn()}
-          onUpdateCapturedFullScreenshots={vi.fn()}
+          onToggleThumbnails={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onUpdateCapturedThumbnails={jest.fn()}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onUpdateCapturedFullScreenshots={jest.fn()}
           hasDownloadableThumbnails
           hasFullScreenshotAssets
           hasDownloadableImages
           hasSelection
           captureIssues={[{ id: 'missing:n1', nodeId: 'n1', label: 'Missing' }]}
-          onOpenImageReport={vi.fn()}
-          onAddScreenshotCredits={vi.fn()}
+          onOpenImageReport={jest.fn()}
+          onAddScreenshotCredits={jest.fn()}
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -610,14 +610,14 @@ describe('CanvasToolbar', () => {
   });
 
   test('requires a saved map before image capture actions are available', () => {
-    const onGetThumbnailsAll = vi.fn();
-    const onGetThumbnailsSelected = vi.fn();
-    const onUpdateCapturedThumbnails = vi.fn();
-    const onGetFullScreenshotsAll = vi.fn();
-    const onGetFullScreenshotsSelected = vi.fn();
-    const onUpdateCapturedFullScreenshots = vi.fn();
-    const onDownloadImagesAll = vi.fn();
-    const onDownloadImagesSelected = vi.fn();
+    const onGetThumbnailsAll = jest.fn();
+    const onGetThumbnailsSelected = jest.fn();
+    const onUpdateCapturedThumbnails = jest.fn();
+    const onGetFullScreenshotsAll = jest.fn();
+    const onGetFullScreenshotsSelected = jest.fn();
+    const onUpdateCapturedFullScreenshots = jest.fn();
+    const onDownloadImagesAll = jest.fn();
+    const onDownloadImagesSelected = jest.fn();
 
     act(() => {
       root.render(
@@ -627,23 +627,23 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           onGetThumbnailsAll={onGetThumbnailsAll}
           onGetThumbnailsSelected={onGetThumbnailsSelected}
           onUpdateCapturedThumbnails={onUpdateCapturedThumbnails}
@@ -661,14 +661,14 @@ describe('CanvasToolbar', () => {
           hasDownloadableSelectedImages
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap={false}
           showVersionHistory={false}
@@ -724,40 +724,40 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
-          onGetThumbnailsSelected={vi.fn()}
-          onGetFullScreenshotsSelected={vi.fn()}
-          onDownloadImagesSelected={vi.fn()}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onDownloadImagesSelected={jest.fn()}
           showImageMenu
           imageMenuRef={{ current: null }}
           hasSelection={false}
           hasDownloadableSelectedImages
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -779,8 +779,8 @@ describe('CanvasToolbar', () => {
   });
 
   test('uses captured image update actions only when saved images exist', () => {
-    const onUpdateCapturedThumbnails = vi.fn();
-    const onUpdateCapturedFullScreenshots = vi.fn();
+    const onUpdateCapturedThumbnails = jest.fn();
+    const onUpdateCapturedFullScreenshots = jest.fn();
 
     act(() => {
       root.render(
@@ -790,28 +790,28 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
-          onGetThumbnailsAll={vi.fn()}
-          onGetThumbnailsSelected={vi.fn()}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
           onUpdateCapturedThumbnails={onUpdateCapturedThumbnails}
-          onGetFullScreenshotsAll={vi.fn()}
-          onGetFullScreenshotsSelected={vi.fn()}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
           onUpdateCapturedFullScreenshots={onUpdateCapturedFullScreenshots}
           showImageMenu
           imageMenuRef={{ current: null }}
@@ -820,14 +820,14 @@ describe('CanvasToolbar', () => {
           hasFullScreenshotAssets={false}
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -850,28 +850,28 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
-          onGetThumbnailsAll={vi.fn()}
-          onGetThumbnailsSelected={vi.fn()}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
           onUpdateCapturedThumbnails={onUpdateCapturedThumbnails}
-          onGetFullScreenshotsAll={vi.fn()}
-          onGetFullScreenshotsSelected={vi.fn()}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
           onUpdateCapturedFullScreenshots={onUpdateCapturedFullScreenshots}
           showImageMenu
           imageMenuRef={{ current: null }}
@@ -880,14 +880,14 @@ describe('CanvasToolbar', () => {
           hasFullScreenshotAssets
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -912,7 +912,7 @@ describe('CanvasToolbar', () => {
   });
 
   test('shows remaining screenshot action when some full screenshots exist', () => {
-    const onGetFullScreenshotsAll = vi.fn();
+    const onGetFullScreenshotsAll = jest.fn();
 
     act(() => {
       root.render(
@@ -922,38 +922,38 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           onGetFullScreenshotsAll={onGetFullScreenshotsAll}
-          onGetFullScreenshotsSelected={vi.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
           showImageMenu
           imageMenuRef={{ current: null }}
           hasSelection
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -975,7 +975,7 @@ describe('CanvasToolbar', () => {
   });
 
   test('shows remaining thumbnail action when some thumbnails exist', () => {
-    const onGetThumbnailsAll = vi.fn();
+    const onGetThumbnailsAll = jest.fn();
 
     act(() => {
       root.render(
@@ -985,38 +985,38 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           onGetThumbnailsAll={onGetThumbnailsAll}
-          onGetThumbnailsSelected={vi.fn()}
+          onGetThumbnailsSelected={jest.fn()}
           showImageMenu
           imageMenuRef={{ current: null }}
           hasSelection
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -1038,8 +1038,8 @@ describe('CanvasToolbar', () => {
   });
 
   test('uses recapture labels for selected saved image actions', () => {
-    const onGetThumbnailsSelected = vi.fn();
-    const onGetFullScreenshotsSelected = vi.fn();
+    const onGetThumbnailsSelected = jest.fn();
+    const onGetFullScreenshotsSelected = jest.fn();
 
     act(() => {
       root.render(
@@ -1049,23 +1049,23 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           onGetThumbnailsSelected={onGetThumbnailsSelected}
           onGetFullScreenshotsSelected={onGetFullScreenshotsSelected}
           showImageMenu
@@ -1073,14 +1073,14 @@ describe('CanvasToolbar', () => {
           hasSelection
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -1107,7 +1107,7 @@ describe('CanvasToolbar', () => {
   });
 
   test('shows the image report option instead of inline capture issues', () => {
-    const onOpenImageReport = vi.fn();
+    const onOpenImageReport = jest.fn();
 
     act(() => {
       root.render(
@@ -1117,22 +1117,22 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu
           imageMenuRef={{ current: null }}
           captureIssues={[{
@@ -1147,17 +1147,17 @@ describe('CanvasToolbar', () => {
           onOpenImageReport={onOpenImageReport}
           hasSelection={false}
           hasAnyThumbnails
-          onToggleThumbnails={vi.fn()}
+          onToggleThumbnails={jest.fn()}
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -1190,7 +1190,7 @@ describe('CanvasToolbar', () => {
   });
 
   test('marks the image menu as scrollable and contains wheel events', () => {
-    const onCanvasWheel = vi.fn();
+    const onCanvasWheel = jest.fn();
     container.addEventListener('wheel', onCanvasWheel);
 
     act(() => {
@@ -1201,35 +1201,35 @@ describe('CanvasToolbar', () => {
           canViewVersionHistory
           activeTool="select"
           connectionTool={null}
-          onSelectTool={vi.fn()}
-          onAddPage={vi.fn()}
-          onToggleUserFlow={vi.fn()}
-          onToggleCrosslink={vi.fn()}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
           showCommentsPanel={false}
-          onToggleCommentsPanel={vi.fn()}
+          onToggleCommentsPanel={jest.fn()}
           showReportDrawer={false}
-          onToggleReportDrawer={vi.fn()}
+          onToggleReportDrawer={jest.fn()}
           showLayersMenu={false}
-          onToggleLayersMenu={vi.fn()}
+          onToggleLayersMenu={jest.fn()}
           layersMenuRef={{ current: null }}
           layersPanel={null}
           showLegendMenu={false}
-          onToggleLegendMenu={vi.fn()}
+          onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
-          onToggleImageMenu={vi.fn()}
+          onToggleImageMenu={jest.fn()}
           showImageMenu
           imageMenuRef={{ current: null }}
           hasSelection={false}
           canUndo={false}
           canRedo={false}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
-          onClearCanvas={vi.fn()}
-          onSaveMap={vi.fn()}
-          onDuplicateMap={vi.fn()}
-          onShowVersionHistory={vi.fn()}
-          onExport={vi.fn()}
-          onShare={vi.fn()}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
           hasMap
           hasSavedMap
           showVersionHistory={false}

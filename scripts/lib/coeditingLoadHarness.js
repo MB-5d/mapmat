@@ -1,6 +1,6 @@
 const assert = require('assert');
 const { performance } = require('perf_hooks');
-const { randomUUID: uuidv4 } = require('node:crypto');
+const { v4: uuidv4 } = require('uuid');
 const db = require('../../db');
 const authStore = require('../../stores/authStore');
 const mapStore = require('../../stores/mapStore');

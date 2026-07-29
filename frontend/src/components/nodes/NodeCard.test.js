@@ -26,7 +26,7 @@ describe('NodeCard', () => {
     act(() => {
       root.unmount();
     });
-    vi.useRealTimers();
+    jest.useRealTimers();
     container.remove();
     container = null;
     root = null;
@@ -57,12 +57,12 @@ describe('NodeCard', () => {
           canComment
           showCommentAction
           badges={['Subdomain', 'Duplicate']}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
-          onAddNote={vi.fn()}
-          onViewNotes={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
+          onAddNote={jest.fn()}
+          onViewNotes={jest.fn()}
         />
       );
     });
@@ -98,10 +98,10 @@ describe('NodeCard', () => {
           canEdit
           canComment
           showCommentAction
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onAddNote={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onAddNote={jest.fn()}
         />
       );
     });
@@ -109,7 +109,7 @@ describe('NodeCard', () => {
     const commentAction = container.querySelector('.node-card-action[aria-label="Comments"]');
     expect(commentAction).not.toBeNull();
     expect(commentAction.querySelector('.ui-icon__svg')).not.toBeNull();
-    expect(commentAction.querySelector('[class*="lucide-message-square-plus"]')).not.toBeNull();
+    expect(commentAction.querySelectorAll('line')).toHaveLength(2);
   });
 
   test('can hide direct delete action while keeping edit action available', () => {
@@ -122,9 +122,9 @@ describe('NodeCard', () => {
           showThumbnails={false}
           canEdit
           showDeleteAction={false}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
         />
       );
     });
@@ -146,9 +146,9 @@ describe('NodeCard', () => {
           canEdit
           showCommentAction
           connectionTool="crosslink"
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
         />
       );
     });
@@ -192,7 +192,7 @@ describe('NodeCard', () => {
   });
 
   test('renders a group-only capture action for deferred pages', () => {
-    const onCaptureDeferredGroup = vi.fn();
+    const onCaptureDeferredGroup = jest.fn();
     act(() => {
       root.render(
         <NodeCard
@@ -225,8 +225,8 @@ describe('NodeCard', () => {
   });
 
   test('stack toggle handles click without starting card drag', () => {
-    const onToggleStack = vi.fn();
-    const onCardPointerDown = vi.fn();
+    const onToggleStack = jest.fn();
+    const onCardPointerDown = jest.fn();
 
     act(() => {
       root.render(
@@ -239,9 +239,9 @@ describe('NodeCard', () => {
           dragHandleProps={{ onPointerDown: onCardPointerDown }}
           stackInfo={{ parentId: 0, totalCount: 6, collapsed: true }}
           onToggleStack={onToggleStack}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
         />
       );
     });
@@ -273,10 +273,10 @@ describe('NodeCard', () => {
           showThumbnails
           thumbnailRequestIds={new Set(['node-2'])}
           thumbnailSessionId={2}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
         />
       );
     });
@@ -287,7 +287,7 @@ describe('NodeCard', () => {
   });
 
   test('renders only the thumbnail image on the node card', async () => {
-    const onViewImage = vi.fn();
+    const onViewImage = jest.fn();
 
     await act(async () => {
       root.render(
@@ -302,9 +302,9 @@ describe('NodeCard', () => {
           number="1"
           color="#0ea5e9"
           showThumbnails
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
           onViewImage={onViewImage}
         />
       );
@@ -330,10 +330,10 @@ describe('NodeCard', () => {
           number="1"
           color="#0ea5e9"
           showThumbnails
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
         />
       );
     });
@@ -344,7 +344,7 @@ describe('NodeCard', () => {
   });
 
   test('opens an existing thumbnail asset without starting a new capture', async () => {
-    const onViewImage = vi.fn();
+    const onViewImage = jest.fn();
 
     await act(async () => {
       root.render(
@@ -359,9 +359,9 @@ describe('NodeCard', () => {
           number="1"
           color="#0ea5e9"
           showThumbnails
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
           onViewImage={onViewImage}
         />
       );
@@ -378,7 +378,7 @@ describe('NodeCard', () => {
   });
 
   test('retries an existing thumbnail display when the capture session changes', async () => {
-    const onThumbnailError = vi.fn();
+    const onThumbnailError = jest.fn();
     const node = {
       id: 'node-1',
       title: 'Already captured',
@@ -395,10 +395,10 @@ describe('NodeCard', () => {
           showThumbnails
           thumbnailRequestIds={new Set(['node-2'])}
           thumbnailSessionId={1}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
           onThumbnailError={onThumbnailError}
         />
       );
@@ -420,10 +420,10 @@ describe('NodeCard', () => {
           showThumbnails
           thumbnailRequestIds={new Set(['node-2'])}
           thumbnailSessionId={2}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
           onThumbnailError={onThumbnailError}
         />
       );
@@ -434,7 +434,7 @@ describe('NodeCard', () => {
   });
 
   test('retries a saved thumbnail display when its reload key changes', async () => {
-    const onThumbnailError = vi.fn();
+    const onThumbnailError = jest.fn();
     const node = {
       id: 'node-1',
       title: 'Already captured',
@@ -450,10 +450,10 @@ describe('NodeCard', () => {
           color="#0ea5e9"
           showThumbnails
           thumbnailReloadKey={0}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
           onThumbnailError={onThumbnailError}
         />
       );
@@ -473,10 +473,10 @@ describe('NodeCard', () => {
           color="#0ea5e9"
           showThumbnails
           thumbnailReloadKey={1}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
           onThumbnailError={onThumbnailError}
         />
       );
@@ -488,8 +488,8 @@ describe('NodeCard', () => {
   });
 
   test('does not report a display error timeout before a thumbnail asset exists', async () => {
-    vi.useFakeTimers();
-    const onThumbnailError = vi.fn();
+    jest.useFakeTimers();
+    const onThumbnailError = jest.fn();
 
     await act(async () => {
       root.render(
@@ -501,24 +501,24 @@ describe('NodeCard', () => {
           thumbnailRequestIds={new Set(['node-1'])}
           thumbnailSessionId={1}
           onRequestThumbnail={() => Promise.resolve(true)}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
           onThumbnailError={onThumbnailError}
         />
       );
     });
 
     act(() => {
-      vi.advanceTimersByTime(120000);
+      jest.advanceTimersByTime(120000);
     });
 
     expect(onThumbnailError).not.toHaveBeenCalled();
   });
 
   test('does not start thumbnail capture from render state', async () => {
-    const onRequestThumbnail = vi.fn(() => Promise.resolve(true));
+    const onRequestThumbnail = jest.fn(() => Promise.resolve(true));
 
     await act(async () => {
       root.render(
@@ -530,10 +530,10 @@ describe('NodeCard', () => {
           thumbnailRequestIds={new Set(['node-1'])}
           thumbnailSessionId={1}
           onRequestThumbnail={onRequestThumbnail}
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
         />
       );
     });
@@ -555,10 +555,10 @@ describe('NodeCard', () => {
           number="77.1"
           color="#0ea5e9"
           showThumbnails
-          onDelete={vi.fn()}
-          onEdit={vi.fn()}
-          onDuplicate={vi.fn()}
-          onViewImage={vi.fn()}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
         />
       );
     });

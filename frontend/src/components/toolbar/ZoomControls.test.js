@@ -28,10 +28,10 @@ describe('ZoomControls', () => {
       root.render(
         <ZoomControls
           scale={1}
-          onZoomOut={vi.fn()}
-          onZoomIn={vi.fn()}
-          onResetView={vi.fn()}
-          onToggleMinimap={vi.fn()}
+          onZoomOut={jest.fn()}
+          onZoomIn={jest.fn()}
+          onResetView={jest.fn()}
+          onToggleMinimap={jest.fn()}
           showMinimap={false}
         />
       );
@@ -47,10 +47,10 @@ describe('ZoomControls', () => {
       root.render(
         <ZoomControls
           scale={1}
-          onZoomOut={vi.fn()}
-          onZoomIn={vi.fn()}
-          onResetView={vi.fn()}
-          onToggleMinimap={vi.fn()}
+          onZoomOut={jest.fn()}
+          onZoomIn={jest.fn()}
+          onResetView={jest.fn()}
+          onToggleMinimap={jest.fn()}
           showMinimap
         />
       );
