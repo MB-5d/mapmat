@@ -5286,38 +5286,26 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const MAX_SITEMAPS = 12;
   let focusedRobotsSitemapSucceeded = false;
 
-  const processSitemap = async (
-    sitemapUrl,
-    source = 'sitemap',
-    sitemapDocumentPath = null
-  ) => {
-    const normalizedSitemap = normalizeUrl(sitemapUrl);
-    if (!normalizedSitemap) return false;
-    if (processedSitemaps.has(normalizedSitemap)) return false;
-    if (processedSitemaps.size >= MAX_SITEMAPS) return false;
-
-    const placement = getPlacementForUrl(normalizedSitemap, scanScope);
-    if (!placement) return false;
-
-    processedSitemaps.add(normalizedSitemap);
-    const documentPath = Array.isArray(sitemapDocumentPath)
-      ? sitemapDocumentPath
-      : [sitemapDocumentCounter++];
+  const fetchSitemapDocument = async ({
+    normalizedSitemap,
+    source,
+    documentPath,
+  }) => {
     const getSitemapEntryOrderKey = (index) => (
       `sitemap:${[...documentPath, index]
         .map((part) => String(Math.max(0, Number(part) || 0)).padStart(8, '0'))
         .join('.')}`
     );
-    if (await pollJobStatus()) return false;
+    if (await pollJobStatus()) return { succeeded: false, subSitemaps: [] };
 
     try {
-      const sitemapRes = await axios.get(sitemapUrl, {
+      const sitemapRes = await axios.get(normalizedSitemap, {
         timeout: 10000,
         headers: { 'User-Agent': SCAN_REQUEST_USER_AGENT },
         validateStatus: (s) => s >= 200 && s < 400,
       });
 
-      if (sitemapUrl.endsWith('.txt')) {
+      if (normalizedSitemap.endsWith('.txt')) {
         const urls = sitemapRes.data.split('\n').map((u) => u.trim()).filter(Boolean);
         for (let index = 0; index < urls.length; index += 1) {
           const u = urls[index];
@@ -5349,7 +5337,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           }
         }
         markCompleteSitemapParents(urls);
-        return true;
+        return { succeeded: true, subSitemaps: [] };
       }
 
       const $ = cheerio.load(sitemapRes.data, { xmlMode: true });
@@ -5391,16 +5379,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const loc = $(el).text().trim();
         if (loc) subSitemaps.push(loc);
       });
-
-      const orderedSubSitemaps = subSitemaps.map((loc, index) => ({ loc, index }));
-      await runWithConcurrency(orderedSubSitemaps, 4, async ({ loc, index }) => {
-        if (await pollJobStatus() || stopRequested) return;
-        await processSitemap(loc, source, [...documentPath, index]);
-      });
-      return true;
+      return { succeeded: true, subSitemaps };
     } catch (error) {
       const status = error?.response?.status || null;
-      if (status === 404 && source !== 'robots_sitemap') return false;
+      if (status === 404 && source !== 'robots_sitemap') {
+        return { succeeded: false, subSitemaps: [] };
+      }
       scanDiagnostics.sitemapFetchFailures += 1;
       recordDiscoveryError({
         source,
@@ -5408,8 +5392,80 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         status,
         message: error?.message || 'sitemap fetch failed',
       });
-      return false;
+      return { succeeded: false, subSitemaps: [] };
     }
+  };
+
+  const compareSitemapDocumentPaths = (left, right) => {
+    const maxLength = Math.max(left.length, right.length);
+    for (let index = 0; index < maxLength; index += 1) {
+      if (index >= left.length) return -1;
+      if (index >= right.length) return 1;
+      const difference = Number(left[index]) - Number(right[index]);
+      if (difference !== 0) return difference;
+    }
+    return 0;
+  };
+
+  const processSitemap = async (
+    sitemapUrl,
+    source = 'sitemap',
+    sitemapDocumentPath = null
+  ) => {
+    const rootDocumentPath = Array.isArray(sitemapDocumentPath)
+      ? sitemapDocumentPath
+      : [sitemapDocumentCounter++];
+    let pendingTasks = [{
+      sitemapUrl,
+      source,
+      documentPath: rootDocumentPath,
+      root: true,
+    }];
+    let rootSucceeded = false;
+
+    while (pendingTasks.length > 0 && processedSitemaps.size < MAX_SITEMAPS) {
+      if (await pollJobStatus() || stopRequested) break;
+      pendingTasks.sort((left, right) => (
+        compareSitemapDocumentPaths(left.documentPath, right.documentPath)
+      ));
+
+      const admittedTasks = [];
+      for (const task of pendingTasks) {
+        if (processedSitemaps.size >= MAX_SITEMAPS) break;
+        const normalizedSitemap = normalizeUrl(task.sitemapUrl);
+        if (!normalizedSitemap || processedSitemaps.has(normalizedSitemap)) continue;
+        if (!getPlacementForUrl(normalizedSitemap, scanScope)) continue;
+        processedSitemaps.add(normalizedSitemap);
+        admittedTasks.push({ ...task, normalizedSitemap });
+      }
+      if (admittedTasks.length === 0) break;
+
+      const results = new Array(admittedTasks.length);
+      await runWithConcurrency(
+        admittedTasks.map((task, index) => ({ task, index })),
+        4,
+        async ({ task, index }) => {
+          results[index] = await fetchSitemapDocument(task);
+        }
+      );
+
+      const nextTasks = [];
+      admittedTasks.forEach((task, taskIndex) => {
+        const result = results[taskIndex] || { succeeded: false, subSitemaps: [] };
+        if (task.root && result.succeeded) rootSucceeded = true;
+        result.subSitemaps.forEach((loc, index) => {
+          nextTasks.push({
+            sitemapUrl: loc,
+            source: task.source,
+            documentPath: [...task.documentPath, index],
+            root: false,
+          });
+        });
+      });
+      pendingTasks = nextTasks;
+    }
+
+    return rootSucceeded;
   };
 
   const processRobotsSitemaps = async () => {

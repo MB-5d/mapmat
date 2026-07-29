@@ -24,12 +24,27 @@ async function fetchJson(url, options = {}) {
 function createFixtureServer() {
   let concurrentFocusedRun = 0;
   let concurrentSitemapRequests = 0;
+  let sitemapCapFocusedRun = 0;
+  let sitemapCapRequests = 0;
   let unstableListingRun = 0;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://fixture.local');
     const postMatch = url.pathname.match(/^\/blog\/post-(\d+)$/);
     if (url.pathname === '/sitemap.xml') {
       const origin = `http://127.0.0.1:${server.address().port}`;
+      if (sitemapCapFocusedRun > 0 && sitemapCapRequests < 2) {
+        sitemapCapRequests += 1;
+        res.writeHead(200, { 'content-type': 'application/xml' });
+        res.end([
+          '<sitemapindex>',
+          ...Array.from(
+            { length: 14 },
+            (_, index) => `<sitemap><loc>${origin}/fixture-cap-${index + 1}.xml</loc></sitemap>`
+          ),
+          '</sitemapindex>',
+        ].join(''));
+        return;
+      }
       if (concurrentFocusedRun > 0 && concurrentSitemapRequests < 2) {
         concurrentSitemapRequests += 1;
         res.writeHead(200, { 'content-type': 'application/xml' });
@@ -58,6 +73,17 @@ function createFixtureServer() {
       ];
       res.writeHead(200, { 'content-type': 'application/xml' });
       res.end(`<urlset>${urls.map((entry) => `<url><loc>${entry}</loc></url>`).join('')}</urlset>`);
+      return;
+    }
+    if (/^\/fixture-cap-\d+\.xml$/.test(url.pathname)) {
+      const origin = `http://127.0.0.1:${server.address().port}`;
+      const index = Number(url.pathname.match(/\d+/)?.[0] || 0);
+      const oddRun = sitemapCapFocusedRun % 2 === 1;
+      const delay = (index % 2 === 1) === oddRun ? 80 : 5;
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'application/xml' });
+        res.end(`<urlset><url><loc>${origin}/section/sitemap-cap/item-${index}</loc></url></urlset>`);
+      }, delay);
       return;
     }
     if (/^\/fixture-parent-[ab]\.xml$/.test(url.pathname)) {
@@ -241,6 +267,21 @@ function createFixtureServer() {
     if (/^\/section\/concurrent\/articles\/article-[ab][12]$/.test(url.pathname)) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Article</h1></article></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/sitemap-cap') {
+      sitemapCapFocusedRun += 1;
+      const links = Array.from(
+        { length: 14 },
+        (_, index) => `<article><h2><a href="/section/sitemap-cap/item-${index + 1}">Item ${index + 1}</a></h2></article>`
+      ).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Sitemap cap</title></head><body>${links}</body></html>`);
+      return;
+    }
+    if (/^\/section\/sitemap-cap\/item-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body>Item</body></html>`);
       return;
     }
     if (url.pathname === '/section/unstable-listing') {
@@ -779,6 +820,23 @@ async function main() {
       getNumberingSnapshot(repeatedConcurrentResult),
       getNumberingSnapshot(concurrentResult),
       'parallel focused scans must select and number the same capped descendants regardless of response order'
+    );
+    const sitemapCapResult = await createScan({
+      url: `${fixtureOrigin}/section/sitemap-cap`,
+      maxPages: 30,
+      options: {},
+    }, authToken);
+    const repeatedSitemapCapResult = await createScan({
+      url: `${fixtureOrigin}/section/sitemap-cap`,
+      maxPages: 30,
+      options: {},
+    }, authToken);
+    assert.equal(sitemapCapResult.scanDiagnostics?.sitemapUrlsFound, 11);
+    assert.equal(repeatedSitemapCapResult.scanDiagnostics?.sitemapUrlsFound, 11);
+    assert.deepEqual(
+      getNumberingSnapshot(repeatedSitemapCapResult),
+      getNumberingSnapshot(sitemapCapResult),
+      'sitemap file admission must remain stable when a sitemap index exceeds the processing limit'
     );
     const unstableListingResult = await createScan({
       url: `${fixtureOrigin}/section/unstable-listing`,
