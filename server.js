@@ -4997,12 +4997,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       focusedContentUrls.add(normalized);
       return false;
     }
-    const sourceDiscoveryOrder = numberingDiscoveryOrder.get(normalizedSource);
+    const sourceListingKey = focusedListingOrder.get(normalizedSource);
+    const sourceSitemapOrder = sitemapNumberingOrder.get(normalizedSource);
     const sourceKey = normalizedSource === seed
       ? 'listing:0'
-      : Number.isFinite(sourceDiscoveryOrder)
-        ? `listing:1:${String(Math.max(0, sourceDiscoveryOrder)).padStart(12, '0')}`
-        : `listing:2:${normalizedSource}`;
+      : sourceListingKey
+        ? `listing:1:${sourceListingKey}`
+        : Number.isFinite(sourceSitemapOrder)
+          ? `listing:2:sitemap:${String(Math.max(0, sourceSitemapOrder)).padStart(12, '0')}`
+          : `listing:3:url:${normalizedSource}`;
     const listingKey = `${sourceKey}:${String(Math.max(0, sourceOrder)).padStart(8, '0')}`;
     const existingListingKey = focusedListingOrder.get(normalized);
     if (!existingListingKey || listingKey.localeCompare(existingListingKey) < 0) {

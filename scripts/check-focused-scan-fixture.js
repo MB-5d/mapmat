@@ -22,6 +22,7 @@ async function fetchJson(url, options = {}) {
 }
 
 function createFixtureServer() {
+  let concurrentFocusedRun = 0;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://fixture.local');
     const postMatch = url.pathname.match(/^\/blog\/post-(\d+)$/);
@@ -163,6 +164,41 @@ function createFixtureServer() {
     if (url.pathname === '/section/editorial/articles') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end('<html><head><title>Editorial articles</title></head><body><h1>Articles</h1></body></html>');
+      return;
+    }
+    if (url.pathname === '/section/concurrent') {
+      concurrentFocusedRun += 1;
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end([
+        '<html><head><title>Concurrent section</title></head><body>',
+        '<a href="/section/concurrent/branch-a">Branch A</a>',
+        '<a href="/section/concurrent/branch-b">Branch B</a>',
+        '</body></html>',
+      ].join(''));
+      return;
+    }
+    if (/^\/section\/concurrent\/branch-[ab]$/.test(url.pathname)) {
+      const branch = url.pathname.endsWith('branch-a') ? 'a' : 'b';
+      const oddRun = concurrentFocusedRun % 2 === 1;
+      const delay = (branch === 'a') === oddRun ? 80 : 5;
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end(`<html><head><title>Branch ${branch.toUpperCase()}</title></head><body><a href="/section/concurrent/index-${branch}">Index ${branch.toUpperCase()}</a></body></html>`);
+      }, delay);
+      return;
+    }
+    if (/^\/section\/concurrent\/index-[ab]$/.test(url.pathname)) {
+      const branch = url.pathname.endsWith('index-a') ? 'a' : 'b';
+      const links = [1, 2].map((index) => (
+        `<article><h2><a href="/section/concurrent/articles/article-${branch}${index}">Article ${branch.toUpperCase()}${index}</a></h2></article>`
+      )).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Index ${branch.toUpperCase()}</title></head><body>${links}</body></html>`);
+      return;
+    }
+    if (/^\/section\/concurrent\/articles\/article-[ab][12]$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Article</h1></article></body></html>`);
       return;
     }
     if (url.pathname === '/section/unrelated') {
@@ -669,6 +705,22 @@ async function main() {
       getNumberingSnapshot(repeatedArchiveResult),
       getNumberingSnapshot(archiveResult),
       'repeated NYT-style dated scans should produce identical numbering and child order'
+    );
+
+    const concurrentResult = await createScan({
+      url: `${fixtureOrigin}/section/concurrent`,
+      maxPages: 8,
+      options: {},
+    }, authToken);
+    const repeatedConcurrentResult = await createScan({
+      url: `${fixtureOrigin}/section/concurrent`,
+      maxPages: 8,
+      options: {},
+    }, authToken);
+    assert.deepEqual(
+      getNumberingSnapshot(repeatedConcurrentResult),
+      getNumberingSnapshot(concurrentResult),
+      'parallel focused scans must select and number the same capped descendants regardless of response order'
     );
 
     // Apple-style newsroom archive with a dated category parent required by a captured detail page.
