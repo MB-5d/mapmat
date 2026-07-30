@@ -564,4 +564,34 @@ describe('NodeCard', () => {
     expect(container.textContent).not.toContain('TXT file');
     expect(container.textContent).not.toContain('No page preview');
   });
+
+  test('keeps crawl findings separate from screenshot capture failures', async () => {
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'node-1',
+            title: 'Restricted crawl result',
+            url: 'https://example.com/page',
+            scanStatus: 'scan_limited',
+            statusCode: 403,
+            thumbnailCaptureFailed: true,
+            thumbnailCaptureError: 'Capture failed',
+          }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          thumbnailCaptureStopped
+          badges={['Crawl restricted']}
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onDuplicate={vi.fn()}
+          onViewImage={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.thumb-placeholder-label')?.textContent).toBe('Capture failed');
+    expect(container.querySelector('.node-badge')?.textContent).toBe('Crawl restricted');
+  });
 });

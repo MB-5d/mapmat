@@ -38,7 +38,7 @@ const REPORT_FILTER_META = {
   inactivePages: { label: 'Inactive', tone: getFindingTone('inactivePages') },
   subdomains: { label: 'Subdomain', tone: getFindingTone('subdomains') },
   files: { label: 'Files', tone: getFindingTone('files') },
-  authenticatedPages: { label: 'Authenticated', tone: getFindingTone('authenticatedPages') },
+  authenticatedPages: { label: 'Login required', tone: getFindingTone('authenticatedPages') },
   missingTitle: { label: 'No title', tone: getFindingTone('missingTitle') },
   shortTitle: { label: 'Short title', tone: getFindingTone('shortTitle') },
   longTitle: { label: 'Very long title', tone: getFindingTone('longTitle') },

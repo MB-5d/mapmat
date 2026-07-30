@@ -112,7 +112,7 @@ describe('ScanProgressModal', () => {
     expect(pagesSection.querySelector('.scan-inline-note').textContent).toBe('(94%)');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Captured 350');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Deferred 30');
-    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Scan limited 2');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Crawl restricted 2');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Failed 2');
   });
 

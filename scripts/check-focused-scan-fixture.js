@@ -209,8 +209,23 @@ function createFixtureServer() {
           (_, index) => `<a href="/section/science/space?page=${index + 1}">Page ${index + 1}</a>`
         ).join('')
         : '';
+      const story = page === 2
+        ? [
+          '<ol><li>',
+          '<h2><a href="/section/science/space?page=2#stream">Latest</a></h2>',
+          '<section class="story-stream"><article>',
+          '<h3><a href="/2026/06/09/science/space/page-2-story">Page 2 story</a></h3>',
+          '</article></section>',
+          '</li></ol>',
+        ].join('')
+        : '';
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<html><head><title>Space page ${page}</title></head><body><h1>Space page ${page}</h1>${links}</body></html>`);
+      res.end(`<html><head><title>Space page ${page}</title></head><body><main><h1>Space page ${page}</h1>${links}${story}</main></body></html>`);
+      return;
+    }
+    if (url.pathname === '/2026/06/09/science/space/page-2-story') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Page 2 story</title><meta property="og:type" content="article"></head><body><article><h1>Page 2 story</h1></article></body></html>');
       return;
     }
     if (url.pathname === '/section/science') {
@@ -684,8 +699,16 @@ async function main() {
     );
     assert.equal(
       paginationResult.pageCountSummary.totalDiscoveredPageCount,
-      1,
-      'discovery helpers must not inflate focused page totals'
+      2,
+      'discovery helpers must not inflate focused page totals, but their primary articles must remain'
+    );
+    const paginationArticle = paginationNodes.find(
+      (node) => node.url === `${fixtureOrigin}/2026/06/09/science/space/page-2-story`
+    );
+    assert.equal(
+      paginationArticle?.parentUrl,
+      paginationTarget.url,
+      'nested pagination listings should keep the primary article under the focused page'
     );
 
     // NYT-style dated article hierarchy discovered from month listing pages.

@@ -558,7 +558,7 @@ describe('ReportDrawer', () => {
       'No H1',
       'Broken links',
       'Files',
-      'Authenticated',
+      'Login required',
     ]);
   });
 

@@ -1499,6 +1499,10 @@ const sameId = (left, right) => {
   return String(left) === String(right);
 };
 
+const canReuseRouteGatePreview = ({ previewLoaded, previewMapId, routeMapId }) => (
+  Boolean(previewLoaded) && sameId(previewMapId, routeMapId)
+);
+
 const normalizeShareAccessForApp = (value) => (
   Object.values(ACCESS_LEVELS).includes(value) ? value : ACCESS_LEVELS.VIEW
 );
@@ -3368,6 +3372,7 @@ export const __testing = {
   getCommentPopoverDrawerPosition,
   getCommentDrawerNodeFocusTarget,
   formatBillingUpgradeSuccessMessage,
+  canReuseRouteGatePreview,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -12599,11 +12604,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     ) {
       clearLoadedMapView();
     }
-    if (
-      !isLoggedIn
-      && routeGatePreviewMapLoadedRef.current
-      && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
-    ) {
+    if (canReuseRouteGatePreview({
+      previewLoaded: routeGatePreviewMapLoadedRef.current,
+      previewMapId: routeGatePreviewMapIdRef.current,
+      routeMapId: currentRoute.mapId,
+    })) {
       return undefined;
     }
 
@@ -13626,7 +13631,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
       } else if (data.blockedSections?.length) {
         const blockedUrl = data.blockedSections[0]?.url || hostname;
-        showToast(`Scan complete. A section was blocked at ${blockedUrl}.`, 'warning');
+        showToast(`Scan complete. Crawling was restricted at ${blockedUrl}.`, 'warning');
       } else if (isPartialResult) {
         showToast(`Scan complete with partial data${hostname ? `: ${hostname}` : ''}`, 'warning');
       } else {

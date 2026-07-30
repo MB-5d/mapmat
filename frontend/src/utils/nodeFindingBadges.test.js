@@ -35,7 +35,7 @@ describe('node finding badges', () => {
       authRequired: true,
       isInactive: true,
       statusCode: 401,
-    })).toEqual(['Auth']);
+    })).toEqual(['Login required']);
 
     expect(getFindingBadgesForNode({
       id: 'inactive',
@@ -51,6 +51,6 @@ describe('node finding badges', () => {
       scanStatus: 'scan_limited',
       isBlocked: true,
       statusCode: 403,
-    })).toEqual(['Scan limited']);
+    })).toEqual(['Crawl restricted']);
   });
 });

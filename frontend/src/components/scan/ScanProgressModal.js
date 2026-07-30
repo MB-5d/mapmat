@@ -12,8 +12,8 @@ const FINDING_ITEMS = [
   { key: 'errorPages', label: 'Error' },
   { key: 'inactivePages', label: 'Inactive' },
   { key: 'redirects', label: 'Redirects' },
-  { key: 'authenticatedPages', label: 'Auth required' },
-  { key: 'scanLimited', label: 'Scan limited' },
+  { key: 'authenticatedPages', label: 'Login required' },
+  { key: 'scanLimited', label: 'Crawl restricted' },
 ];
 
 const formatCount = (value) => new Intl.NumberFormat().format(Math.max(0, Number(value || 0) || 0));
@@ -174,7 +174,7 @@ const ScanProgressModal = ({
             <div className="scan-outcome-note">
               <span>Captured {formatCount(capturedCount)}</span>
               {deferredCount > 0 ? <span>Deferred {formatCount(deferredCount)}</span> : null}
-              {blockedCount > 0 ? <span>Scan limited {formatCount(blockedCount)}</span> : null}
+              {blockedCount > 0 ? <span>Crawl restricted {formatCount(blockedCount)}</span> : null}
               {failedCount > 0 ? <span>Failed {formatCount(failedCount)}</span> : null}
             </div>
           </div>

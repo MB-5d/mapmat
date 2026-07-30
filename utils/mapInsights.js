@@ -352,7 +352,7 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
       findings.push(createFinding({
         category: CATEGORIES.technical,
         severity: SEVERITIES.medium,
-        title: 'Scan limited by site protection',
+        title: 'Crawl restricted by site protection',
         description: `${title || page.url} could not be fully scanned${statusLabel ? ` (${statusLabel})` : ''}.`,
         recommendation: 'If you control this site, allow Vellic in Cloudflare or add a WAF skip rule for trusted Vellic scan traffic.',
         page,

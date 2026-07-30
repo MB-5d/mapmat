@@ -181,9 +181,15 @@ async function main() {
     fixture = await createFixtureServer();
     const fixtureBase = getServerUrl(fixture);
     await waitForHealth();
+    const login = await fetchJson(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify({ email: 'admin@vellic.io', password: 'Admin123' }),
+    });
+    const authHeaders = { authorization: `Bearer ${login.token}` };
 
     const precheck = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
       method: 'POST',
+      headers: authHeaders,
       body: JSON.stringify({ url: `${fixtureBase}/` }),
     });
     assert.strictEqual(precheck.authRequired, true, 'precheck should find login-gated pages');
@@ -192,11 +198,14 @@ async function main() {
 
     const interactive = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
       method: 'POST',
+      headers: authHeaders,
       body: JSON.stringify({ url: `${fixtureBase}/login` }),
     });
     assert.strictEqual(interactive.status, 'interactive', 'login flow should create an interactive browser session');
 
-    const loginScreen = await fetchRaw(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/screenshot`);
+    const loginScreen = await fetchRaw(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/screenshot`, {
+      headers: authHeaders,
+    });
     assert.ok(
       String(loginScreen.headers.get('content-type') || '').includes('image/jpeg'),
       'interactive login screen should return a browser screenshot'
@@ -204,26 +213,34 @@ async function main() {
 
     await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/action`, {
       method: 'POST',
+      headers: authHeaders,
       body: JSON.stringify({ action: 'type', text: 'ok' }),
     });
     await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/action`, {
       method: 'POST',
+      headers: authHeaders,
       body: JSON.stringify({ action: 'press', key: 'Enter' }),
     });
     await sleep(1000);
     const completedInteractive = await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/complete`, {
       method: 'POST',
+      headers: authHeaders,
     });
     assert.strictEqual(completedInteractive.ready, true, 'interactive login should capture a ready storage state');
 
     const interactiveScreenshot = await fetchJson(
-      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${interactive.sessionId}`
+      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${interactive.sessionId}`,
+      { headers: authHeaders }
     );
     assert.ok(interactiveScreenshot.thumbnailUrl, 'interactive auth session should capture protected pages');
-    await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}`, { method: 'DELETE' });
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}`, {
+      method: 'DELETE',
+      headers: authHeaders,
+    });
 
     const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
       method: 'POST',
+      headers: authHeaders,
       body: JSON.stringify({
         url: `${fixtureBase}/`,
         storageState: {
@@ -243,12 +260,14 @@ async function main() {
     assert.strictEqual(session.status, 'ready', 'storage state should create a ready auth session');
 
     const screenshot = await fetchJson(
-      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${session.sessionId}`
+      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${session.sessionId}`,
+      { headers: authHeaders }
     );
     assert.ok(screenshot.thumbnailUrl, 'same auth session should capture another protected page');
 
     const created = await fetchJson(`${API_BASE}/scan-jobs`, {
       method: 'POST',
+      headers: authHeaders,
       body: JSON.stringify({
         url: `${fixtureBase}/private-a`,
         maxPages: 10,
@@ -265,7 +284,9 @@ async function main() {
 
     let deleted = false;
     try {
-      await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}`);
+      await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}`, {
+        headers: authHeaders,
+      });
     } catch (error) {
       deleted = /failed 404/.test(error.message);
     }

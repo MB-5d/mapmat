@@ -4431,41 +4431,6 @@ function extractLinks(html, baseUrl) {
   return Array.from(links);
 }
 
-const FOCUSED_CONTENT_LINK_SELECTOR = [
-  'article h1 a[href]',
-  'article h2 a[href]',
-  'article h3 a[href]',
-  'article h4 a[href]',
-  'main li h1 a[href]',
-  'main li h2 a[href]',
-  'main li h3 a[href]',
-  'main li h4 a[href]',
-  'main [role="listitem"] h1 a[href]',
-  'main [role="listitem"] h2 a[href]',
-  'main [role="listitem"] h3 a[href]',
-  'main [role="listitem"] h4 a[href]',
-  '[class*="card"] h1 a[href]',
-  '[class*="card"] h2 a[href]',
-  '[class*="card"] h3 a[href]',
-  '[class*="card"] h4 a[href]',
-  '[class*="Card"] h1 a[href]',
-  '[class*="Card"] h2 a[href]',
-  '[class*="Card"] h3 a[href]',
-  '[class*="Card"] h4 a[href]',
-  '[class*="tile"] h1 a[href]',
-  '[class*="tile"] h2 a[href]',
-  '[class*="tile"] h3 a[href]',
-  '[class*="tile"] h4 a[href]',
-  '[class*="teaser"] h1 a[href]',
-  '[class*="teaser"] h2 a[href]',
-  '[class*="teaser"] h3 a[href]',
-  '[class*="teaser"] h4 a[href]',
-  '[class*="story"] h1 a[href]',
-  '[class*="story"] h2 a[href]',
-  '[class*="story"] h3 a[href]',
-  '[class*="story"] h4 a[href]',
-].join(', ');
-
 function extractFocusedContentLinks(html, baseUrl) {
   const $ = cheerio.load(html);
   const links = new Set();
@@ -4482,32 +4447,48 @@ function extractFocusedContentLinks(html, baseUrl) {
     '[class*="story"]',
     '[class*="Story"]',
   ].join(', ');
-  const addLink = (el) => {
+  const normalizeLink = (el) => {
     const $link = $(el);
-    if ($link.closest('header, nav, footer, aside, [role="navigation"]').length > 0) return;
+    if ($link.closest('header, nav, footer, aside, [role="navigation"]').length > 0) return null;
     const href = ($link.attr('href') || '').trim();
-    if (!href || /^(mailto:|tel:|javascript:)/i.test(href)) return;
+    if (!href || /^(mailto:|tel:|javascript:)/i.test(href)) return null;
     try {
-      const normalized = normalizeUrl(new URL(href, baseUrl).toString());
-      if (normalized) links.add(normalized);
+      return normalizeUrl(new URL(href, baseUrl).toString());
     } catch {
-      // Ignore malformed content links.
+      return null;
     }
+  };
+  const getHeadingLinkScore = (link) => {
+    const $link = $(link);
+    const $heading = $link.closest('h1, h2, h3, h4');
+    const tag = String($heading.get(0)?.tagName || '').toLowerCase();
+    const className = [
+      $heading.attr('class'),
+      $link.attr('class'),
+      $heading.parent().attr('class'),
+    ].filter(Boolean).join(' ');
+    let score = ({ h1: 40, h2: 30, h3: 20, h4: 10 })[tag] || 0;
+    if (/(?:title|headline|heading)/i.test(className)) score += 100;
+    if (/(?:slug|kicker|eyebrow|category|section|label)/i.test(className)) score -= 100;
+    const normalized = normalizeLink(link);
+    if (!normalized) return { normalized: null, score: Number.NEGATIVE_INFINITY };
+    const pathname = new URL(normalized).pathname;
+    if (/\/(?:19|20)\d{2}(?:\/|$)/.test(pathname)) score += 50;
+    if (/^\/(?:sections?|topics?|tags?|categor(?:y|ies)|newsletters?|podcasts?)(?:\/[^/]+)?\/?$/i.test(pathname)) {
+      score -= 80;
+    }
+    return { normalized, score };
   };
 
   $(containerSelector).each((_, container) => {
     const $container = $(container);
-    if ($container.parents(containerSelector).length > 0) return;
-    let headingLink = $();
-    for (const selector of ['h1 a[href]', 'h2 a[href]', 'h3 a[href]', 'h4 a[href]']) {
-      const candidate = $container.find(selector).first();
-      if (candidate.length > 0) {
-        headingLink = candidate;
-        break;
-      }
-    }
-    if (headingLink.length > 0) {
-      addLink(headingLink.get(0));
+    const headingLinks = $container.find('h1 a[href], h2 a[href], h3 a[href], h4 a[href]')
+      .get()
+      .map((link, index) => ({ link, index, ...getHeadingLinkScore(link) }))
+      .filter((candidate) => candidate.normalized)
+      .sort((left, right) => right.score - left.score || left.index - right.index);
+    if (headingLinks.length > 0) {
+      links.add(headingLinks[0].normalized);
       return;
     }
     const className = String($container.attr('class') || '');
@@ -4517,21 +4498,19 @@ function extractFocusedContentLinks(html, baseUrl) {
     );
     if (isGenericListItem) {
       const paragraphLink = $container.find('p a[href]').first();
-      if (paragraphLink.length > 0) addLink(paragraphLink.get(0));
+      const normalized = paragraphLink.length > 0 ? normalizeLink(paragraphLink.get(0)) : null;
+      if (normalized) links.add(normalized);
       return;
     }
     const directLink = $container.children('a[href]').first();
     if (directLink.length > 0) {
-      addLink(directLink.get(0));
+      const normalized = normalizeLink(directLink.get(0));
+      if (normalized) links.add(normalized);
       return;
     }
     const fallbackLink = $container.find('a[href]').first();
-    if (fallbackLink.length > 0) addLink(fallbackLink.get(0));
-  });
-
-  $(FOCUSED_CONTENT_LINK_SELECTOR).each((_, el) => {
-    if ($(el).parents(containerSelector).length > 0) return;
-    addLink(el);
+    const normalized = fallbackLink.length > 0 ? normalizeLink(fallbackLink.get(0)) : null;
+    if (normalized) links.add(normalized);
   });
 
   return Array.from(links);
@@ -4553,21 +4532,19 @@ async function extractRenderedLinks(url, context = null) {
       timeout: 12000,
     });
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
-    const renderedLinks = await page.evaluate((selector) => {
-      const contentLinks = Array.from(document.querySelectorAll(selector))
-        .filter((anchor) => !anchor.closest('header, nav, footer, aside, [role="navigation"]'))
+    const renderedLinks = await page.evaluate(() => (
+      Array.from(document.querySelectorAll('a[href]'))
         .map((anchor) => anchor.href)
-        .filter(Boolean);
-      return {
-        links: Array.from(document.querySelectorAll('a[href]'))
-          .map((anchor) => anchor.href)
-          .filter(Boolean),
-        contentLinks,
-      };
-    }, FOCUSED_CONTENT_LINK_SELECTOR);
+        .filter(Boolean)
+    ));
+    const renderedHtml = await page.content();
+    const contentLinks = extractFocusedContentLinks(
+      renderedHtml,
+      response?.url?.() || page.url() || url
+    );
     return {
-      links: Array.from(new Set(renderedLinks.links)),
-      contentLinks: Array.from(new Set(renderedLinks.contentLinks)),
+      links: Array.from(new Set(renderedLinks)),
+      contentLinks: Array.from(new Set(contentLinks)),
       status: response?.status?.() || null,
       finalUrl: response?.url?.() || url,
       error: null,

@@ -91,7 +91,7 @@ describe('LayersPanel', () => {
     expect(container.textContent).toContain('Broken link');
     expect(container.textContent).toContain('Error');
     expect(container.textContent).toContain('Inactive');
-    expect(container.textContent).toContain('Auth required');
+    expect(container.textContent).toContain('Login required');
     expect(container.querySelector('.ui-menu-item--selected')).toBeNull();
 
     act(() => {

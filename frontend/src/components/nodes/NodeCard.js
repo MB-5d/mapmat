@@ -19,7 +19,6 @@ import Button from '../ui/Button';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
-import { getNodeHttpErrorLabel, isRealHttpErrorNode, isScanLimitedNode } from '../../utils/scanStatus';
 
 const NODE_STATUS_BADGE_STYLE = {
   new: 'info',
@@ -122,7 +121,6 @@ const NodeCard = ({
   const getPreviewIssue = () => {
     const orphanType = String(node?.orphanType || '').toLowerCase();
     const pageType = String(node?.pageType || node?.type || '').toLowerCase();
-    const scanStatus = String(node?.scanStatus || node?.status || '').toLowerCase();
     const extension = getUrlExtension(node?.url).toUpperCase();
     const isRenderableText = isRenderableTextUrl(node?.url);
     if (isEntitlementLocked) {
@@ -145,47 +143,6 @@ const NodeCard = ({
         label: extension ? `${extension} file` : 'File link',
         text: 'No page preview',
         variant: 'file',
-      };
-    }
-    if (node?.authRequired) {
-      return {
-        icon: Lock,
-        label: 'Requires login',
-        text: 'Preview unavailable',
-        variant: 'blocked',
-      };
-    }
-    const statusCode = Number(node?.httpStatus ?? node?.statusCode);
-    if (isScanLimitedNode(node)) {
-      return {
-        icon: AlertTriangle,
-        label: statusCode >= 400 ? `Scan limited (${getNodeHttpErrorLabel(node) || `HTTP ${statusCode}`})` : 'Scan limited',
-        text: 'Preview unavailable',
-        variant: 'blocked',
-      };
-    }
-    const isViewableError = Boolean(node?.isViewableError && Number.isFinite(statusCode) && statusCode >= 400);
-    if (isViewableError) return null;
-    if (
-      node?.isBroken
-      || orphanType === 'broken'
-      || scanStatus === 'error'
-      || scanStatus === 'failed'
-      || isRealHttpErrorNode(node)
-    ) {
-      return {
-        icon: AlertTriangle,
-        label: getNodeHttpErrorLabel(node) || 'Error page',
-        text: 'Preview unavailable',
-        variant: 'error',
-      };
-    }
-    if (node?.isInactive || orphanType === 'inactive' || scanStatus === 'inactive' || statusCode === 0) {
-      return {
-        icon: AlertTriangle,
-        label: 'Inactive page',
-        text: 'Preview unavailable',
-        variant: 'inactive',
       };
     }
     if (node?.thumbnailCaptureFailed) {
