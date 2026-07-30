@@ -45,16 +45,22 @@ async function main() {
           event.currentTarget.closest('[role="dialog"]').remove();
         });
         document.querySelector('#govuk-cookie-accept').addEventListener('click', (event) => {
-          event.currentTarget.closest('.govuk-cookie-banner').remove();
+          const banner = event.currentTarget.closest('.govuk-cookie-banner');
+          banner.innerHTML = \`
+            <p>You've accepted additional cookies.</p>
+            <button id="govuk-cookie-hide">Hide cookie message</button>
+          \`;
+          banner.querySelector('#govuk-cookie-hide').addEventListener('click', () => banner.remove());
         });
       </script>
     `);
 
     const result = await dismissScreenshotObstructions(page, { settleMs: 0 });
     const repeatedResult = await dismissScreenshotObstructions(page, { settleMs: 0 });
+    const confirmationResult = await dismissScreenshotObstructions(page, { settleMs: 0 });
     assert.ok(
-      result.clickedCount + repeatedResult.clickedCount >= 4,
-      'cookie and newsletter controls should be dismissed across capture preparation passes'
+      result.clickedCount + repeatedResult.clickedCount + confirmationResult.clickedCount >= 5,
+      'cookie, confirmation, and newsletter controls should be dismissed across capture preparation passes'
     );
     assert.equal(await page.locator('#onetrust-consent-sdk').count(), 0);
     assert.equal(await page.locator('[aria-label="Newsletter signup"]').count(), 0);

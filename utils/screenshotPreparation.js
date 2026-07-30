@@ -28,7 +28,7 @@ async function dismissScreenshotObstructions(page, {
       };
       const blockedContext = /(?:sign[\s-]?in|log[\s-]?in|password|purchase|checkout|payment)/i;
       const consentContext = /(?:cookie|consent|privacy|gdpr|tracking|preference|onetrust|trustarc|quantcast|didomi|cookiebot)/i;
-      const acceptAction = /^(?:accept(?: all| additional| optional| analytics)?(?: cookies)?|i accept|allow(?: all)?(?: cookies)?|agree|i agree|consent|continue|got it|ok(?:ay)?)$/i;
+      const acceptAction = /^(?:accept(?: all| additional| optional| analytics)?(?: cookies)?|hide(?: this)? cookie message|i accept|allow(?: all)?(?: cookies)?|agree|i agree|consent|continue|got it|ok(?:ay)?)$/i;
       const nuisanceContext = /(?:newsletter|notifications?|promotion|special offer|sign up for updates|subscribe|subscription|sale ends)/i;
       const knownConsentSelectors = [
         '#onetrust-accept-btn-handler',
