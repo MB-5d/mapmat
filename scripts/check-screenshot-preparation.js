@@ -22,6 +22,10 @@ async function main() {
         <p>Choose whether to allow cookies and tracking.</p>
         <button id="generic-cookie-accept">Accept all cookies</button>
       </div>
+      <div class="govuk-cookie-banner" style="position: fixed; top: 0">
+        <p>Cookies on GOV.UK. We use some essential cookies to make this website work.</p>
+        <button id="govuk-cookie-accept">Accept additional cookies</button>
+      </div>
       <div role="dialog" aria-label="Sign in">
         <p>Sign in with your password.</p>
         <button aria-label="Close" id="protected-close">×</button>
@@ -40,14 +44,22 @@ async function main() {
         document.querySelector('#generic-cookie-accept').addEventListener('click', (event) => {
           event.currentTarget.closest('[role="dialog"]').remove();
         });
+        document.querySelector('#govuk-cookie-accept').addEventListener('click', (event) => {
+          event.currentTarget.closest('.govuk-cookie-banner').remove();
+        });
       </script>
     `);
 
     const result = await dismissScreenshotObstructions(page, { settleMs: 0 });
-    assert.ok(result.clickedCount >= 3, 'cookie and newsletter controls should be dismissed');
+    const repeatedResult = await dismissScreenshotObstructions(page, { settleMs: 0 });
+    assert.ok(
+      result.clickedCount + repeatedResult.clickedCount >= 4,
+      'cookie and newsletter controls should be dismissed across capture preparation passes'
+    );
     assert.equal(await page.locator('#onetrust-consent-sdk').count(), 0);
     assert.equal(await page.locator('[aria-label="Newsletter signup"]').count(), 0);
     assert.equal(await page.locator('[aria-label="Privacy choices"]').count(), 0);
+    assert.equal(await page.locator('.govuk-cookie-banner').count(), 0);
     assert.equal(
       await page.locator('.subscription-banner').isVisible(),
       false,
