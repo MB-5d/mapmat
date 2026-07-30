@@ -59,13 +59,17 @@ async function main() {
     const repeatedResult = await dismissScreenshotObstructions(page, { settleMs: 0 });
     const confirmationResult = await dismissScreenshotObstructions(page, { settleMs: 0 });
     assert.ok(
-      result.clickedCount + repeatedResult.clickedCount + confirmationResult.clickedCount >= 5,
-      'cookie, confirmation, and newsletter controls should be dismissed across capture preparation passes'
+      result.clickedCount + repeatedResult.clickedCount + confirmationResult.clickedCount >= 3,
+      'cookie and newsletter controls should be dismissed across capture preparation passes'
     );
     assert.equal(await page.locator('#onetrust-consent-sdk').count(), 0);
     assert.equal(await page.locator('[aria-label="Newsletter signup"]').count(), 0);
     assert.equal(await page.locator('[aria-label="Privacy choices"]').count(), 0);
-    assert.equal(await page.locator('.govuk-cookie-banner').count(), 0);
+    assert.equal(
+      await page.locator('.govuk-cookie-banner').isVisible(),
+      false,
+      'GOV.UK consent confirmations should be hidden before capture'
+    );
     assert.equal(
       await page.locator('.subscription-banner').isVisible(),
       false,

@@ -47,6 +47,7 @@ async function dismissScreenshotObstructions(page, {
         '#CybotCookiebotDialog',
         '[data-testid="cookie-banner"]',
         '[data-testid="consent-banner"]',
+        '.govuk-cookie-banner',
       ];
       let clicked = 0;
       let hidden = 0;
