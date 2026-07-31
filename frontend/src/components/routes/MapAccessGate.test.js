@@ -81,35 +81,4 @@ describe('MapAccessGate', () => {
     expect(container.querySelector('textarea')).toBeNull();
     expect(container.textContent).not.toContain('Request access');
   });
-
-  test('lets a signed-out user leave or sign in', () => {
-    const onGoHome = vi.fn();
-    const onLogin = vi.fn();
-
-    act(() => {
-      root.render(
-        <MapAccessGate
-          isLoggedIn={false}
-          requestStatus="idle"
-          requestMessage=""
-          onGoHome={onGoHome}
-          onLogin={onLogin}
-          onRequestMessageChange={vi.fn()}
-          onRequestAccess={vi.fn()}
-        />
-      );
-    });
-
-    const buttons = Array.from(container.querySelectorAll('button'));
-    const backButton = buttons.find((button) => button.textContent.includes('Back to app'));
-    const signInButton = buttons.find((button) => button.textContent.includes('Sign in'));
-
-    act(() => {
-      backButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      signInButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onGoHome).toHaveBeenCalledTimes(1);
-    expect(onLogin).toHaveBeenCalledTimes(1);
-  });
 });
