@@ -105,6 +105,11 @@ describe('App live share refresh and undo helpers', () => {
 
     expect(__testing.canReuseRouteGatePreview({ ...preview, isLoggedIn: false })).toBe(true);
     expect(__testing.canReuseRouteGatePreview({ ...preview, isLoggedIn: true })).toBe(false);
+    expect(__testing.canReuseRouteGatePreview({
+      ...preview,
+      isLoggedIn: true,
+      errorStatus: 403,
+    })).toBe(true);
   });
 
   test('keeps large saved maps on the scene renderer when live updates are enabled', () => {

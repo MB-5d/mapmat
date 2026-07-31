@@ -1504,10 +1504,15 @@ const canReuseRouteGatePreview = ({
   previewMapId,
   routeMapId,
   isLoggedIn,
+  errorStatus,
 } = {}) => (
-  !isLoggedIn
-  && Boolean(previewLoaded)
+  Boolean(previewLoaded)
   && sameId(previewMapId, routeMapId)
+  && (
+    !isLoggedIn
+    || errorStatus === 403
+    || errorStatus === 404
+  )
 );
 
 const canActivateCoeditingForMap = ({
@@ -12635,6 +12640,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       previewMapId: routeGatePreviewMapIdRef.current,
       routeMapId: currentRoute.mapId,
       isLoggedIn,
+      errorStatus: routeMapGateState?.errorStatus || null,
     })) {
       return undefined;
     }
@@ -12767,6 +12773,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     loadPendingMapInvites,
     loadSavedMapById,
     root?.id,
+    routeMapGateState?.errorStatus,
     navigateToRoute,
     showConfirm,
     showToast,
