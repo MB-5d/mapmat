@@ -1499,6 +1499,35 @@ const sameId = (left, right) => {
   return String(left) === String(right);
 };
 
+const canReuseRouteGatePreview = ({
+  previewLoaded,
+  previewMapId,
+  routeMapId,
+  isLoggedIn,
+} = {}) => (
+  !isLoggedIn
+  && Boolean(previewLoaded)
+  && sameId(previewMapId, routeMapId)
+);
+
+const canActivateCoeditingForMap = ({
+  coeditingUiEnabled,
+  isLoggedIn,
+  mapId,
+  hasRoot,
+  isImportedMap,
+  isViewingHistoricalVersion,
+  isLargeMapShell,
+} = {}) => Boolean(
+  coeditingUiEnabled
+  && isLoggedIn
+  && mapId
+  && hasRoot
+  && !isImportedMap
+  && !isViewingHistoricalVersion
+  && !isLargeMapShell
+);
+
 const normalizeShareAccessForApp = (value) => (
   Object.values(ACCESS_LEVELS).includes(value) ? value : ACCESS_LEVELS.VIEW
 );
@@ -3368,6 +3397,8 @@ export const __testing = {
   getCommentPopoverDrawerPosition,
   getCommentDrawerNodeFocusTarget,
   formatBillingUpgradeSuccessMessage,
+  canReuseRouteGatePreview,
+  canActivateCoeditingForMap,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -4550,25 +4581,25 @@ export default function App({ currentRoute, navigateToRoute }) {
       : accessLevel === ACCESS_LEVELS.EDIT
   );
 
+  const canActivateCoediting = canActivateCoeditingForMap({
+    coeditingUiEnabled: COEDITING_EXPERIMENT_UI_ENABLED,
+    isLoggedIn,
+    mapId: currentMap?.id,
+    hasRoot: !!root,
+    isImportedMap,
+    isViewingHistoricalVersion,
+    isLargeMapShell: !!currentMap?.largeMapShell,
+  });
+
   const isLiveEditingModeActive = !!(
-    COEDITING_EXPERIMENT_UI_ENABLED
-    && isLoggedIn
-    && currentMap?.id
-    && root
+    canActivateCoediting
     && liveModeCanEdit
     && resolvedCoeditingMode === 'enabled'
-    && !isImportedMap
-    && !isViewingHistoricalVersion
   );
 
   const isLiveRealtimeModeActive = !!(
-    COEDITING_EXPERIMENT_UI_ENABLED
-    && isLoggedIn
-    && currentMap?.id
-    && root
+    canActivateCoediting
     && resolvedCoeditingMode !== 'disabled'
-    && !isImportedMap
-    && !isViewingHistoricalVersion
   );
   const areMapPermissionsPending = !!(
     featureGatesEnabled
@@ -12599,10 +12630,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     ) {
       clearLoadedMapView();
     }
-    if (
-      routeGatePreviewMapLoadedRef.current
-      && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
-    ) {
+    if (canReuseRouteGatePreview({
+      previewLoaded: routeGatePreviewMapLoadedRef.current,
+      previewMapId: routeGatePreviewMapIdRef.current,
+      routeMapId: currentRoute.mapId,
+      isLoggedIn,
+    })) {
       return undefined;
     }
 

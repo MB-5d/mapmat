@@ -95,4 +95,33 @@ describe('App live share refresh and undo helpers', () => {
       drafts: [],
     });
   });
+
+  test('revalidates map access after sign-in instead of keeping the signed-out preview', () => {
+    const preview = {
+      previewLoaded: true,
+      previewMapId: 'map-1',
+      routeMapId: 'map-1',
+    };
+
+    expect(__testing.canReuseRouteGatePreview({ ...preview, isLoggedIn: false })).toBe(true);
+    expect(__testing.canReuseRouteGatePreview({ ...preview, isLoggedIn: true })).toBe(false);
+  });
+
+  test('keeps large saved maps on the scene renderer when live updates are enabled', () => {
+    const ordinaryMap = {
+      coeditingUiEnabled: true,
+      isLoggedIn: true,
+      mapId: 'map-1',
+      hasRoot: true,
+      isImportedMap: false,
+      isViewingHistoricalVersion: false,
+      isLargeMapShell: false,
+    };
+
+    expect(__testing.canActivateCoeditingForMap(ordinaryMap)).toBe(true);
+    expect(__testing.canActivateCoeditingForMap({
+      ...ordinaryMap,
+      isLargeMapShell: true,
+    })).toBe(false);
+  });
 });
