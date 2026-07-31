@@ -19583,6 +19583,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       ? inviteAcceptState?.invite?.mapName
       : pendingInviteForCurrentRoute?.mapName || routeMapGateState?.mapName
   ) || currentMap?.name || mapName || 'Shared sitemap';
+  const showRouteGatePreviewCanvas = routeGateActive && !hasMap;
 
   const renderCompletedConnection = (conn) => {
     const path = generateConnectionPath(conn);
@@ -19820,6 +19821,29 @@ export default function App({ currentRoute, navigateToRoute }) {
         onScroll={resetCanvasNativeScroll}
        
       >
+        {showRouteGatePreviewCanvas && (
+          <div className="route-gate-preview-map" aria-hidden="true">
+            <div className="route-gate-preview-content">
+              <div className="route-gate-preview-node route-gate-preview-node-root" />
+              <div className="route-gate-preview-branch route-gate-preview-branch-left">
+                {[0, 1, 2, 3].map((index) => (
+                  <div className="route-gate-preview-node" key={`left-${index}`} />
+                ))}
+              </div>
+              <div className="route-gate-preview-branch route-gate-preview-branch-right">
+                {[0, 1, 2, 3, 4].map((index) => (
+                  <div className="route-gate-preview-node" key={`right-${index}`} />
+                ))}
+              </div>
+              <div className="route-gate-preview-branch route-gate-preview-branch-bottom">
+                {[0, 1, 2].map((index) => (
+                  <div className="route-gate-preview-node" key={`bottom-${index}`} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {showInviteAcceptGate && (
           <InviteAcceptGate
             status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
