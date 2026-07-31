@@ -14167,7 +14167,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     cancelScheduledResetView();
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const nodeContainer = e.target.closest('[data-node-id]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .canvas-map-header, .topbar-collaborator-menu, .image-capture-toast, .minimap-navigator');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .canvas-map-header, .topbar-collaborator-menu, .image-capture-toast, .minimap-navigator, .route-gate');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideCommentsDrawer = e.target.closest('.comments-drawer');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
@@ -20601,7 +20601,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                 );
               })}
 
-            <RightRail
+            {!routeGateActive && (
+              <RightRail
               toolbarProps={{
                 canEdit: canEdit(),
                 canViewComments: canComment(),
@@ -20920,7 +20921,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                 onZoomIn: zoomIn,
                 onZoomOut: zoomOut,
               }}
-            />
+              />
+            )}
             <ReportDrawer
               isOpen={showReportDrawer}
               onClose={() => setShowReportDrawer(false)}
