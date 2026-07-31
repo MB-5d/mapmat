@@ -1499,10 +1499,6 @@ const sameId = (left, right) => {
   return String(left) === String(right);
 };
 
-const canReuseRouteGatePreview = ({ previewLoaded, previewMapId, routeMapId }) => (
-  Boolean(previewLoaded) && sameId(previewMapId, routeMapId)
-);
-
 const normalizeShareAccessForApp = (value) => (
   Object.values(ACCESS_LEVELS).includes(value) ? value : ACCESS_LEVELS.VIEW
 );
@@ -3372,7 +3368,6 @@ export const __testing = {
   getCommentPopoverDrawerPosition,
   getCommentDrawerNodeFocusTarget,
   formatBillingUpgradeSuccessMessage,
-  canReuseRouteGatePreview,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -12604,11 +12599,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     ) {
       clearLoadedMapView();
     }
-    if (canReuseRouteGatePreview({
-      previewLoaded: routeGatePreviewMapLoadedRef.current,
-      previewMapId: routeGatePreviewMapIdRef.current,
-      routeMapId: currentRoute.mapId,
-    })) {
+    if (
+      routeGatePreviewMapLoadedRef.current
+      && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
+    ) {
       return undefined;
     }
 
