@@ -3576,6 +3576,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const loadSavedMapByIdRef = useRef(null);
   const routeGatePreviewMapLoadedRef = useRef(false);
   const routeGatePreviewMapIdRef = useRef('');
+  const routeMapOpenRequestRef = useRef(null);
   const versionInfoToastRef = useRef(false);
   const seenActivityIdsRef = useRef(new Set());
   const primedActivityMapIdRef = useRef(null);
@@ -12615,6 +12616,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (routeGatePreviewMapLoadedRef.current) {
       clearLoadedMapView();
     }
+    routeMapOpenRequestRef.current = null;
     setRouteMapGateState(null);
     setRouteAccessRequestMessage('');
   }, [clearLoadedMapView, currentRoute?.section, currentRoute?.surface]);
@@ -12646,6 +12648,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     if (!isLoggedIn) {
+      routeMapOpenRequestRef.current = null;
       if (isUnsavedScannedMap) {
         const promptKey = `${currentRoute.mapId}:${root?.id || 'draft'}`;
         navigateToRoute(createAppHomeRoute(), { replace: true });
@@ -12714,7 +12717,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       };
     }
 
-    let cancelled = false;
+    const existingRequest = routeMapOpenRequestRef.current;
+    if (existingRequest && sameId(existingRequest.mapId, currentRoute.mapId)) {
+      return undefined;
+    }
+    const openRequest = { mapId: currentRoute.mapId };
+    routeMapOpenRequestRef.current = openRequest;
     setRouteMapGateState((previous) => ({
       mapId: currentRoute.mapId,
       mapName: previous?.mapId === currentRoute.mapId ? previous?.mapName || '' : '',
@@ -12725,19 +12733,43 @@ export default function App({ currentRoute, navigateToRoute }) {
       requestError: '',
     }));
 
+    if (!(
+      routeGatePreviewMapLoadedRef.current
+      && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
+    )) {
+      api.getMapAccessPreview(currentRoute.mapId)
+        .then((preview) => {
+          if (routeMapOpenRequestRef.current !== openRequest) return;
+          const previewLoaded = loadAccessPreviewMap(preview?.map);
+          setRouteMapGateState((previous) => ({
+            mapId: currentRoute.mapId,
+            mapName: preview?.map?.name || previous?.mapName || '',
+            loading: true,
+            errorStatus: null,
+            errorMessage: '',
+            requestStatus: previous?.requestStatus || 'idle',
+            requestError: '',
+            previewLoaded,
+          }));
+        })
+        .catch(() => {});
+    }
+
     loadSavedMapById(currentRoute.mapId, { skipNavigation: true, silent: true })
       .then(() => {
-        if (cancelled) return;
+        if (routeMapOpenRequestRef.current !== openRequest) return;
+        routeMapOpenRequestRef.current = null;
         setRouteMapGateState(null);
         setRouteAccessRequestMessage('');
       })
       .catch(async (error) => {
-        if (cancelled) return;
+        if (routeMapOpenRequestRef.current !== openRequest) return;
         clearLoadedMapView();
         const preview = (error?.status === 404 || error?.status === 403)
           ? await api.getMapAccessPreview(currentRoute.mapId).catch(() => null)
           : null;
-        if (cancelled) return;
+        if (routeMapOpenRequestRef.current !== openRequest) return;
+        routeMapOpenRequestRef.current = null;
         const previewLoaded = loadAccessPreviewMap(preview?.map);
         setRouteMapGateState({
           mapId: currentRoute.mapId,
@@ -12756,9 +12788,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast(error.message || 'Failed to load map', 'error');
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return undefined;
   }, [
     authLoading,
     clearLoadedMapView,

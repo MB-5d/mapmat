@@ -52,15 +52,21 @@ async function main() {
           \`;
           banner.querySelector('#govuk-cookie-hide').addEventListener('click', () => banner.remove());
         });
+        setTimeout(() => {
+          const popup = document.createElement('div');
+          popup.setAttribute('role', 'dialog');
+          popup.setAttribute('aria-label', 'Late cookie preferences');
+          popup.innerHTML = '<p>Allow cookies and tracking?</p><button>Accept all cookies</button>';
+          popup.querySelector('button').addEventListener('click', () => popup.remove());
+          document.body.appendChild(popup);
+        }, 50);
       </script>
     `);
 
     const result = await dismissScreenshotObstructions(page, { settleMs: 0 });
-    const repeatedResult = await dismissScreenshotObstructions(page, { settleMs: 0 });
-    const confirmationResult = await dismissScreenshotObstructions(page, { settleMs: 0 });
     assert.ok(
-      result.clickedCount + repeatedResult.clickedCount + confirmationResult.clickedCount >= 3,
-      'cookie and newsletter controls should be dismissed across capture preparation passes'
+      result.clickedCount >= 3,
+      'cookie and newsletter controls should be dismissed during one capture preparation call'
     );
     assert.equal(await page.locator('#onetrust-consent-sdk').count(), 0);
     assert.equal(await page.locator('[aria-label="Newsletter signup"]').count(), 0);
@@ -74,6 +80,11 @@ async function main() {
       await page.locator('.subscription-banner').isVisible(),
       false,
       'fixed subscription promotions should be hidden'
+    );
+    assert.equal(
+      await page.locator('[aria-label="Late cookie preferences"]').count(),
+      0,
+      'late cookie dialogs should be dismissed before capture'
     );
     assert.equal(await page.locator('#protected-close').count(), 1, 'authentication dialogs must remain untouched');
   } finally {

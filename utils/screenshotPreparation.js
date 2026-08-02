@@ -1,7 +1,11 @@
 const DEFAULT_SCREENSHOT_OBSTRUCTION_SETTLE_MS = 250;
+const DEFAULT_SCREENSHOT_OBSTRUCTION_PASSES = 3;
+const DEFAULT_SCREENSHOT_OBSTRUCTION_PASS_DELAY_MS = 100;
 
 async function dismissScreenshotObstructions(page, {
   settleMs = DEFAULT_SCREENSHOT_OBSTRUCTION_SETTLE_MS,
+  maxPasses = DEFAULT_SCREENSHOT_OBSTRUCTION_PASSES,
+  passDelayMs = DEFAULT_SCREENSHOT_OBSTRUCTION_PASS_DELAY_MS,
 } = {}) {
   if (!page || typeof page.frames !== 'function') {
     return { clickedCount: 0, hiddenCount: 0 };
@@ -9,9 +13,11 @@ async function dismissScreenshotObstructions(page, {
 
   let clickedCount = 0;
   let hiddenCount = 0;
-  const frames = page.frames();
-  for (const frame of frames) {
-    const result = await frame.evaluate(() => {
+  const passCount = Math.max(1, Number(maxPasses) || 1);
+  for (let passIndex = 0; passIndex < passCount; passIndex += 1) {
+    const frames = page.frames();
+    for (const frame of frames) {
+      const result = await frame.evaluate(() => {
       const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
       const isVisible = (element) => {
         if (!element || !(element instanceof Element)) return false;
@@ -152,9 +158,17 @@ async function dismissScreenshotObstructions(page, {
       });
 
       return { clicked, hidden };
-    }).catch(() => ({ clicked: 0, hidden: 0 }));
-    clickedCount += Number(result?.clicked || 0);
-    hiddenCount += Number(result?.hidden || 0);
+      }).catch(() => ({ clicked: 0, hidden: 0 }));
+      clickedCount += Number(result?.clicked || 0);
+      hiddenCount += Number(result?.hidden || 0);
+    }
+    if (
+      passIndex < passCount - 1
+      && passDelayMs > 0
+      && typeof page.waitForTimeout === 'function'
+    ) {
+      await page.waitForTimeout(passDelayMs).catch(() => {});
+    }
   }
 
   if (clickedCount > 0 && settleMs > 0 && typeof page.waitForTimeout === 'function') {
@@ -164,6 +178,8 @@ async function dismissScreenshotObstructions(page, {
 }
 
 module.exports = {
+  DEFAULT_SCREENSHOT_OBSTRUCTION_PASSES,
+  DEFAULT_SCREENSHOT_OBSTRUCTION_PASS_DELAY_MS,
   DEFAULT_SCREENSHOT_OBSTRUCTION_SETTLE_MS,
   dismissScreenshotObstructions,
 };
