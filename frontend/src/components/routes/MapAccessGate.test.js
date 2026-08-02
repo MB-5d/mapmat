@@ -81,4 +81,44 @@ describe('MapAccessGate', () => {
     expect(container.querySelector('textarea')).toBeNull();
     expect(container.textContent).not.toContain('Request access');
   });
+
+  test('shows only the opening state while authentication is unresolved', () => {
+    act(() => {
+      root.render(
+        <MapAccessGate
+          isLoggedIn={false}
+          authLoading
+          requestStatus="idle"
+          requestMessage=""
+          onLogin={vi.fn()}
+          onGoHome={vi.fn()}
+          onRequestAccess={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Opening map');
+    expect(container.textContent).not.toContain('Sign in to continue');
+    expect(container.textContent).not.toContain('Request access');
+  });
+
+  test('shows sign in only after signed-out state is confirmed', () => {
+    act(() => {
+      root.render(
+        <MapAccessGate
+          isLoggedIn={false}
+          authLoading={false}
+          requestStatus="idle"
+          requestMessage=""
+          onLogin={vi.fn()}
+          onGoHome={vi.fn()}
+          onRequestAccess={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Sign in to continue');
+    expect(container.textContent).not.toContain('Opening map');
+    expect(container.textContent).not.toContain('Request access');
+  });
 });

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 const REPETITIVE_GROUP_THRESHOLD = 20;
-const REPETITIVE_GROUP_CAPTURE_LIMIT = 10;
+const REPETITIVE_GROUP_CAPTURE_LIMIT = 20;
 const NATURAL_SCAN_COLLATOR = new Intl.Collator('en', {
   numeric: true,
   sensitivity: 'base',

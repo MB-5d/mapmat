@@ -4861,7 +4861,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       deferredUrlToGroup.delete(entry.url);
       deferredOutcomeUrls.delete(entry.url);
       entry.order = index;
-      if (visited.has(entry.url) || index < REPETITIVE_GROUP_CAPTURE_LIMIT) {
+      if (index < REPETITIVE_GROUP_CAPTURE_LIMIT) {
         group.captureUrls.add(entry.url);
       } else {
         group.deferredEntries.push(entry);
@@ -4881,7 +4881,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       return;
     }
     group.members.forEach((entry) => {
-      if (visited.has(entry.url) || group.captureUrls.size < REPETITIVE_GROUP_CAPTURE_LIMIT) {
+      if (group.captureUrls.size < REPETITIVE_GROUP_CAPTURE_LIMIT) {
         group.captureUrls.add(entry.url);
       } else {
         group.deferredEntries.push(entry);
@@ -4924,7 +4924,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         rebalanceFocusedRepetitiveGroup(group);
         return;
       }
-      if (visited.has(normalized) || group.captureUrls.size < REPETITIVE_GROUP_CAPTURE_LIMIT) {
+      if (group.captureUrls.size < REPETITIVE_GROUP_CAPTURE_LIMIT) {
         group.captureUrls.add(normalized);
       } else {
         group.deferredEntries.push(entry);
@@ -7010,7 +7010,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           order: entry.order ?? index,
           scanNumber: preservedNumberMap.get(entry.url) || '',
         }));
-      if (deferredEntries.length === 0) return;
+      const capturedEntries = group.members
+        .filter((entry) => isSuccessfulCapturedPageMeta(pageMap.get(entry.url)))
+        .map((entry) => ({
+          url: entry.url,
+          source: entry.source,
+          order: numberingDiscoveryOrder.get(entry.url) ?? entry.order ?? 0,
+          scanNumber: preservedNumberMap.get(entry.url) || '',
+        }));
+      if (
+        deferredEntries.length === 0
+        && capturedEntries.length <= REPETITIVE_GROUP_CAPTURE_LIMIT
+      ) return;
       const placeholderParentUrl = normalizeUrl(group.parentUrl);
       const parentNode = (
         placeholderParentUrl
@@ -7031,39 +7042,74 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           parentUrl: parentKey,
           shapes: new Set(),
           sourceGroupIds: [],
-          capturedCount: 0,
+          capturedEntries: [],
           entries: [],
         });
       }
       const combined = groupsByVisibleParent.get(parentKey);
       combined.shapes.add(group.shape);
       combined.sourceGroupIds.push(group.groupId);
-      combined.capturedCount += group.members.filter((entry) => (
-        isSuccessfulCapturedPageMeta(pageMap.get(entry.url))
-      )).length;
+      combined.capturedEntries.push(...capturedEntries);
       combined.entries.push(...deferredEntries);
     });
 
     groupsByVisibleParent.forEach((combined) => {
-      const deferredEntries = combined.entries
-        .sort((left, right) => (
-          Number(left.order || 0) - Number(right.order || 0)
-          || String(left.url).localeCompare(String(right.url))
+      const compareCombinedEntries = (left, right) => (
+        compareScanNumberStrings(left.scanNumber, right.scanNumber)
+        || Number(left.order || 0) - Number(right.order || 0)
+        || compareNaturalScanUrls(left.url, right.url)
+      );
+      const directChildUrls = new Set((combined.parentNode.children || [])
+        .map((child) => normalizeUrl(child?.url))
+        .filter(Boolean));
+      const capturedEntries = combined.capturedEntries
+        .sort(compareCombinedEntries)
+        .filter((entry, index, entries) => (
+          entries.findIndex((candidate) => candidate.url === entry.url) === index
         ))
+        .filter((entry) => directChildUrls.has(normalizeUrl(entry.url)));
+      const requiredCapturedEntries = capturedEntries.filter((entry) => (
+        (nodes.get(entry.url)?.children || []).length > 0
+      ));
+      const retainedCapturedUrls = new Set(
+        requiredCapturedEntries
+          .slice(0, REPETITIVE_GROUP_CAPTURE_LIMIT)
+          .map((entry) => entry.url)
+      );
+      capturedEntries.forEach((entry) => {
+        if (retainedCapturedUrls.size >= REPETITIVE_GROUP_CAPTURE_LIMIT) return;
+        retainedCapturedUrls.add(entry.url);
+      });
+      const overflowEntries = capturedEntries.filter((entry) => !retainedCapturedUrls.has(entry.url));
+      if (overflowEntries.length > 0) {
+        const overflowUrls = new Set(overflowEntries.map((entry) => normalizeUrl(entry.url)));
+        combined.parentNode.children = (combined.parentNode.children || []).filter((child) => (
+          !overflowUrls.has(normalizeUrl(child?.url))
+        ));
+        overflowEntries.forEach((entry) => {
+          nodes.delete(entry.url);
+          pageMap.delete(entry.url);
+          visiblePrimaryUrls.delete(entry.url);
+          deferredOutcomeUrls.add(entry.url);
+        });
+      }
+      const deferredEntries = [...combined.entries, ...overflowEntries]
+        .sort(compareCombinedEntries)
         .filter((entry, index, entries) => (
           entries.findIndex((candidate) => candidate.url === entry.url) === index
         ));
       if (deferredEntries.length === 0) return;
       deferredEntries.forEach((entry) => deferredOutcomeUrls.add(entry.url));
+      const capturedCount = capturedEntries.length - overflowEntries.length;
       const summary = {
         id: combined.id,
         key: combined.key,
         parentUrl: combined.parentUrl,
         shape: combined.shapes.size === 1 ? Array.from(combined.shapes)[0] : 'mixed',
         sourceGroupIds: combined.sourceGroupIds,
-        capturedCount: combined.capturedCount,
+        capturedCount,
         deferredCount: deferredEntries.length,
-        totalCount: combined.capturedCount + deferredEntries.length,
+        totalCount: capturedCount + deferredEntries.length,
         entries: deferredEntries,
       };
       repetitiveGroups.push(summary);
@@ -7075,9 +7121,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         deferredGroupId: combined.id,
         deferredGroupKey: combined.key,
         parentUrl: combined.parentUrl,
-        capturedCount: combined.capturedCount,
+        capturedCount,
         remainingCount: deferredEntries.length,
-        totalCount: combined.capturedCount + deferredEntries.length,
+        totalCount: capturedCount + deferredEntries.length,
         deferredEntries,
         children: [],
       });

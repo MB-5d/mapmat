@@ -129,10 +129,10 @@ const datedUrls = Array.from(
 );
 const groups = buildRepetitiveGroups([...blogUrls, blogUrls[0], ...newsUrls, ...datedUrls, ...paginationUrls]);
 assert.equal(groups.length, 4);
-assert.equal(groups[0].capturedEntries.length, 10);
-assert.equal(groups[0].deferredEntries.length, 11);
-assert.equal(groups[1].capturedEntries.length, 10);
-assert.equal(groups[1].deferredEntries.length, 11);
+assert.equal(groups[0].capturedEntries.length, 20);
+assert.equal(groups[0].deferredEntries.length, 1);
+assert.equal(groups[1].capturedEntries.length, 20);
+assert.equal(groups[1].deferredEntries.length, 1);
 assert.equal(groups[0].parentUrl, 'https://example.com/blog');
 assert.equal(groups[1].parentUrl, 'https://example.com/news');
 assert.equal(groups[2].parentUrl, 'https://example.com/archive');

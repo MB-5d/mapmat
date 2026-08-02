@@ -508,8 +508,8 @@ async function main() {
     assert.notEqual(target.scanNumber, '0');
     assert.equal(nodes.some((node) => node.url === `${fixtureOrigin}/blogger`), false);
     assert.ok(placeholder, 'repetitive group placeholder should be present');
-    assert.equal(placeholder.remainingCount, 11);
-    assert.equal(placeholder.capturedCount, 10);
+    assert.equal(placeholder.remainingCount, 1);
+    assert.equal(placeholder.capturedCount, 20);
     assert.equal(result.pageCountSummary.totalDiscoveredPageCount, 22);
     assert.equal(result.partial, undefined);
 
@@ -546,7 +546,7 @@ async function main() {
       authToken
     );
     assert.equal(captureResult.captureSummary.groupId, placeholder.deferredGroupId);
-    assert.equal(captureResult.captureSummary.capturedCount, 10);
+    assert.equal(captureResult.captureSummary.capturedCount, 0);
     assert.equal(captureResult.captureSummary.terminalCount, 1);
     assert.equal(captureResult.captureSummary.terminalEntries[0].url, `${fixtureOrigin}/blog/post-21`);
     assert.equal(captureResult.captureSummary.terminalEntries[0].status, 404);
@@ -570,8 +570,8 @@ async function main() {
     const wholeSitePlaceholder = wholeSiteNodes.find((node) => node.nodeKind === 'deferred-group');
     assert.equal(wholeSiteResult.scanScope.focused, false);
     assert.ok(wholeSitePlaceholder, 'homepage scans should use the same repetitive-page optimization');
-    assert.equal(wholeSitePlaceholder.capturedCount, 10);
-    assert.equal(wholeSitePlaceholder.remainingCount, 11);
+    assert.equal(wholeSitePlaceholder.capturedCount, 20);
+    assert.equal(wholeSitePlaceholder.remainingCount, 1);
     const wholeSiteParent = wholeSiteNodes.find((node) => node.url === `${fixtureOrigin}/blog`);
     assert.equal(wholeSiteParent.children.at(-1).nodeKind, 'deferred-group');
 
@@ -739,8 +739,8 @@ async function main() {
     assert.equal(archiveSectionContext?.isVirtualMissing, true);
     assert.equal(archiveSectionContext?.httpStatus, null);
     assert.equal(archiveSectionContext?.contextHttpStatus, 404);
-    assert.equal(archivePlaceholder?.remainingCount, 11);
-    assert.equal(archiveArticleNodes.length, 10);
+    assert.equal(archivePlaceholder?.remainingCount, 1);
+    assert.equal(archiveArticleNodes.length, 20);
     assert.equal(
       archiveArticleNodes.every((node) => /^(?:X|XX)(?:\.\d+){2}$/.test(node.scanNumber)),
       true,
@@ -791,11 +791,11 @@ async function main() {
     );
     assert.equal(
       editorialNodes.filter((node) => node.url?.startsWith(`${fixtureOrigin}/section/editorial/articles/article-`)).length,
-      10,
+      20,
       'focused descendants should capture the representative sample'
     );
-    assert.equal(editorialPlaceholder?.remainingCount, 15);
-    assert.equal(editorialPlaceholder?.capturedCount, 10);
+    assert.equal(editorialPlaceholder?.remainingCount, 5);
+    assert.equal(editorialPlaceholder?.capturedCount, 20);
     assert.equal(editorialPlaceholder?.parentUrl, editorialArticlesParent?.url);
     assert.equal(
       editorialArticlesParent?.parentUrl,
@@ -898,8 +898,8 @@ async function main() {
       ),
       'a deferred page required by a captured descendant should be promoted and scanned as its real parent'
     );
-    assert.equal(catalogPlaceholder?.capturedCount, 11);
-    assert.equal(catalogPlaceholder?.remainingCount, 10);
+    assert.equal(catalogPlaceholder?.capturedCount, 20);
+    assert.equal(catalogPlaceholder?.remainingCount, 1);
     assert.equal(catalogResult.scanDiagnostics?.promotedDeferredAncestorCount, 1);
     const repeatedCatalogResult = await createScan({
       url: `${fixtureOrigin}/section/catalog`,
@@ -925,8 +925,8 @@ async function main() {
       `one visible parent should render one combined placeholder (${JSON.stringify(mixedResult.repetitiveGroups)})`
     );
     assert.equal(mixedPlaceholders[0].parentUrl, `${fixtureOrigin}/section/mixed`);
-    assert.equal(mixedPlaceholders[0].capturedCount, 10);
-    assert.equal(mixedPlaceholders[0].remainingCount, 11);
+    assert.equal(mixedPlaceholders[0].capturedCount, 20);
+    assert.equal(mixedPlaceholders[0].remainingCount, 1);
 
     const redirectedResult = await createScan({
       url: `${fixtureOrigin}/jobs-old`,
