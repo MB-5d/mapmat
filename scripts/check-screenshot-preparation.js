@@ -30,7 +30,7 @@ async function main() {
         <p>Sign in with your password.</p>
         <button aria-label="Close" id="protected-close">×</button>
       </div>
-      <div class="subscription-banner" style="position: fixed; bottom: 0">
+      <div class="acquisition-dock" style="position: fixed; bottom: 0">
         <p>Sale ends soon. Subscribe today.</p>
         <button>Subscribe</button>
       </div>
@@ -77,9 +77,9 @@ async function main() {
       'GOV.UK consent confirmations should be hidden before capture'
     );
     assert.equal(
-      await page.locator('.subscription-banner').isVisible(),
+      await page.locator('.acquisition-dock').isVisible(),
       false,
-      'fixed subscription promotions should be hidden'
+      'fixed subscription promotions without predictable class names should be hidden'
     );
     assert.equal(
       await page.locator('[aria-label="Late cookie preferences"]').count(),

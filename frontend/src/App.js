@@ -6737,6 +6737,17 @@ export default function App({ currentRoute, navigateToRoute }) {
         preserveExistingAssetsOnEmpty: true,
       }) || node
     ));
+    if (
+      routeMapGateState?.awaitingScene
+      && currentRoute?.surface === ROUTE_SURFACES.APP
+      && currentRoute?.section === 'map'
+      && sameId(routeMapGateState.mapId, currentRoute.mapId)
+      && sameId(currentMap?.id, currentRoute.mapId)
+    ) {
+      routeMapOpenRequestRef.current = null;
+      setRouteMapGateState(null);
+      setRouteAccessRequestMessage('');
+    }
     if (!scene?.homeNode || !canvasRef.current) return;
     largeMapHomeNodeRef.current = scene.homeNode;
     const initialHomeTransform = getInitialLargeMapHomeTransform({
@@ -6752,7 +6763,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     } else if (pendingInitialLargeMapCenterRef.current) {
       scheduleResetViewRef.current?.(20);
     }
-  }, [applyTransform, currentMap?.id, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
+  }, [
+    applyTransform,
+    currentMap?.id,
+    currentRoute?.mapId,
+    currentRoute?.section,
+    currentRoute?.surface,
+    mergeLargeMapNodeCache,
+    routeMapGateState?.awaitingScene,
+    routeMapGateState?.mapId,
+    showThumbnails,
+    showToast,
+    useLargeMapSurface,
+  ]);
 
   const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
     let homeNode = largeMapHomeNodeRef.current;
@@ -12734,11 +12757,29 @@ export default function App({ currentRoute, navigateToRoute }) {
     }));
 
     loadSavedMapById(currentRoute.mapId, { skipNavigation: true, silent: true })
-      .then(() => {
+      .then((loadedMap) => {
         if (routeMapOpenRequestRef.current !== openRequest) return;
-        routeMapOpenRequestRef.current = null;
-        setRouteMapGateState(null);
-        setRouteAccessRequestMessage('');
+        const awaitingScene = shouldUseLargeMapSurface({
+          nodeCount: loadedMap?.nodeCount,
+          hasSavedMap: true,
+        });
+        setRouteMapGateState((previous) => ({
+          ...previous,
+          mapId: currentRoute.mapId,
+          mapName: loadedMap?.name || previous?.mapName || '',
+          loading: true,
+          backgroundReady: true,
+          awaitingScene,
+        }));
+        if (awaitingScene) return;
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            if (routeMapOpenRequestRef.current !== openRequest) return;
+            routeMapOpenRequestRef.current = null;
+            setRouteMapGateState(null);
+            setRouteAccessRequestMessage('');
+          });
+        });
       })
       .catch(async (error) => {
         if (routeMapOpenRequestRef.current !== openRequest) return;
@@ -19494,16 +19535,28 @@ export default function App({ currentRoute, navigateToRoute }) {
   const zoomBounds = getZoomBounds();
   const showInviteAcceptGate = currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'invite_accept';
+  const routeMapMatchesCurrent = !!currentMap?.id && sameId(currentMap.id, currentRoute?.mapId);
+  const showAuthorizedMapOpeningGate = !!(
+    isLoggedIn
+    && routeMapMatchesCurrent
+    && routeMapGateState?.loading
+    && routeMapGateState?.backgroundReady
+  );
   const showMapAccessGate = (
     currentRoute?.surface === ROUTE_SURFACES.APP
       && currentRoute?.section === 'map'
       && !isBillingReturnRoute
-      && (!currentMap?.id || !sameId(currentMap.id, currentRoute?.mapId))
       && (
-        !!routeMapGateState
-        || !isLoggedIn
-        || authLoading
-        || !!pendingInviteForCurrentRoute
+        showAuthorizedMapOpeningGate
+        || (
+          !routeMapMatchesCurrent
+          && (
+            !isLoggedIn
+            || authLoading
+            || !!pendingInviteForCurrentRoute
+            || (!!routeMapGateState && !routeMapGateState.loading)
+          )
+        )
       )
   ) || (
     currentRoute?.surface === ROUTE_SURFACES.SHARE

@@ -36,6 +36,7 @@ async function dismissScreenshotObstructions(page, {
       const consentContext = /(?:cookie|consent|privacy|gdpr|tracking|preference|onetrust|trustarc|quantcast|didomi|cookiebot)/i;
       const acceptAction = /^(?:accept(?: all| additional| optional| analytics)?(?: cookies)?|hide(?: this)? cookie message|i accept|allow(?: all)?(?: cookies)?|agree|i agree|consent|continue|got it|ok(?:ay)?)$/i;
       const nuisanceContext = /(?:newsletter|notifications?|promotion|special offer|sign up for updates|subscribe|subscription|sale ends)/i;
+      const fixedNuisanceContext = /(?:sale ends|special offer|newsletter|sign up for updates|enable notifications|subscription offer|subscribe (?:now|today))/i;
       const knownConsentSelectors = [
         '#onetrust-accept-btn-handler',
         '#truste-consent-button',
@@ -153,6 +154,21 @@ async function dismissScreenshotObstructions(page, {
           element.innerText,
         ].join(' '));
         if (blockedContext.test(contextText) || !nuisanceContext.test(contextText)) return;
+        element.style.setProperty('display', 'none', 'important');
+        hidden += 1;
+      });
+
+      document.querySelectorAll('body *').forEach((element) => {
+        if (!isVisible(element)) return;
+        const style = window.getComputedStyle(element);
+        if (!['fixed', 'sticky'].includes(style.position)) return;
+        const contextText = normalizeText([
+          element.id,
+          element.className,
+          element.getAttribute('aria-label'),
+          element.innerText,
+        ].join(' '));
+        if (blockedContext.test(contextText) || !fixedNuisanceContext.test(contextText)) return;
         element.style.setProperty('display', 'none', 'important');
         hidden += 1;
       });
