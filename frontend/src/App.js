@@ -12733,28 +12733,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       requestError: '',
     }));
 
-    if (!(
-      routeGatePreviewMapLoadedRef.current
-      && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
-    )) {
-      api.getMapAccessPreview(currentRoute.mapId)
-        .then((preview) => {
-          if (routeMapOpenRequestRef.current !== openRequest) return;
-          const previewLoaded = loadAccessPreviewMap(preview?.map);
-          setRouteMapGateState((previous) => ({
-            mapId: currentRoute.mapId,
-            mapName: preview?.map?.name || previous?.mapName || '',
-            loading: true,
-            errorStatus: null,
-            errorMessage: '',
-            requestStatus: previous?.requestStatus || 'idle',
-            requestError: '',
-            previewLoaded,
-          }));
-        })
-        .catch(() => {});
-    }
-
     loadSavedMapById(currentRoute.mapId, { skipNavigation: true, silent: true })
       .then(() => {
         if (routeMapOpenRequestRef.current !== openRequest) return;
