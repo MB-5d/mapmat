@@ -372,12 +372,33 @@ function createFixtureServer() {
     }
     if (url.pathname === '/content/jobs') {
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end('<html><head><title>Jobs</title></head><body><h1>Jobs</h1><a href="/content/jobs/role-1">Role</a></body></html>');
+      res.end('<html><head><title>Jobs</title></head><body><h1>Jobs</h1><a href="/content/jobs">Jobs home</a><a href="/content/jobs/role-1">Role</a></body></html>');
       return;
     }
     if (url.pathname === '/content/jobs/role-1') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end('<html><head><title>Role 1</title></head><body><h1>Role 1</h1></body></html>');
+      return;
+    }
+    if (url.pathname === '/section/unstructured') {
+      const slugs = ['alpha', 'beta', 'gamma', 'delta', 'epsilon'];
+      const mixed = Array.from({ length: 5 }, (_, index) => `item${index + 1}`);
+      const numbers = Array.from({ length: 5 }, (_, index) => `${index + 1}`);
+      const dates = Array.from({ length: 5 }, (_, index) => `2026-01-0${index + 1}`);
+      const uuids = Array.from(
+        { length: 5 },
+        (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
+      );
+      const links = [...slugs, ...mixed, ...numbers, ...dates, ...uuids]
+        .map((entry) => `<a href="/section/unstructured/${entry}">${entry}</a>`)
+        .join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Unstructured</title></head><body><h1>Unstructured</h1>${links}</body></html>`);
+      return;
+    }
+    if (url.pathname.startsWith('/section/unstructured/')) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body><h1>Page</h1></body></html>`);
       return;
     }
     if (url.pathname === '/' || url.pathname === '/about' || url.pathname === '/blogger' || url.pathname === '/pricing') {
@@ -574,6 +595,25 @@ async function main() {
     assert.equal(wholeSitePlaceholder.remainingCount, 1);
     const wholeSiteParent = wholeSiteNodes.find((node) => node.url === `${fixtureOrigin}/blog`);
     assert.equal(wholeSiteParent.children.at(-1).nodeKind, 'deferred-group');
+
+    const unstructuredResult = await createScan({
+      url: `${fixtureOrigin}/section/unstructured`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const unstructuredNodes = flattenTree(unstructuredResult.root);
+    const unstructuredParent = unstructuredNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/unstructured`
+    );
+    const unstructuredVisibleChildren = unstructuredParent.children.filter(
+      (node) => node.nodeKind !== 'deferred-group'
+    );
+    const unstructuredPlaceholder = unstructuredParent.children.find(
+      (node) => node.nodeKind === 'deferred-group'
+    );
+    assert.equal(unstructuredVisibleChildren.length, 20);
+    assert.equal(unstructuredPlaceholder?.capturedCount, 20);
+    assert.equal(unstructuredPlaceholder?.remainingCount, 5);
 
     const deepResult = await createScan({
       url: `${fixtureOrigin}/blog/post-1`,
@@ -939,6 +979,12 @@ async function main() {
       'same-origin redirected section paths should continue scanning below the final URL'
     );
     assert.equal(redirectedResult.scanDiagnostics?.focusedRedirectAliasCount, 1);
+    assert.equal(redirectedResult.scanDiagnostics?.rootRedirectAliasCollapsedCount, 1);
+    assert.equal(
+      redirectedNodes.some((node) => node.url === `${fixtureOrigin}/content/jobs`),
+      false,
+      'the final URL for a redirected scan seed should not render as a duplicate child'
+    );
     console.log('[focused-scan-fixture] Passed.');
   } finally {
     if (fixture) await new Promise((resolve) => fixture.close(resolve));

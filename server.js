@@ -4745,6 +4745,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     focusedAncestorInspectedCount: 0,
     focusedContentDiscoveredCount: 0,
     focusedRedirectAliasCount: 0,
+    rootRedirectAliasCollapsedCount: 0,
     promotedDeferredAncestorCount: 0,
     focusedParentProbeCount: 0,
     focusedParentProbeSuccessCount: 0,
@@ -6584,6 +6585,45 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   });
 
   const canonicalKeyFor = (node) => getPageIdentityKey(node);
+  const rootNodeBeforeGrouping = nodes.get(rootUrl);
+  const rootRedirectAliasUrl = normalizeUrl(rootNodeBeforeGrouping?.finalUrl);
+  if (
+    rootNodeBeforeGrouping
+    && rootRedirectAliasUrl
+    && rootRedirectAliasUrl !== rootUrl
+    && nodes.has(rootRedirectAliasUrl)
+    && canonicalKeyFor(rootNodeBeforeGrouping) === canonicalKeyFor(nodes.get(rootRedirectAliasUrl))
+  ) {
+    const aliasNode = nodes.get(rootRedirectAliasUrl);
+    rootNodeBeforeGrouping.linksIn = Math.max(
+      Number(rootNodeBeforeGrouping.linksIn || 0),
+      Number(aliasNode?.linksIn || 0)
+    );
+    rootNodeBeforeGrouping.linksOut = Math.max(
+      Number(rootNodeBeforeGrouping.linksOut || 0),
+      Number(aliasNode?.linksOut || 0)
+    );
+    const mergedRootLinks = Array.from(new Set([
+      ...(linksByUrl.get(rootUrl) || []),
+      ...(linksByUrl.get(rootRedirectAliasUrl) || []),
+    ]));
+    linksByUrl.set(rootUrl, mergedRootLinks);
+    linksByUrl.delete(rootRedirectAliasUrl);
+    nodes.delete(rootRedirectAliasUrl);
+    pageMap.delete(rootRedirectAliasUrl);
+    focusedContentUrls.delete(rootRedirectAliasUrl);
+    focusedListingUrls.delete(rootRedirectAliasUrl);
+    focusedListingOrder.delete(rootRedirectAliasUrl);
+    focusedListingParentByUrl.delete(rootRedirectAliasUrl);
+    scopedDiscoveredUrls.delete(rootRedirectAliasUrl);
+    numberingDiscoveryOrder.delete(rootRedirectAliasUrl);
+    sitemapNumberingOrder.delete(rootRedirectAliasUrl);
+    sitemapOrder.delete(rootRedirectAliasUrl);
+    failedOutcomeUrls.delete(rootRedirectAliasUrl);
+    blockedOutcomeUrls.delete(rootRedirectAliasUrl);
+    deferredOutcomeUrls.delete(rootRedirectAliasUrl);
+    scanDiagnostics.rootRedirectAliasCollapsedCount += 1;
+  }
   const shouldInferPathParents = (node) => {
     if (!node?.url || node.url === rootUrl) return false;
     try {
@@ -7185,6 +7225,103 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     node.children.forEach((child) => sortTree(child, depth + 1));
   };
 
+  const enforceFinalSiblingLimit = (node) => {
+    if (!node?.children?.length) return;
+    const existingPlaceholder = node.children.find((child) => child?.nodeKind === 'deferred-group') || null;
+    const visibleChildren = node.children.filter((child) => child?.nodeKind !== 'deferred-group');
+    if (visibleChildren.length > REPETITIVE_GROUP_CAPTURE_LIMIT) {
+      const retainedKeys = new Set();
+      visibleChildren
+        .filter((child) => (child?.children || []).length > 0)
+        .slice(0, REPETITIVE_GROUP_CAPTURE_LIMIT)
+        .forEach((child) => retainedKeys.add(normalizeUrl(child?.url) || child?.id));
+      visibleChildren.forEach((child) => {
+        if (retainedKeys.size >= REPETITIVE_GROUP_CAPTURE_LIMIT) return;
+        retainedKeys.add(normalizeUrl(child?.url) || child?.id);
+      });
+
+      const retainedChildren = visibleChildren.filter((child) => (
+        retainedKeys.has(normalizeUrl(child?.url) || child?.id)
+      ));
+      const overflowChildren = visibleChildren.filter((child) => (
+        !retainedKeys.has(normalizeUrl(child?.url) || child?.id)
+      ));
+      const overflowEntries = [];
+      const collectOverflowEntries = (child) => {
+        if (!child || child.nodeKind === 'deferred-group') return;
+        const url = normalizeUrl(child.url);
+        if (url) {
+          overflowEntries.push({
+            url,
+            source: discoverySourceByUrl.get(url) || 'final_tree',
+            order: numberingDiscoveryOrder.get(url) ?? overflowEntries.length,
+            scanNumber: child.scanNumber || preservedNumberMap.get(url) || '',
+          });
+        }
+        (child.children || []).forEach(collectOverflowEntries);
+      };
+      overflowChildren.forEach(collectOverflowEntries);
+
+      const parentUrl = normalizeUrl(node.url) || seed;
+      const groupId = existingPlaceholder?.deferredGroupId
+        || getStableRepetitiveGroupId(`${parentUrl}|visible-parent`);
+      const deferredEntries = [
+        ...(existingPlaceholder?.deferredEntries || []),
+        ...overflowEntries,
+      ].filter((entry, index, entries) => (
+        entry?.url
+        && entries.findIndex((candidate) => candidate?.url === entry.url) === index
+      ));
+      const capturedCount = retainedChildren.length;
+      const placeholder = {
+        ...(existingPlaceholder || {}),
+        id: existingPlaceholder?.id || `placeholder_${groupId}`,
+        url: '',
+        title: `${deferredEntries.length} more pages like this`,
+        nodeKind: 'deferred-group',
+        deferredGroupId: groupId,
+        deferredGroupKey: existingPlaceholder?.deferredGroupKey || `${parentUrl}|visible-parent`,
+        parentUrl,
+        capturedCount,
+        remainingCount: deferredEntries.length,
+        totalCount: capturedCount + deferredEntries.length,
+        deferredEntries,
+        children: [],
+      };
+      node.children = [...retainedChildren, placeholder];
+
+      overflowEntries.forEach((entry) => {
+        nodes.delete(entry.url);
+        pageMap.delete(entry.url);
+        visiblePrimaryUrls.delete(entry.url);
+        deferredOutcomeUrls.add(entry.url);
+      });
+
+      const existingSummary = repetitiveGroups.find((group) => group.id === groupId);
+      if (existingSummary) {
+        existingSummary.capturedCount = capturedCount;
+        existingSummary.deferredCount = deferredEntries.length;
+        existingSummary.totalCount = capturedCount + deferredEntries.length;
+        existingSummary.entries = deferredEntries;
+      } else {
+        repetitiveGroups.push({
+          id: groupId,
+          key: `${parentUrl}|visible-parent`,
+          parentUrl,
+          shape: 'mixed',
+          sourceGroupIds: [],
+          capturedCount,
+          deferredCount: deferredEntries.length,
+          totalCount: capturedCount + deferredEntries.length,
+          entries: deferredEntries,
+        });
+      }
+    }
+    node.children
+      .filter((child) => child?.nodeKind !== 'deferred-group')
+      .forEach(enforceFinalSiblingLimit);
+  };
+
   let root = nodes.get(rootUrl);
   if (root && (!root.children || root.children.length === 0) && pageMap.size > 1) {
     let repairedCount = 0;
@@ -7202,6 +7339,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanDiagnostics.treeRepairAdded = repairedCount;
     }
   }
+  computeStats(root);
+  subdomainNodes.forEach(computeStats);
+  orphanNodes.forEach(computeStats);
+  sortTree(root);
+  subdomainNodes.forEach((node) => sortTree(node, 0));
+  orphanNodes.forEach((node) => sortTree(node, 0));
+  enforceFinalSiblingLimit(root);
+  subdomainNodes.forEach(enforceFinalSiblingLimit);
+  orphanNodes.forEach(enforceFinalSiblingLimit);
   computeStats(root);
   subdomainNodes.forEach(computeStats);
   orphanNodes.forEach(computeStats);

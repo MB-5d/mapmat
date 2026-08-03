@@ -1515,6 +1515,21 @@ const canReuseRouteGatePreview = ({
   )
 );
 
+const isMapRouteOpeningPending = ({
+  isMapRoute,
+  routeMapMatchesCurrent,
+  authLoading,
+  routeMapGateState,
+} = {}) => Boolean(
+  isMapRoute
+  && !routeMapMatchesCurrent
+  && (
+    authLoading
+    || !routeMapGateState
+    || routeMapGateState.loading
+  )
+);
+
 const canActivateCoeditingForMap = ({
   coeditingUiEnabled,
   isLoggedIn,
@@ -3403,6 +3418,7 @@ export const __testing = {
   getCommentDrawerNodeFocusTarget,
   formatBillingUpgradeSuccessMessage,
   canReuseRouteGatePreview,
+  isMapRouteOpeningPending,
   canActivateCoeditingForMap,
 };
 
@@ -9476,6 +9492,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [isLoggedIn, openAuthModal]);
 
   const authValue = useMemo(() => ({
+    authLoading,
     isLoggedIn,
     currentUser,
     onLogin: handleLogin,
@@ -9486,6 +9503,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     onShowSettings: handleShowSettings,
     onShowSupport: handleShowSupport,
   }), [
+    authLoading,
     isLoggedIn,
     currentUser,
     handleLogin,
@@ -19535,7 +19553,15 @@ export default function App({ currentRoute, navigateToRoute }) {
   const zoomBounds = getZoomBounds();
   const showInviteAcceptGate = currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'invite_accept';
+  const isMapRoute = currentRoute?.surface === ROUTE_SURFACES.APP
+    && currentRoute?.section === 'map';
   const routeMapMatchesCurrent = !!currentMap?.id && sameId(currentMap.id, currentRoute?.mapId);
+  const showInitialMapRouteOpeningGate = isMapRouteOpeningPending({
+    isMapRoute,
+    routeMapMatchesCurrent,
+    authLoading,
+    routeMapGateState,
+  });
   const showAuthorizedMapOpeningGate = !!(
     isLoggedIn
     && routeMapMatchesCurrent
@@ -19543,11 +19569,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     && routeMapGateState?.backgroundReady
   );
   const showMapAccessGate = (
-    currentRoute?.surface === ROUTE_SURFACES.APP
-      && currentRoute?.section === 'map'
+    isMapRoute
       && !isBillingReturnRoute
       && (
         showAuthorizedMapOpeningGate
+        || showInitialMapRouteOpeningGate
         || (
           !routeMapMatchesCurrent
           && (
@@ -19929,7 +19955,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             isLoggedIn={isLoggedIn}
             authLoading={authLoading}
             invite={pendingInviteForCurrentRoute}
-            loading={!!routeMapGateState?.loading || (!!pendingInviteForCurrentRoute && pendingMapInvitesLoading)}
+            loading={showInitialMapRouteOpeningGate || !!routeMapGateState?.loading || (!!pendingInviteForCurrentRoute && pendingMapInvitesLoading)}
             requestStatus={routeMapGateState?.requestStatus || 'idle'}
             requestError={routeMapGateState?.requestError || ''}
             requestMessage={routeAccessRequestMessage}

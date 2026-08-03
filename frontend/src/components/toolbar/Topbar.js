@@ -68,7 +68,7 @@ const Topbar = ({
   pendingInviteCount = 0,
   pendingAccessRequestCount = 0,
 }) => {
-  const { isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onShowSupport, onLogout, onLogin, onSignup } = useAuth();
+  const { authLoading, isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onShowSupport, onLogout, onLogin, onSignup } = useAuth();
   const { t } = useLocale();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
@@ -183,7 +183,7 @@ const Topbar = ({
       </div>
 
       <div className="topbar-right">
-        {isLoggedIn ? (
+        {authLoading ? null : isLoggedIn ? (
           <div className="account-menu-wrapper" ref={accountMenuRef}>
             <Button
               className="topbar-account-trigger"

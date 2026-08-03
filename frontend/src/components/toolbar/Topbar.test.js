@@ -170,6 +170,13 @@ describe('Topbar', () => {
     expect(auth.onLogin).not.toHaveBeenCalled();
   });
 
+  test('shows neither account state while authentication is still loading', () => {
+    renderTopbar({ authLoading: true, isLoggedIn: false, currentUser: null });
+
+    expect(container.querySelector('.topbar-account-trigger')).toBeNull();
+    expect(container.querySelector('.topbar-login-btn')).toBeNull();
+  });
+
   test('keeps the account trigger bubble filled instead of transparent', () => {
     const baseRule = appCss.match(/\.topbar-account-trigger\.ui-btn\s*{([^}]+)}/)?.[1] || '';
     const hoverRule = appCss.match(/\.topbar-account-trigger\.ui-btn:hover:not\(:disabled\),\s*\.topbar-account-trigger\.ui-btn\[aria-expanded="true"\]\s*{([^}]+)}/)?.[1] || '';

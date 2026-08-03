@@ -1,6 +1,29 @@
 import { __testing } from './App';
 
 describe('large map viewport behavior', () => {
+  test('shows the opening gate before a map-route load request initializes', () => {
+    expect(__testing.isMapRouteOpeningPending({
+      isMapRoute: true,
+      routeMapMatchesCurrent: false,
+      authLoading: false,
+      routeMapGateState: null,
+    })).toBe(true);
+
+    expect(__testing.isMapRouteOpeningPending({
+      isMapRoute: true,
+      routeMapMatchesCurrent: false,
+      authLoading: false,
+      routeMapGateState: { loading: true },
+    })).toBe(true);
+
+    expect(__testing.isMapRouteOpeningPending({
+      isMapRoute: true,
+      routeMapMatchesCurrent: false,
+      authLoading: false,
+      routeMapGateState: { loading: false, errorStatus: 403 },
+    })).toBe(false);
+  });
+
   test('stack toggles preserve the current viewport during normal map layout refresh', () => {
     expect(__testing.getNextExpandedStackState({ parentA: true }, 'parentB')).toEqual({
       parentA: true,
