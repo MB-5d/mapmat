@@ -380,6 +380,21 @@ function createFixtureServer() {
       res.end('<html><head><title>Role 1</title></head><body><h1>Role 1</h1></body></html>');
       return;
     }
+    if (url.pathname === '/locale') {
+      res.writeHead(302, { location: '/locale/en' });
+      res.end();
+      return;
+    }
+    if (url.pathname === '/locale/en') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>English</title></head><body><h1>English</h1><a href="/locale/en/actions">Actions</a></body></html>');
+      return;
+    }
+    if (url.pathname === '/locale/en/actions') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Actions</title></head><body><h1>Actions</h1></body></html>');
+      return;
+    }
     if (url.pathname === '/section/unstructured') {
       const slugs = ['alpha', 'beta', 'gamma', 'delta', 'epsilon'];
       const mixed = Array.from({ length: 5 }, (_, index) => `item${index + 1}`);
@@ -984,6 +999,23 @@ async function main() {
       redirectedNodes.some((node) => node.url === `${fixtureOrigin}/content/jobs`),
       false,
       'the final URL for a redirected scan seed should not render as a duplicate child'
+    );
+
+    const focusedAncestorRedirectResult = await createScan({
+      url: `${fixtureOrigin}/locale/en/actions`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const focusedAncestorRedirectNodes = flattenTree(focusedAncestorRedirectResult.root);
+    assert.ok(
+      focusedAncestorRedirectNodes.some((node) => node.url === `${fixtureOrigin}/locale/en/actions`),
+      'focused descendants should remain visible below a redirected ancestor'
+    );
+    assert.equal(focusedAncestorRedirectResult.scanDiagnostics?.rootRedirectAliasCollapsedCount, 1);
+    assert.equal(
+      focusedAncestorRedirectNodes.some((node) => node.url === `${fixtureOrigin}/locale/en`),
+      false,
+      'a focused ancestor redirect target should not render as a duplicate child'
     );
     console.log('[focused-scan-fixture] Passed.');
   } finally {

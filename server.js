@@ -6587,43 +6587,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const canonicalKeyFor = (node) => getPageIdentityKey(node);
   const rootNodeBeforeGrouping = nodes.get(rootUrl);
   const rootRedirectAliasUrl = normalizeUrl(rootNodeBeforeGrouping?.finalUrl);
-  if (
-    rootNodeBeforeGrouping
-    && rootRedirectAliasUrl
-    && rootRedirectAliasUrl !== rootUrl
-    && nodes.has(rootRedirectAliasUrl)
-    && canonicalKeyFor(rootNodeBeforeGrouping) === canonicalKeyFor(nodes.get(rootRedirectAliasUrl))
-  ) {
-    const aliasNode = nodes.get(rootRedirectAliasUrl);
-    rootNodeBeforeGrouping.linksIn = Math.max(
-      Number(rootNodeBeforeGrouping.linksIn || 0),
-      Number(aliasNode?.linksIn || 0)
-    );
-    rootNodeBeforeGrouping.linksOut = Math.max(
-      Number(rootNodeBeforeGrouping.linksOut || 0),
-      Number(aliasNode?.linksOut || 0)
-    );
-    const mergedRootLinks = Array.from(new Set([
-      ...(linksByUrl.get(rootUrl) || []),
-      ...(linksByUrl.get(rootRedirectAliasUrl) || []),
-    ]));
-    linksByUrl.set(rootUrl, mergedRootLinks);
-    linksByUrl.delete(rootRedirectAliasUrl);
-    nodes.delete(rootRedirectAliasUrl);
-    pageMap.delete(rootRedirectAliasUrl);
-    focusedContentUrls.delete(rootRedirectAliasUrl);
-    focusedListingUrls.delete(rootRedirectAliasUrl);
-    focusedListingOrder.delete(rootRedirectAliasUrl);
-    focusedListingParentByUrl.delete(rootRedirectAliasUrl);
-    scopedDiscoveredUrls.delete(rootRedirectAliasUrl);
-    numberingDiscoveryOrder.delete(rootRedirectAliasUrl);
-    sitemapNumberingOrder.delete(rootRedirectAliasUrl);
-    sitemapOrder.delete(rootRedirectAliasUrl);
-    failedOutcomeUrls.delete(rootRedirectAliasUrl);
-    blockedOutcomeUrls.delete(rootRedirectAliasUrl);
-    deferredOutcomeUrls.delete(rootRedirectAliasUrl);
-    scanDiagnostics.rootRedirectAliasCollapsedCount += 1;
-  }
   const shouldInferPathParents = (node) => {
     if (!node?.url || node.url === rootUrl) return false;
     try {
@@ -6723,6 +6686,61 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const allowFocusedContentAncestors = scanScope.focused && focusedContentUrls.has(node.url);
     if (shouldSuppressVirtualPlaceholders && !allowFocusedContentAncestors) continue;
     ensureParentChain(node.url, { allowFocusedContentAncestors });
+  }
+
+  if (
+    rootNodeBeforeGrouping
+    && rootRedirectAliasUrl
+    && rootRedirectAliasUrl !== rootUrl
+    && nodes.has(rootRedirectAliasUrl)
+  ) {
+    const aliasNode = nodes.get(rootRedirectAliasUrl);
+    rootNodeBeforeGrouping.linksIn = Math.max(
+      Number(rootNodeBeforeGrouping.linksIn || 0),
+      Number(aliasNode?.linksIn || 0)
+    );
+    rootNodeBeforeGrouping.linksOut = Math.max(
+      Number(rootNodeBeforeGrouping.linksOut || 0),
+      Number(aliasNode?.linksOut || 0)
+    );
+    const mergedRootLinks = Array.from(new Set([
+      ...(linksByUrl.get(rootUrl) || []),
+      ...(linksByUrl.get(rootRedirectAliasUrl) || []),
+    ]));
+    linksByUrl.set(rootUrl, mergedRootLinks);
+    linksByUrl.delete(rootRedirectAliasUrl);
+    nodes.forEach((node) => {
+      if (normalizeUrl(node.parentUrl) === rootRedirectAliasUrl) node.parentUrl = rootUrl;
+    });
+    focusedContentParentByUrl.forEach((parentUrl, childUrl) => {
+      if (normalizeUrl(parentUrl) === rootRedirectAliasUrl) {
+        focusedContentParentByUrl.set(childUrl, rootUrl);
+      }
+    });
+    focusedListingParentByUrl.forEach((parentUrl, childUrl) => {
+      if (normalizeUrl(parentUrl) === rootRedirectAliasUrl) {
+        focusedListingParentByUrl.set(childUrl, rootUrl);
+      }
+    });
+    canonicalToUrl.forEach((mappedUrl, key) => {
+      if (mappedUrl === rootRedirectAliasUrl) canonicalToUrl.set(key, rootUrl);
+    });
+    const redirectAliasKey = getCanonicalKey(rootRedirectAliasUrl);
+    if (redirectAliasKey) canonicalToUrl.set(redirectAliasKey, rootUrl);
+    nodes.delete(rootRedirectAliasUrl);
+    pageMap.delete(rootRedirectAliasUrl);
+    focusedContentUrls.delete(rootRedirectAliasUrl);
+    focusedListingUrls.delete(rootRedirectAliasUrl);
+    focusedListingOrder.delete(rootRedirectAliasUrl);
+    focusedListingParentByUrl.delete(rootRedirectAliasUrl);
+    scopedDiscoveredUrls.delete(rootRedirectAliasUrl);
+    numberingDiscoveryOrder.delete(rootRedirectAliasUrl);
+    sitemapNumberingOrder.delete(rootRedirectAliasUrl);
+    sitemapOrder.delete(rootRedirectAliasUrl);
+    failedOutcomeUrls.delete(rootRedirectAliasUrl);
+    blockedOutcomeUrls.delete(rootRedirectAliasUrl);
+    deferredOutcomeUrls.delete(rootRedirectAliasUrl);
+    scanDiagnostics.rootRedirectAliasCollapsedCount += 1;
   }
 
   nodes.forEach((node) => {
@@ -7414,6 +7432,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       const isMissingContext = contextStatus === 404 || contextStatus === 410;
       const isUnresolvedContext = contextStatus === 0;
       const shouldExposePageStatus = isResolvedPage || isAuthenticationPage;
+      const inspectedFinalUrl = normalizeUrl(inspectedMeta.finalUrl);
+      const collapseRedirectAliasChild = Boolean(
+        inspectedFinalUrl
+        && inspectedFinalUrl !== ancestorUrl
+        && inspectedFinalUrl === normalizeUrl(focusedTree.url)
+      );
+      const focusedChildren = collapseRedirectAliasChild
+        ? (focusedTree.children || [])
+        : [focusedTree];
+      if (collapseRedirectAliasChild) {
+        scanDiagnostics.rootRedirectAliasCollapsedCount += 1;
+      }
       focusedTree = {
         id: safeIdFromUrl(`focus:${ancestorUrl}`),
         url: ancestorUrl,
@@ -7464,7 +7494,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
               ? inspectedMeta.scanStatus || null
               : 'structural',
         metadataAvailable: shouldExposePageStatus ? inspectedMeta.metadataAvailable !== false : false,
-        children: [focusedTree],
+        children: focusedChildren,
       };
     }
     root = focusedTree;
