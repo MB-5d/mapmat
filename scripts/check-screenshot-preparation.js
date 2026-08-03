@@ -86,6 +86,22 @@ async function main() {
       0,
       'late cookie dialogs should be dismissed before capture'
     );
+    await page.evaluate(() => {
+      const lateOneTrust = document.createElement('div');
+      lateOneTrust.id = 'onetrust-consent-sdk';
+      lateOneTrust.innerHTML = `
+        <div id="onetrust-banner-sdk">
+          <p>We use cookies and tracking technologies.</p>
+          <button>Accept All</button>
+        </div>
+      `;
+      document.body.appendChild(lateOneTrust);
+    });
+    assert.equal(
+      await page.locator('#onetrust-consent-sdk').isVisible(),
+      false,
+      'OneTrust banners inserted after preparation should remain hidden'
+    );
     assert.equal(await page.locator('#protected-close').count(), 1, 'authentication dialogs must remain untouched');
   } finally {
     await browser.close();

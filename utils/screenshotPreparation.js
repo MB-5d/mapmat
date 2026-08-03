@@ -132,6 +132,19 @@ async function dismissScreenshotObstructions(page, {
         });
       });
 
+      const persistentConsentStyleId = 'vellic-screenshot-consent-suppression';
+      if (!document.getElementById(persistentConsentStyleId)) {
+        const style = document.createElement('style');
+        style.id = persistentConsentStyleId;
+        style.textContent = `${knownConsentContainers.join(', ')} {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }`;
+        (document.head || document.documentElement).appendChild(style);
+      }
+
       document.querySelectorAll([
         '[role="dialog"]',
         '[aria-modal="true"]',
