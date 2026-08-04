@@ -740,6 +740,57 @@ describe('deferred page capture', () => {
     expect(blogChildren[1].deferredEntries[0].url).toBe('https://example.com/blog/post-12');
   });
 
+  test('applies deferred captures inside an orphan tree without changing the root', () => {
+    const placeholder = {
+      id: 'placeholder-subdomain',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'subdomain-group',
+      capturedCount: 10,
+      remainingCount: 1,
+      deferredEntries: [
+        { url: 'https://docs.example.com/guide', scanNumber: '0.1.11', order: 10 },
+      ],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [],
+    };
+    const existingOrphans = [{
+      id: 'docs',
+      url: 'https://docs.example.com/',
+      children: [placeholder],
+    }];
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      existingOrphans,
+      placeholderNode: placeholder,
+      captureResult: {
+        root: {
+          id: 'capture-root',
+          url: 'https://docs.example.com/',
+          children: [{
+            id: 'guide',
+            url: 'https://docs.example.com/guide',
+            title: 'Guide',
+            children: [],
+          }],
+        },
+        captureSummary: {
+          successfulEntries: [{ url: 'https://docs.example.com/guide' }],
+        },
+      },
+    });
+
+    expect(applied.root).toEqual(existingRoot);
+    expect(applied.orphans[0].children).toHaveLength(1);
+    expect(applied.orphans[0].children[0].url).toBe('https://docs.example.com/guide');
+    expect(applied.orphans[0].children[0].scanNumber).toBe('0.1.11');
+    expect(applied.capturedCount).toBe(1);
+    expect(applied.remainingCount).toBe(0);
+  });
+
   test('replaces a matching virtual Missing ancestor and stays idempotent on retry', () => {
     const placeholder = {
       id: 'placeholder-blog',

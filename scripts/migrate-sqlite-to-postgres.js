@@ -118,7 +118,7 @@ const TABLES = [
     conflictKey: 'id',
     columns: [
       'id', 'type', 'status', 'created_at', 'started_at', 'finished_at', 'user_id', 'api_key',
-      'ip_hash', 'payload', 'progress', 'result', 'error',
+      'ip_hash', 'payload', 'idempotency_key', 'request_url', 'progress', 'result', 'error',
     ],
   },
 ];
@@ -251,6 +251,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   api_key TEXT,
   ip_hash TEXT,
   payload TEXT,
+  idempotency_key TEXT,
+  request_url TEXT,
   progress TEXT,
   result TEXT,
   error TEXT
@@ -266,6 +268,11 @@ CREATE INDEX IF NOT EXISTS idx_shares_user ON shares(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_events_type_time ON usage_events(event_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at);
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS request_url TEXT;
+CREATE INDEX IF NOT EXISTS idx_jobs_user_idempotency ON jobs(type, user_id, idempotency_key, request_url, status) WHERE idempotency_key IS NOT NULL AND user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_jobs_api_key_idempotency ON jobs(type, api_key, idempotency_key, request_url, status) WHERE idempotency_key IS NOT NULL AND api_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_jobs_ip_idempotency ON jobs(type, ip_hash, idempotency_key, request_url, status) WHERE idempotency_key IS NOT NULL AND ip_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_pages_parent ON pages(parent_url);
 CREATE INDEX IF NOT EXISTS idx_pages_placement ON pages(placement);
 `;

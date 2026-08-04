@@ -137,6 +137,7 @@ const {
   requireAccountActionAsync,
   sendEntitlementError,
   recordMeterDebitAsync,
+  getScanJobDebitIdempotencyKey,
   getScreenshotCreditCost,
 } = require('./utils/entitlements');
 
@@ -1269,15 +1270,14 @@ const findScanJobByIdempotencyKey = async (req, idempotencyKey, safeUrl) => {
   if (!idempotencyKey) return null;
   const identity = getRequestJobIdentity(req);
   if (!identity) return null;
-  const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
-    JOB_TYPES.scan,
-    [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.stopping, JOB_STATUS.complete]
-  );
-  return (rows || []).find((row) => {
-    if (row[identity.column] !== identity.value) return false;
-    const payload = getJobPayload(row);
-    return payload.idempotencyKey === idempotencyKey && payload.url === safeUrl;
-  }) || null;
+  return jobStore.findJobByIdempotencyAsync({
+    type: JOB_TYPES.scan,
+    statuses: [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.stopping, JOB_STATUS.complete],
+    identityColumn: identity.column,
+    identityValue: identity.value,
+    idempotencyKey,
+    requestUrl: safeUrl,
+  });
 };
 
 const normalizeImageCaptureNodeIdList = (nodeIds) => (
@@ -1502,6 +1502,8 @@ const createJob = async ({ type, payload, req, status = JOB_STATUS.queued }) => 
     apiKey,
     ipHash,
     payload: JSON.stringify(payload || {}),
+    idempotencyKey: payload?.idempotencyKey || null,
+    requestUrl: payload?.url || null,
   });
 
   return id;
@@ -1567,7 +1569,6 @@ async function debitScanPagesForJobAsync({
   jobId,
   jobUserId,
   result,
-  idempotencyKey = null,
 }) {
   const pageCount = countScanResultPages(result);
   if (!jobUserId || pageCount <= 0) return;
@@ -1575,9 +1576,7 @@ async function debitScanPagesForJobAsync({
     user: { id: jobUserId },
     meter: ENTITLEMENT_METERS.crawlPages,
     quantity: pageCount,
-    idempotencyKey: idempotencyKey
-      ? `scan-job:${idempotencyKey}:crawl-pages`
-      : `scan-job:${jobId}:crawl-pages`,
+    idempotencyKey: getScanJobDebitIdempotencyKey(jobId),
     metadata: { jobId, pageCount },
   });
 }
@@ -8598,7 +8597,6 @@ async function processJob(job) {
         jobId,
         jobUserId: job.user_id,
         result,
-        idempotencyKey: payload.idempotencyKey || null,
       });
       await markJobComplete(jobId, result);
       return;

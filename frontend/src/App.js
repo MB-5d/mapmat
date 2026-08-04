@@ -3170,10 +3170,17 @@ const mergeRescanResults = ({
   };
 };
 
-const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNode }) => {
-  if (!existingRoot || !captureResult?.root || !placeholderNode?.deferredGroupId) {
+const applyDeferredCaptureResult = ({
+  existingRoot,
+  existingOrphans = [],
+  captureResult,
+  placeholderNode,
+}) => {
+  const orphanNodes = Array.isArray(existingOrphans) ? existingOrphans : [];
+  if ((!existingRoot && orphanNodes.length === 0) || !captureResult?.root || !placeholderNode?.deferredGroupId) {
     return {
       root: existingRoot,
+      orphans: orphanNodes,
       capturedCount: 0,
       terminalCount: 0,
       remainingCount: placeholderNode?.remainingCount || 0,
@@ -3190,6 +3197,7 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
   if (successfulUrls.size === 0 && terminalUrls.size === 0) {
     return {
       root: existingRoot,
+      orphans: orphanNodes,
       capturedCount: 0,
       terminalCount: 0,
       remainingCount: placeholderNode?.remainingCount || 0,
@@ -3212,7 +3220,8 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
     });
   });
 
-  const nextRoot = cloneNodeTree(existingRoot);
+  const nextRoot = existingRoot ? cloneNodeTree(existingRoot) : null;
+  const nextOrphans = orphanNodes.map(cloneNodeTree);
   let capturedCount = 0;
   const replaceCapturedVirtualNodes = (node) => {
     if (!node) return node;
@@ -3241,8 +3250,9 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
     };
   };
   const rootWithCapturedAncestors = replaceCapturedVirtualNodes(nextRoot);
+  const orphansWithCapturedAncestors = nextOrphans.map(replaceCapturedVirtualNodes);
   const existingUrls = new Set(
-    collectNodesDeep(rootWithCapturedAncestors)
+    collectNodesDeep(rootWithCapturedAncestors, orphansWithCapturedAncestors)
       .filter((node) => !(node?.isVirtualMissing || node?.isMissing))
       .map((node) => normalizeUrlForCompare(node?.url))
       .filter(Boolean)
@@ -3302,9 +3312,13 @@ const applyDeferredCaptureResult = ({ existingRoot, captureResult, placeholderNo
     return parent.children.some(updateParent);
   };
 
-  updateParent(rootWithCapturedAncestors);
+  const updatedRoot = updateParent(rootWithCapturedAncestors);
+  if (!updatedRoot) {
+    orphansWithCapturedAncestors.some(updateParent);
+  }
   return {
     root: rootWithCapturedAncestors,
+    orphans: orphansWithCapturedAncestors,
     capturedCount,
     terminalCount,
     remainingCount,
@@ -14020,6 +14034,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       const applied = applyDeferredCaptureResult({
         existingRoot: rootRef.current,
+        existingOrphans: orphansRef.current,
         captureResult: completedJob.result,
         placeholderNode,
       });
@@ -14029,9 +14044,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
 
       rootRef.current = applied.root;
+      orphansRef.current = applied.orphans;
       setRoot(applied.root);
+      setOrphans(applied.orphans);
       const visiblePageCount = countPageNodes(applied.root)
-        + orphansRef.current.reduce((total, orphan) => total + countPageNodes(orphan), 0);
+        + applied.orphans.reduce((total, orphan) => total + countPageNodes(orphan), 0);
       setScanMeta((current) => reconcileDeferredCaptureScanMeta({
         current,
         groupId,
@@ -14042,7 +14059,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       }));
       setDraftVersionFromSnapshot({
         root: applied.root,
-        orphans: orphansRef.current,
+        orphans: applied.orphans,
         connections,
         colors,
         connectionColors,

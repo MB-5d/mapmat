@@ -678,6 +678,12 @@ function getScreenshotCreditCost({ type = 'thumb', viewport = 'desktop', pair = 
   return normalizeLimit(costs.desktop_viewport ?? 1);
 }
 
+function getScanJobDebitIdempotencyKey(jobId) {
+  const normalizedJobId = String(jobId || '').trim();
+  if (!normalizedJobId) throw new Error('Scan job id is required for metering.');
+  return `scan-job:${normalizedJobId}:crawl-pages`;
+}
+
 module.exports = {
   ACTIONS,
   METERS,
@@ -688,5 +694,6 @@ module.exports = {
   requireAccountActionAsync,
   sendEntitlementError,
   recordMeterDebitAsync,
+  getScanJobDebitIdempotencyKey,
   getScreenshotCreditCost,
 };

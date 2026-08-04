@@ -588,6 +588,47 @@ async function main() {
     assert.equal(captureResult.captureSummary.terminalEntries[0].status, 404);
     assert.equal(captureResult.captureSummary.remainingEntries.length, 0);
 
+    const crossUrlIdempotencyKey = 'fixture-cross-url-debit';
+    const crossUrlHeaders = {
+      authorization: `Bearer ${authToken}`,
+      'idempotency-key': crossUrlIdempotencyKey,
+    };
+    const firstCrossUrlJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: crossUrlHeaders,
+      body: JSON.stringify({
+        url: `${fixtureOrigin}/about`,
+        maxPages: 1,
+        options: {},
+      }),
+    });
+    const replayedCrossUrlJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: crossUrlHeaders,
+      body: JSON.stringify({
+        url: `${fixtureOrigin}/about`,
+        maxPages: 1,
+        options: {},
+      }),
+    });
+    const secondCrossUrlJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: crossUrlHeaders,
+      body: JSON.stringify({
+        url: `${fixtureOrigin}/pricing`,
+        maxPages: 1,
+        options: {},
+      }),
+    });
+    assert.equal(replayedCrossUrlJob.jobId, firstCrossUrlJob.jobId);
+    assert.equal(replayedCrossUrlJob.idempotentReplay, true);
+    assert.notEqual(secondCrossUrlJob.jobId, firstCrossUrlJob.jobId);
+    assert.equal(secondCrossUrlJob.idempotentReplay, undefined);
+    await Promise.all([
+      waitForJob(firstCrossUrlJob.jobId, firstCrossUrlJob.jobAccessToken, authToken),
+      waitForJob(secondCrossUrlJob.jobId, secondCrossUrlJob.jobAccessToken, authToken),
+    ]);
+
     const limitedResult = await createScan({
       url: `${fixtureOrigin}/limited`,
       maxPages: 5,
