@@ -21,6 +21,14 @@ function countScanTreeNodes(node) {
   return count;
 }
 
+function getCapturedTreeNodeCount(result) {
+  const diagnostics = result?.scanDiagnostics;
+  if (diagnostics && Object.prototype.hasOwnProperty.call(diagnostics, 'capturedTreeNodeCount')) {
+    return toNonNegativeInteger(diagnostics.capturedTreeNodeCount);
+  }
+  return countScanTreeNodes(result?.root);
+}
+
 function normalizeProgress(progress = {}) {
   return {
     scanned: toNonNegativeInteger(progress.scanned),
@@ -45,7 +53,7 @@ function canReclassifyRootOnlyPartialReason(partialReason) {
 
 function getRootOnlyCollapseReasons(result, context = {}) {
   if (!result?.root || !canReclassifyRootOnlyPartialReason(result.partialReason)) return [];
-  const rootTreeNodeCount = countScanTreeNodes(result.root);
+  const rootTreeNodeCount = getCapturedTreeNodeCount(result);
   if (rootTreeNodeCount > 1) return [];
 
   const diagnostics = result.scanDiagnostics || {};
@@ -70,8 +78,13 @@ function getRootOnlyCollapseReasons(result, context = {}) {
 
 function getInvalidScanResultReason(result) {
   if (!result?.root) return 'no_root';
-  const rootTreeNodeCount = countScanTreeNodes(result.root);
+  const rootTreeNodeCount = getCapturedTreeNodeCount(result);
   if (rootTreeNodeCount > 1) return null;
+  const isUsableFocusedChallenge = result?.scanScope?.focused === true
+    && result?.partialReason === 'root_discovery_failed'
+    && result?.scanDiagnostics?.rootClassification === 'scan_limited'
+    && toNonNegativeInteger(result?.scanDiagnostics?.rootStatus) >= 400;
+  if (isUsableFocusedChallenge) return null;
   if (ROOT_ONLY_DEGRADED_PARTIAL_REASONS.has(result.partialReason)) return result.partialReason;
   if (result.partialReason === 'stopped_by_user') return 'stopped_before_valid_partial';
   return null;
@@ -95,7 +108,7 @@ function hardenCollapsedScanResult(result, context = {}) {
   if (reasons.length === 0) return result;
 
   const progress = normalizeProgress(context.progress);
-  const rootTreeNodeCount = countScanTreeNodes(result.root);
+  const rootTreeNodeCount = getCapturedTreeNodeCount(result);
   const rootChildCount = Array.isArray(result.root?.children) ? result.root.children.length : 0;
   const existingDiagnostics = result.scanDiagnostics && typeof result.scanDiagnostics === 'object'
     ? result.scanDiagnostics

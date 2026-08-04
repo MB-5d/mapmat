@@ -36,7 +36,7 @@ const LayersPanel = ({
     { key: 'statusBroken', label: 'Broken link' },
     { key: 'statusError', label: 'Error' },
     { key: 'statusInactive', label: 'Inactive' },
-    { key: 'statusAuth', label: 'Auth required' },
+    { key: 'statusAuth', label: 'Login required' },
   ].filter((option) => !!scanLayerAvailability?.[option.key]);
   const hasPlacementLayers = placementLayers.length > 0;
   const hasStatusLayers = statusLayers.length > 0;

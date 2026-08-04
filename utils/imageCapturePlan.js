@@ -21,6 +21,11 @@ const IMAGE_CAPTURE_STAGE_SIZES = Object.freeze({
   full: 100,
 });
 
+const IMAGE_CAPTURE_INELIGIBILITY_CODES = Object.freeze({
+  structural: 'structural',
+  invalidUrl: 'invalid_url',
+});
+
 const IMAGE_CAPTURE_SCALE_LIMITS = Object.freeze({
   thumb: Object.freeze({
     smallMax: 250,
@@ -39,6 +44,35 @@ function normalizeId(value) {
 
 function normalizeCaptureType(value) {
   return String(value || '').trim().toLowerCase() === 'full' ? 'full' : 'thumb';
+}
+
+function getImageCaptureEligibility(node) {
+  const nodeKind = String(node?.nodeKind || '').trim().toLowerCase();
+  if (
+    !node
+    || ['import-container', 'import-ghost', 'source-group', 'deferred-group'].includes(nodeKind)
+  ) {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.structural,
+      reason: 'Structural page',
+    };
+  }
+  try {
+    const parsed = new URL(String(node.url || '').trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Invalid protocol');
+  } catch {
+    return {
+      eligible: false,
+      code: IMAGE_CAPTURE_INELIGIBILITY_CODES.invalidUrl,
+      reason: 'Invalid URL',
+    };
+  }
+  return {
+    eligible: true,
+    code: '',
+    reason: '',
+  };
 }
 
 function getImageCaptureScaleTier(captureType, count) {
@@ -209,6 +243,7 @@ function buildImageCaptureStages(records, captureType = 'thumb') {
 
 module.exports = {
   TREE_TYPES,
+  IMAGE_CAPTURE_INELIGIBILITY_CODES,
   IMAGE_CAPTURE_SCALE_TIERS,
   IMAGE_CAPTURE_STAGE_SIZES,
   collectImageCaptureRecords,
@@ -217,5 +252,6 @@ module.exports = {
   compareCaptureRecords,
   getImageCaptureScaleTier,
   getImageCaptureStageSize,
+  getImageCaptureEligibility,
   normalizeCaptureType,
 };

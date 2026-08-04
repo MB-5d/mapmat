@@ -1,5 +1,10 @@
 import { STACK_THRESHOLD, LAYOUT } from './constants';
 
+const PAGE_NUMBER_COLLATOR = new Intl.Collator('en', {
+  numeric: true,
+  sensitivity: 'base',
+});
+
 export const buildExpandedStackMap = (rootNode, orphanNodes = []) => {
   const expanded = {};
   const walk = (node) => {
@@ -25,7 +30,12 @@ export const countNodes = (node) => {
   return 1 + (node.children || []).reduce((sum, c) => sum + countNodes(c), 0);
 };
 
-const NON_PAGE_NODE_KINDS = new Set(['import-container', 'import-ghost', 'source-group']);
+const NON_PAGE_NODE_KINDS = new Set([
+  'import-container',
+  'import-ghost',
+  'source-group',
+  'deferred-group',
+]);
 
 export const isPageNode = (node) => {
   if (!node || NON_PAGE_NODE_KINDS.has(node.nodeKind)) return false;
@@ -37,9 +47,68 @@ export const isPageNode = (node) => {
   }
 };
 
+export const isCapturedPageNode = (node) => (
+  isPageNode(node)
+  && !node.isStructuralContext
+  && !node.isVirtualMissing
+  && !node.isEntitlementLocked
+  && !node.entitlementLocked
+);
+
+export const getImageCaptureIneligibilityReason = (node) => {
+  if (!isPageNode(node)) return 'structural';
+  return '';
+};
+
+export const isImageCaptureEligibleNode = (node) => (
+  getImageCaptureIneligibilityReason(node) === ''
+);
+
+export const compareScanNumberStrings = (leftValue, rightValue) => {
+  const parse = (value) => String(value || '').trim().split('.').filter(Boolean).map((part) => {
+    if (/^\d+$/.test(part)) return { type: 'number', value: Number(part) };
+    if (/^X+$/i.test(part)) return { type: 'unknown', value: 0 };
+    return { type: 'text', value: part };
+  });
+  const left = parse(leftValue);
+  const right = parse(rightValue);
+  if (left.length === 0 || right.length === 0) return 0;
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = left[index];
+    const rightPart = right[index];
+    if (!leftPart || !rightPart) return left.length - right.length;
+    if (leftPart.type === 'unknown' && rightPart.type === 'unknown') continue;
+    if (leftPart.type === 'number' && rightPart.type === 'number') {
+      if (leftPart.value !== rightPart.value) return leftPart.value - rightPart.value;
+      continue;
+    }
+    if (leftPart.type !== rightPart.type) {
+      if (leftPart.type === 'number') return -1;
+      if (rightPart.type === 'number') return 1;
+      if (leftPart.type === 'unknown') return -1;
+      if (rightPart.type === 'unknown') return 1;
+    }
+    const difference = PAGE_NUMBER_COLLATOR.compare(
+      String(leftPart.value),
+      String(rightPart.value)
+    );
+    if (difference !== 0) return difference;
+  }
+  return 0;
+};
+
+export const getOrderedChildren = (node) => (
+  [...(node?.children || [])].sort((left, right) => {
+    if (left?.nodeKind === 'deferred-group' && right?.nodeKind !== 'deferred-group') return 1;
+    if (left?.nodeKind !== 'deferred-group' && right?.nodeKind === 'deferred-group') return -1;
+    return compareScanNumberStrings(left?.scanNumber, right?.scanNumber);
+  })
+);
+
 export const countPageNodes = (node) => {
   if (!node) return 0;
-  return (isPageNode(node) ? 1 : 0)
+  return (isCapturedPageNode(node) ? 1 : 0)
     + (node.children || []).reduce((sum, child) => sum + countPageNodes(child), 0);
 };
 

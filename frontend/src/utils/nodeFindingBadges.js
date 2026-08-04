@@ -1,5 +1,11 @@
 import { isTopLevelOrphanRoot } from './mapDisplaySummary';
-import { getNodeHttpErrorLabel, getNodeStatusCode, isRealHttpErrorNode, isVirtualMissingNode } from './scanStatus';
+import {
+  getNodeHttpErrorLabel,
+  getNodeStatusCode,
+  isRealHttpErrorNode,
+  isScanLimitedNode,
+  isVirtualMissingNode,
+} from './scanStatus';
 import { isRenderableTextUrl } from './url';
 
 export const DEFAULT_NODE_BADGE_VISIBILITY = Object.freeze({
@@ -34,6 +40,7 @@ export const getFindingBadgesForNode = (
 
   if (node.isDuplicate && canShowBadge(visibility, 'duplicates')) badges.push('Duplicate');
   if (isVirtualMissingNode(node) && canShowBadge(visibility, 'missing')) badges.push('Missing');
+  if (isScanLimitedNode(node)) badges.push('Crawl restricted');
   // Orphan and subdomain are conveyed by page numbering/placement, not node badges.
   if (!isRenderableText && orphanType === 'file' && canShowBadge(visibility, 'files')) badges.push('File');
   if (orphanType === 'broken' && !isOrphanRoot && canShowBadge(visibility, 'brokenLinks')) {
@@ -45,8 +52,8 @@ export const getFindingBadgesForNode = (
   if (node.isBroken && !isOrphanRoot && canShowBadge(visibility, 'brokenLinks') && !badges.includes('Broken Link')) {
     badges.push('Broken Link');
   }
-  if (node.authRequired && canShowBadge(visibility, 'authenticatedPages') && !badges.includes('Auth')) {
-    badges.push('Auth');
+  if (node.authRequired && canShowBadge(visibility, 'authenticatedPages') && !badges.includes('Login required')) {
+    badges.push('Login required');
   }
   if (isRealError && canShowBadge(visibility, 'errorPages')) {
     const statusCode = getNodeStatusCode(node);

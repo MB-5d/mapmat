@@ -9,15 +9,16 @@ import {
   Loader2,
   Lock,
   Maximize2,
+  Scan,
 } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import NodeActionBar from './NodeActionBar';
 import NodeBadge from './NodeBadge';
 import Badge from '../ui/Badge';
+import Button from '../ui/Button';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
-import { getNodeHttpErrorLabel, isRealHttpErrorNode, isScanLimitedNode } from '../../utils/scanStatus';
 
 const NODE_STATUS_BADGE_STYLE = {
   new: 'info',
@@ -29,6 +30,7 @@ const NODE_STATUS_BADGE_STYLE = {
 };
 
 const HIDDEN_NODE_FINDING_BADGES = new Set(['Orphan', 'Subdomain']);
+const FOCUS_GHOST_REVEAL_MODE = 'card';
 
 const NodeCard = ({
   node,
@@ -66,6 +68,8 @@ const NodeCard = ({
   onThumbnailError,
   stackInfo,
   onToggleStack,
+  onCaptureDeferredGroup,
+  deferredCaptureLoading = false,
   isGhosted = false,
   isSelected = false,
 }) => {
@@ -100,10 +104,13 @@ const NodeCard = ({
   const isEntitlementLocked = Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
   const isImportGhost = node?.nodeKind === 'import-ghost';
   const isSourceGroup = node?.nodeKind === 'source-group';
+  const isFocusGhost = node?.nodeKind === 'focus-ghost' || node?.isFocusAncestor;
+  const isDeferredGroup = node?.nodeKind === 'deferred-group';
   const isImportStructuralNode = isImportGhost || isSourceGroup;
-  const shouldGhost = isGhosted || isDeleted;
+  const isStructuralNode = isImportStructuralNode || isFocusGhost || isDeferredGroup;
+  const shouldGhost = isGhosted || isDeleted || isFocusGhost;
   const showActionBar = !isEntitlementLocked
-    && !isImportStructuralNode
+    && !isStructuralNode
     && (canEdit || showCommentAction || (showExternalLinkAction && !!node.url));
   const actionBarPermission = canEdit
     ? 'Owner / Editor'
@@ -114,7 +121,6 @@ const NodeCard = ({
   const getPreviewIssue = () => {
     const orphanType = String(node?.orphanType || '').toLowerCase();
     const pageType = String(node?.pageType || node?.type || '').toLowerCase();
-    const scanStatus = String(node?.scanStatus || node?.status || '').toLowerCase();
     const extension = getUrlExtension(node?.url).toUpperCase();
     const isRenderableText = isRenderableTextUrl(node?.url);
     if (isEntitlementLocked) {
@@ -137,47 +143,6 @@ const NodeCard = ({
         label: extension ? `${extension} file` : 'File link',
         text: 'No page preview',
         variant: 'file',
-      };
-    }
-    if (node?.authRequired) {
-      return {
-        icon: Lock,
-        label: 'Requires login',
-        text: 'Preview unavailable',
-        variant: 'blocked',
-      };
-    }
-    const statusCode = Number(node?.httpStatus ?? node?.statusCode);
-    if (isScanLimitedNode(node)) {
-      return {
-        icon: AlertTriangle,
-        label: statusCode >= 400 ? `Scan limited (${getNodeHttpErrorLabel(node) || `HTTP ${statusCode}`})` : 'Scan limited',
-        text: 'Preview unavailable',
-        variant: 'blocked',
-      };
-    }
-    const isViewableError = Boolean(node?.isViewableError && Number.isFinite(statusCode) && statusCode >= 400);
-    if (isViewableError) return null;
-    if (
-      node?.isBroken
-      || orphanType === 'broken'
-      || scanStatus === 'error'
-      || scanStatus === 'failed'
-      || isRealHttpErrorNode(node)
-    ) {
-      return {
-        icon: AlertTriangle,
-        label: getNodeHttpErrorLabel(node) || 'Error page',
-        text: 'Preview unavailable',
-        variant: 'error',
-      };
-    }
-    if (node?.isInactive || orphanType === 'inactive' || scanStatus === 'inactive' || statusCode === 0) {
-      return {
-        icon: AlertTriangle,
-        label: 'Inactive page',
-        text: 'Preview unavailable',
-        variant: 'inactive',
       };
     }
     if (node?.thumbnailCaptureFailed) {
@@ -292,6 +257,10 @@ const NodeCard = ({
   if (isEntitlementLocked) classNames.push('entitlement-locked');
   if (isImportGhost) classNames.push('import-ghost');
   if (isSourceGroup) classNames.push('source-group');
+  if (isFocusGhost) {
+    classNames.push('focus-ghost', `focus-ghost-reveal-${FOCUS_GHOST_REVEAL_MODE}`);
+  }
+  if (isDeferredGroup) classNames.push('deferred-group');
   if (showActionBar) classNames.push('has-action-bar');
   if (showCommentBadges && node.comments?.length > 0) classNames.push('has-comment-badge');
 
@@ -314,13 +283,21 @@ const NodeCard = ({
       data-feedback-label={node.title || 'Node card'}
       title={isEntitlementLocked
         ? 'Upgrade to see full map'
-        : (isImportGhost ? 'Inferred from the URL path; this is not a page' : undefined)}
-      aria-label={isImportGhost ? `${node.title}, inferred path, not a page` : undefined}
-      style={{ cursor: isImportStructuralNode ? 'default' : (isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab'))) }}
-      {...(isRoot || isImportStructuralNode ? {} : dragHandleProps)}
+        : (
+          isImportGhost || isFocusGhost
+            ? 'Inferred structural context; this is not a captured page'
+            : undefined
+        )}
+      aria-label={
+        isImportGhost || isFocusGhost
+          ? `${node.title}, inferred structural context, not a captured page`
+          : undefined
+      }
+      style={{ cursor: isStructuralNode ? 'default' : (isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab'))) }}
+      {...(isRoot || isStructuralNode ? {} : dragHandleProps)}
     >
       {/* Connection anchor points - show when connection tool is active */}
-      {connectionTool && !isImportStructuralNode && (
+      {connectionTool && !isStructuralNode && (
         <>
           <div
             className={`anchor-point anchor-top ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'top' ? 'snapped' : ''}`}
@@ -349,21 +326,23 @@ const NodeCard = ({
         </>
       )}
 
-      <div
-        className="card-header"
-        style={{ backgroundColor: color }}
-      >
-      </div>
+      {!isDeferredGroup && (
+        <div
+          className="card-header"
+          style={{ backgroundColor: color }}
+        >
+        </div>
+      )}
 
       {/* Comment badge - show if node has comments and comments mode is active */}
-      {showCommentBadges && !isImportStructuralNode && node.comments?.length > 0 && (
+      {showCommentBadges && !isStructuralNode && node.comments?.length > 0 && (
         <CommentBadge
           count={node.comments.length}
           onClick={(e) => { e.stopPropagation(); onViewNotes?.(node); }}
         />
       )}
 
-      {showThumbnails && !isImportStructuralNode && (
+      {showThumbnails && !isStructuralNode && (
         <div className={`card-thumb${hasThumb && shouldLoadThumb && !thumbError ? ' card-thumb-with-image' : ''}`}>
           {thumbLoading && !thumbError && (
             <div className="thumb-loading">
@@ -429,6 +408,33 @@ const NodeCard = ({
         </div>
       )}
 
+      {isDeferredGroup ? (
+        <div className="deferred-group-content">
+          <div className="deferred-group-message">
+            <span className="deferred-group-number">
+              {Math.max(0, Number(node.remainingCount || 0) || 0).toLocaleString()}
+            </span>
+            <span className="deferred-group-count">more pages like this</span>
+          </div>
+          <Button
+            className="deferred-group-capture"
+            type="secondary"
+            htmlType="button"
+            size="md"
+            startIcon={<Scan data-icon="scan" aria-hidden="true" />}
+            loading={deferredCaptureLoading}
+            disabled={deferredCaptureLoading || !onCaptureDeferredGroup}
+            onClick={(event) => {
+              event.stopPropagation();
+              onCaptureDeferredGroup?.(node);
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {deferredCaptureLoading ? 'Capturing' : 'Capture now'}
+          </Button>
+        </div>
+      ) : (
       <div className="card-content">
         <div className="card-content-top">
           <div className="card-title" title={node.title}>
@@ -446,6 +452,8 @@ const NodeCard = ({
             <span className="import-structural-label">
               {isImportGhost ? 'Inferred path' : 'Section'}
             </span>
+          ) : isFocusGhost ? (
+            <span className="import-structural-label">Structural context</span>
           ) : null}
           {showBadge && (
             <Badge
@@ -466,6 +474,7 @@ const NodeCard = ({
           ? <span className="page-number entitlement-ghost-number" aria-hidden="true" />
           : <span className="page-number">{node.importNumber || number}</span>)}
       </div>
+      )}
 
       {showActionBar && (
         <div className="card-actions">
@@ -549,6 +558,8 @@ const DraggableNodeCard = ({
   showAnnotations,
   stackInfo,
   onToggleStack,
+  onCaptureDeferredGroup,
+  deferredCaptureLoading,
   isGhosted,
   isSelected,
 }) => {
@@ -560,6 +571,8 @@ const DraggableNodeCard = ({
       || node.entitlementLocked
       || node.nodeKind === 'import-ghost'
       || node.nodeKind === 'source-group'
+      || node.nodeKind === 'focus-ghost'
+      || node.nodeKind === 'deferred-group'
       || !canEdit
       || connectionTool, // Disable dragging when connection tool active
   });
@@ -601,6 +614,8 @@ const DraggableNodeCard = ({
         onThumbnailError={onThumbnailError}
         stackInfo={stackInfo}
         onToggleStack={onToggleStack}
+        onCaptureDeferredGroup={onCaptureDeferredGroup}
+        deferredCaptureLoading={deferredCaptureLoading}
         isGhosted={isGhosted}
         isSelected={isSelected}
       />

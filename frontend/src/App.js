@@ -78,7 +78,6 @@ import {
   DEFAULT_CONNECTION_COLORS,
   getDepthColor,
   ACCESS_LEVELS,
-  SCAN_MESSAGES,
   REPORT_TYPE_OPTIONS,
   ANNOTATION_STATUS_OPTIONS,
   LAYOUT,
@@ -120,6 +119,8 @@ import {
   countPageNodes,
   findNodeById,
   findParent,
+  isCapturedPageNode,
+  isImageCaptureEligibleNode,
   isPageNode,
   isDescendantOf,
   shouldStackChildren,
@@ -129,6 +130,7 @@ import {
   buildReportStats,
   buildReportEntries,
   comparePageNumbers,
+  getReportEntitlementVisibleLimit,
 } from './utils/reportUtils';
 import {
   buildExportMetadata,
@@ -139,6 +141,7 @@ import {
   buildSitemapExportRows,
   buildSitemapJsonPayload,
   buildSitemapXml,
+  countCapturedExportRows,
   getSitemapExportFilenameBase,
 } from './utils/fileExports';
 import {
@@ -169,6 +172,7 @@ import {
   shouldPreserveExistingMapForCollapsedScan,
   shouldRejectFreshRootOnlyScan,
 } from './utils/scanCompletion';
+import { createEmptyScanProgress, reconcileScanProgress } from './utils/scanProgress';
 import {
   clearAnalyticsUser,
   identifyAnalyticsUser,
@@ -461,6 +465,10 @@ function normalizeBillingCycle(value) {
 
 function isEntitlementLockedNode(node) {
   return Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
+}
+
+function isNonInteractiveScanNode(node) {
+  return ['import-ghost', 'source-group', 'focus-ghost', 'deferred-group'].includes(node?.nodeKind);
 }
 
 function cloneScanNode(node) {
@@ -1491,6 +1499,55 @@ const sameId = (left, right) => {
   return String(left) === String(right);
 };
 
+const canReuseRouteGatePreview = ({
+  previewLoaded,
+  previewMapId,
+  routeMapId,
+  isLoggedIn,
+  errorStatus,
+} = {}) => (
+  Boolean(previewLoaded)
+  && sameId(previewMapId, routeMapId)
+  && (
+    !isLoggedIn
+    || errorStatus === 403
+    || errorStatus === 404
+  )
+);
+
+const isMapRouteOpeningPending = ({
+  isMapRoute,
+  routeMapMatchesCurrent,
+  authLoading,
+  routeMapGateState,
+} = {}) => Boolean(
+  isMapRoute
+  && !routeMapMatchesCurrent
+  && (
+    authLoading
+    || !routeMapGateState
+    || routeMapGateState.loading
+  )
+);
+
+const canActivateCoeditingForMap = ({
+  coeditingUiEnabled,
+  isLoggedIn,
+  mapId,
+  hasRoot,
+  isImportedMap,
+  isViewingHistoricalVersion,
+  isLargeMapShell,
+} = {}) => Boolean(
+  coeditingUiEnabled
+  && isLoggedIn
+  && mapId
+  && hasRoot
+  && !isImportedMap
+  && !isViewingHistoricalVersion
+  && !isLargeMapShell
+);
+
 const normalizeShareAccessForApp = (value) => (
   Object.values(ACCESS_LEVELS).includes(value) ? value : ACCESS_LEVELS.VIEW
 );
@@ -1797,14 +1854,53 @@ const normalizePersistedDiscoveryManifest = (manifest = null) => {
 
 const normalizePersistedScanMeta = (scanMeta = null) => {
   const entitlement = scanMeta?.entitlement || null;
-  if (!shouldShowScanLimitPreview(entitlement)) return null;
+  const hasEntitlementPreview = shouldShowScanLimitPreview(entitlement);
+  const scanScope = scanMeta?.scanScope && typeof scanMeta.scanScope === 'object'
+    ? scanMeta.scanScope
+    : null;
+  const pageCountSummary = scanMeta?.pageCountSummary && typeof scanMeta.pageCountSummary === 'object'
+    ? {
+      capturedPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.capturedPageCount || 0) || 0)),
+      deferredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.deferredPageCount || 0) || 0)),
+      estimatedRemainingPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.estimatedRemainingPageCount || 0) || 0)),
+      totalDiscoveredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.totalDiscoveredPageCount || 0) || 0)),
+    }
+    : null;
+  const repetitiveGroups = (Array.isArray(scanMeta?.repetitiveGroups) ? scanMeta.repetitiveGroups : [])
+    .map((group) => ({
+      id: String(group?.id || '').slice(0, 120),
+      parentUrl: trimPersistedUrl(group?.parentUrl),
+      shape: String(group?.shape || '').slice(0, 40),
+      capturedCount: Math.max(0, Math.floor(Number(group?.capturedCount || 0) || 0)),
+      deferredCount: Math.max(0, Math.floor(Number(group?.deferredCount || 0) || 0)),
+      totalCount: Math.max(0, Math.floor(Number(group?.totalCount || 0) || 0)),
+    }))
+    .filter((group) => group.id);
+  const blockedSections = (Array.isArray(scanMeta?.blockedSections) ? scanMeta.blockedSections : [])
+    .map((section) => ({
+      url: trimPersistedUrl(section?.url),
+      status: Math.max(0, Math.floor(Number(section?.status || 0) || 0)) || null,
+      reason: String(section?.reason || 'blocked').slice(0, 120),
+    }))
+    .filter((section) => section.url);
+  if (
+    !hasEntitlementPreview
+    && !scanScope?.focused
+    && !pageCountSummary
+    && repetitiveGroups.length === 0
+    && blockedSections.length === 0
+  ) return null;
   return {
     brokenLinks: Array.isArray(scanMeta?.brokenLinks) ? scanMeta.brokenLinks : [],
-    partial: scanMeta?.partial !== false,
-    partialReason: scanMeta?.partialReason || 'entitlement_cap',
+    partial: Boolean(scanMeta?.partial),
+    partialReason: scanMeta?.partialReason || null,
     scanDiagnostics: scanMeta?.scanDiagnostics || null,
-    entitlement,
+    entitlement: hasEntitlementPreview ? entitlement : null,
     discoveryManifest: normalizePersistedDiscoveryManifest(scanMeta?.discoveryManifest),
+    scanScope,
+    pageCountSummary,
+    repetitiveGroups,
+    blockedSections,
   };
 };
 
@@ -1836,7 +1932,9 @@ const hydratePersistedScanLimitMap = (rootNode = null, orphanNodes = []) => {
       scanMeta: { brokenLinks: [] },
     };
   }
-  const display = addScanLimitGhosts(rootNode, orphanNodes, scanMeta.entitlement);
+  const display = scanMeta.entitlement
+    ? addScanLimitGhosts(rootNode, orphanNodes, scanMeta.entitlement)
+    : { root: rootNode, orphans: Array.isArray(orphanNodes) ? orphanNodes : [] };
   return {
     root: display.root,
     orphans: display.orphans,
@@ -2032,6 +2130,8 @@ const SitemapTree = ({
   onThumbnailError,
   expandedStacks,
   onToggleStack,
+  onCaptureDeferredGroup,
+  capturingDeferredGroupIds,
   layout: layoutOverride,
   orientation = MAP_ORIENTATIONS.VERTICAL,
   viewportBounds = null,
@@ -2189,6 +2289,8 @@ const SitemapTree = ({
                 toggleStack(stackToggleParentId);
               }
             }}
+            onCaptureDeferredGroup={onCaptureDeferredGroup}
+            deferredCaptureLoading={capturingDeferredGroupIds?.has(nodeData.node.deferredGroupId)}
             isSelected={isSelected}
           />
         );
@@ -2313,7 +2415,7 @@ const getImageCaptureStats = ({
 
 const collectNodeAndDescendantIds = (node, result = []) => {
   if (!node?.id) return result;
-  result.push(node.id);
+  if (!isNonInteractiveScanNode(node)) result.push(node.id);
   node.children?.forEach((child) => collectNodeAndDescendantIds(child, result));
   return result;
 };
@@ -2530,6 +2632,8 @@ const buildScanScope = (rootNode, scanResult = {}) => {
       rootDomain,
       allowSubdomains: Boolean(scanResult.scanScope?.allowSubdomains),
       exactOnly: Boolean(scanResult.scanScope?.exactOnly) || isLocalOrIpHost(baseHost),
+      focused: Boolean(scanResult.scanScope?.focused),
+      focusPath: scanResult.scanScope?.focusPath || '/',
     };
   } catch {
     return null;
@@ -2540,7 +2644,12 @@ const isUrlInScanScope = (url, scanScope) => {
   if (!scanScope || !url) return true;
   try {
     const host = normalizeScanHost(new URL(url).hostname);
-    if (host === scanScope.baseHost) return true;
+    if (host === scanScope.baseHost) {
+      if (!scanScope.focused) return true;
+      const pathname = new URL(url).pathname.replace(/\/+$/, '') || '/';
+      const focusPath = String(scanScope.focusPath || '/').replace(/\/+$/, '') || '/';
+      return pathname === focusPath || pathname.startsWith(`${focusPath}/`);
+    }
     return Boolean(
       scanScope.allowSubdomains
         && !scanScope.exactOnly
@@ -3061,6 +3170,219 @@ const mergeRescanResults = ({
   };
 };
 
+const applyDeferredCaptureResult = ({
+  existingRoot,
+  existingOrphans = [],
+  captureResult,
+  placeholderNode,
+}) => {
+  const orphanNodes = Array.isArray(existingOrphans) ? existingOrphans : [];
+  if ((!existingRoot && orphanNodes.length === 0) || !captureResult?.root || !placeholderNode?.deferredGroupId) {
+    return {
+      root: existingRoot,
+      orphans: orphanNodes,
+      capturedCount: 0,
+      terminalCount: 0,
+      remainingCount: placeholderNode?.remainingCount || 0,
+    };
+  }
+  const successfulEntries = Array.isArray(captureResult.captureSummary?.successfulEntries)
+    ? captureResult.captureSummary.successfulEntries
+    : [];
+  const terminalEntries = Array.isArray(captureResult.captureSummary?.terminalEntries)
+    ? captureResult.captureSummary.terminalEntries
+    : [];
+  const successfulUrls = new Set(successfulEntries.map((entry) => normalizeUrlForCompare(entry?.url)).filter(Boolean));
+  const terminalUrls = new Set(terminalEntries.map((entry) => normalizeUrlForCompare(entry?.url)).filter(Boolean));
+  if (successfulUrls.size === 0 && terminalUrls.size === 0) {
+    return {
+      root: existingRoot,
+      orphans: orphanNodes,
+      capturedCount: 0,
+      terminalCount: 0,
+      remainingCount: placeholderNode?.remainingCount || 0,
+    };
+  }
+
+  const capturedNodesByUrl = new Map();
+  const successfulEntryByUrl = new Map(
+    successfulEntries
+      .map((entry) => [normalizeUrlForCompare(entry?.url), entry])
+      .filter(([url]) => url)
+  );
+  collectNodesDeep(captureResult.root, captureResult.orphans || []).forEach((node) => {
+    const normalized = normalizeUrlForCompare(node?.url);
+    if (!normalized || !successfulUrls.has(normalized)) return;
+    capturedNodesByUrl.set(normalized, {
+      ...node,
+      children: [],
+      repetitiveGroupId: placeholderNode.deferredGroupId,
+    });
+  });
+
+  const nextRoot = existingRoot ? cloneNodeTree(existingRoot) : null;
+  const nextOrphans = orphanNodes.map(cloneNodeTree);
+  let capturedCount = 0;
+  const replaceCapturedVirtualNodes = (node) => {
+    if (!node) return node;
+    const normalized = normalizeUrlForCompare(node.url);
+    const capturedNode = capturedNodesByUrl.get(normalized);
+    if (
+      capturedNode
+      && successfulUrls.has(normalized)
+      && (node.isVirtualMissing || node.isMissing)
+    ) {
+      capturedCount += 1;
+      return {
+        ...capturedNode,
+        parentUrl: node.parentUrl || capturedNode.parentUrl,
+        scanNumber: successfulEntryByUrl.get(normalized)?.scanNumber
+          || node.scanNumber
+          || capturedNode.scanNumber,
+        children: (node.children || []).map(replaceCapturedVirtualNodes),
+        isMissing: false,
+        isVirtualMissing: false,
+      };
+    }
+    return {
+      ...node,
+      children: (node.children || []).map(replaceCapturedVirtualNodes),
+    };
+  };
+  const rootWithCapturedAncestors = replaceCapturedVirtualNodes(nextRoot);
+  const orphansWithCapturedAncestors = nextOrphans.map(replaceCapturedVirtualNodes);
+  const existingUrls = new Set(
+    collectNodesDeep(rootWithCapturedAncestors, orphansWithCapturedAncestors)
+      .filter((node) => !(node?.isVirtualMissing || node?.isMissing))
+      .map((node) => normalizeUrlForCompare(node?.url))
+      .filter(Boolean)
+  );
+  let remainingCount = Math.max(0, Number(placeholderNode.remainingCount || 0) || 0);
+  let terminalCount = 0;
+
+  const updateParent = (parent) => {
+    if (!Array.isArray(parent?.children)) return false;
+    const placeholderIndex = parent.children.findIndex((child) => (
+      child?.nodeKind === 'deferred-group'
+      && child?.deferredGroupId === placeholderNode.deferredGroupId
+    ));
+    if (placeholderIndex >= 0) {
+      const currentPlaceholder = parent.children[placeholderIndex];
+      const originalEntries = Array.isArray(currentPlaceholder.deferredEntries)
+        ? currentPlaceholder.deferredEntries
+        : [];
+      const capturedNodes = [];
+      originalEntries.forEach((entry) => {
+        const normalized = normalizeUrlForCompare(entry?.url);
+        if (!successfulUrls.has(normalized) || existingUrls.has(normalized)) return;
+        const capturedNode = capturedNodesByUrl.get(normalized);
+        if (!capturedNode) return;
+        capturedNodes.push({
+          ...capturedNode,
+          scanNumber: entry.scanNumber || capturedNode.scanNumber,
+        });
+        existingUrls.add(normalized);
+        capturedCount += 1;
+      });
+      const remainingEntries = originalEntries.filter((entry) => (
+        !successfulUrls.has(normalizeUrlForCompare(entry?.url))
+        && !terminalUrls.has(normalizeUrlForCompare(entry?.url))
+      ));
+      terminalCount += originalEntries.filter((entry) => (
+        terminalUrls.has(normalizeUrlForCompare(entry?.url))
+      )).length;
+      remainingCount = remainingEntries.length;
+      const nextChildren = [
+        ...parent.children.slice(0, placeholderIndex),
+        ...capturedNodes,
+      ];
+      if (remainingEntries.length > 0) {
+        nextChildren.push({
+          ...currentPlaceholder,
+          title: `${remainingEntries.length} more pages like this`,
+          capturedCount: Math.max(0, Number(currentPlaceholder.capturedCount || 0) || 0) + capturedCount,
+          remainingCount: remainingEntries.length,
+          deferredEntries: remainingEntries,
+        });
+      }
+      nextChildren.push(...parent.children.slice(placeholderIndex + 1));
+      parent.children = nextChildren;
+      return true;
+    }
+    return parent.children.some(updateParent);
+  };
+
+  const updatedRoot = updateParent(rootWithCapturedAncestors);
+  if (!updatedRoot) {
+    orphansWithCapturedAncestors.some(updateParent);
+  }
+  return {
+    root: rootWithCapturedAncestors,
+    orphans: orphansWithCapturedAncestors,
+    capturedCount,
+    terminalCount,
+    remainingCount,
+  };
+};
+
+const reconcileDeferredCaptureScanMeta = ({
+  current,
+  groupId,
+  capturedCount,
+  removedCount = 0,
+  remainingCount,
+  visiblePageCount,
+}) => {
+  const currentSummary = current?.pageCountSummary || {};
+  const normalizedCapturedCount = Math.max(0, Number(capturedCount || 0) || 0);
+  const normalizedRemovedCount = Math.max(0, Number(removedCount || 0) || 0);
+  const normalizedResolvedCount = normalizedCapturedCount + normalizedRemovedCount;
+  const normalizedRemainingCount = Math.max(0, Number(remainingCount || 0) || 0);
+  const normalizedVisiblePageCount = Math.max(0, Number(visiblePageCount || 0) || 0);
+  const entitlementVisibleLimit = getReportEntitlementVisibleLimit(current);
+  const reconciledVisiblePageCount = entitlementVisibleLimit
+    ? Math.min(normalizedVisiblePageCount, entitlementVisibleLimit)
+    : normalizedVisiblePageCount;
+  const repetitiveGroups = (current?.repetitiveGroups || []).map((group) => (
+    group?.id === groupId
+      ? {
+        ...group,
+        capturedCount: Math.max(0, Number(group.capturedCount || 0) || 0) + normalizedCapturedCount,
+        deferredCount: normalizedRemainingCount,
+        totalCount: Math.max(0, Number(group.totalCount || 0) || 0),
+      }
+      : group
+  )).filter((group) => Math.max(0, Number(group?.deferredCount || 0) || 0) > 0);
+
+  return {
+    ...current,
+    repetitiveGroups,
+    entitlement: current?.entitlement
+      ? {
+        ...current.entitlement,
+        visiblePageCount: reconciledVisiblePageCount,
+      }
+      : current?.entitlement,
+    pageCountSummary: {
+      capturedPageCount: Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
+        + normalizedCapturedCount,
+      deferredPageCount: Math.max(
+        0,
+        Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0) - normalizedResolvedCount
+      ),
+      estimatedRemainingPageCount: Math.max(
+        0,
+        Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0) - normalizedResolvedCount
+      ),
+      totalDiscoveredPageCount: Math.max(
+        Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0),
+        Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
+          + Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
+      ),
+    },
+  };
+};
+
 export const __testing = {
   normalizeScanConfig,
   normalizeScanEntitlementPreview,
@@ -3080,6 +3402,8 @@ export const __testing = {
   getDisplayScanLayerAvailability,
   applyScanArtifacts,
   mergeRescanResults,
+  applyDeferredCaptureResult,
+  reconcileDeferredCaptureScanMeta,
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
   getPersistedScanMetaFromRoot,
@@ -3107,6 +3431,9 @@ export const __testing = {
   getCommentPopoverDrawerPosition,
   getCommentDrawerNodeFocusTarget,
   formatBillingUpgradeSuccessMessage,
+  canReuseRouteGatePreview,
+  isMapRouteOpeningPending,
+  canActivateCoeditingForMap,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -3131,6 +3458,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanMeta, setScanMeta] = useState({
     brokenLinks: [],
   });
+  const [capturingDeferredGroupIds, setCapturingDeferredGroupIds] = useState(() => new Set());
   const scanMetaRef = useRef(scanMeta);
   const [scanLayerAvailability, setScanLayerAvailability] = useState({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
   const [scanLayerVisibility, setScanLayerVisibility] = useState({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
@@ -3252,7 +3580,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [currentRoute]);
   const [scanMessage, setScanMessage] = useState('');
   const [scanElapsed, setScanElapsed] = useState(0);
-  const [scanProgress, setScanProgress] = useState({ scanned: 0, mapped: 0, queued: 0 });
+  const [scanProgress, setScanProgress] = useState(createEmptyScanProgress);
   const [scanLimitProgressNote, setScanLimitProgressNote] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
@@ -3278,6 +3606,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const loadSavedMapByIdRef = useRef(null);
   const routeGatePreviewMapLoadedRef = useRef(false);
   const routeGatePreviewMapIdRef = useRef('');
+  const routeMapOpenRequestRef = useRef(null);
   const versionInfoToastRef = useRef(false);
   const seenActivityIdsRef = useRef(new Set());
   const primedActivityMapIdRef = useRef(null);
@@ -3568,7 +3897,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handledScanIntentKeyRef = useRef('');
   const scanRef = useRef(null);
   const scanTimerRef = useRef(null);
-  const messageTimerRef = useRef(null);
   const contentRef = useRef(null);
   const contentShellRef = useRef(null);
   const layoutRef = useRef(null);
@@ -4289,25 +4617,25 @@ export default function App({ currentRoute, navigateToRoute }) {
       : accessLevel === ACCESS_LEVELS.EDIT
   );
 
+  const canActivateCoediting = canActivateCoeditingForMap({
+    coeditingUiEnabled: COEDITING_EXPERIMENT_UI_ENABLED,
+    isLoggedIn,
+    mapId: currentMap?.id,
+    hasRoot: !!root,
+    isImportedMap,
+    isViewingHistoricalVersion,
+    isLargeMapShell: !!currentMap?.largeMapShell,
+  });
+
   const isLiveEditingModeActive = !!(
-    COEDITING_EXPERIMENT_UI_ENABLED
-    && isLoggedIn
-    && currentMap?.id
-    && root
+    canActivateCoediting
     && liveModeCanEdit
     && resolvedCoeditingMode === 'enabled'
-    && !isImportedMap
-    && !isViewingHistoricalVersion
   );
 
   const isLiveRealtimeModeActive = !!(
-    COEDITING_EXPERIMENT_UI_ENABLED
-    && isLoggedIn
-    && currentMap?.id
-    && root
+    canActivateCoediting
     && resolvedCoeditingMode !== 'disabled'
-    && !isImportedMap
-    && !isViewingHistoricalVersion
   );
   const areMapPermissionsPending = !!(
     featureGatesEnabled
@@ -4465,7 +4793,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     return () => {
       if (scanTimerRef.current) clearInterval(scanTimerRef.current);
-      if (messageTimerRef.current) clearInterval(messageTimerRef.current);
       if (eventSourceRef.current) eventSourceRef.current.close();
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
       if (thumbnailAutosaveTimerRef.current) clearTimeout(thumbnailAutosaveTimerRef.current);
@@ -6440,6 +6767,17 @@ export default function App({ currentRoute, navigateToRoute }) {
         preserveExistingAssetsOnEmpty: true,
       }) || node
     ));
+    if (
+      routeMapGateState?.awaitingScene
+      && currentRoute?.surface === ROUTE_SURFACES.APP
+      && currentRoute?.section === 'map'
+      && sameId(routeMapGateState.mapId, currentRoute.mapId)
+      && sameId(currentMap?.id, currentRoute.mapId)
+    ) {
+      routeMapOpenRequestRef.current = null;
+      setRouteMapGateState(null);
+      setRouteAccessRequestMessage('');
+    }
     if (!scene?.homeNode || !canvasRef.current) return;
     largeMapHomeNodeRef.current = scene.homeNode;
     const initialHomeTransform = getInitialLargeMapHomeTransform({
@@ -6455,7 +6793,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     } else if (pendingInitialLargeMapCenterRef.current) {
       scheduleResetViewRef.current?.(20);
     }
-  }, [applyTransform, currentMap?.id, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
+  }, [
+    applyTransform,
+    currentMap?.id,
+    currentRoute?.mapId,
+    currentRoute?.section,
+    currentRoute?.surface,
+    mergeLargeMapNodeCache,
+    routeMapGateState?.awaitingScene,
+    routeMapGateState?.mapId,
+    showThumbnails,
+    showToast,
+    useLargeMapSurface,
+  ]);
 
   const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
     let homeNode = largeMapHomeNodeRef.current;
@@ -9156,6 +9506,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [isLoggedIn, openAuthModal]);
 
   const authValue = useMemo(() => ({
+    authLoading,
     isLoggedIn,
     currentUser,
     onLogin: handleLogin,
@@ -9166,6 +9517,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     onShowSettings: handleShowSettings,
     onShowSupport: handleShowSupport,
   }), [
+    authLoading,
     isLoggedIn,
     currentUser,
     handleLogin,
@@ -9949,7 +10301,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           ...(cachedNode || visibleNode || {}),
           url: cachedNode?.url || visibleNode?.url || '',
         };
-      }).filter(isPageNode);
+      }).filter(isImageCaptureEligibleNode);
       return {
         targetIds: new Set(candidates.map((node) => node.id)),
         candidates,
@@ -9964,7 +10316,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => baseIds.has(node.id))
       : allNodes;
-    const targetNodes = scopedNodes.filter(isPageNode);
+    const targetNodes = scopedNodes.filter(isImageCaptureEligibleNode);
     const orderedTargets = orderThumbnailNodes(targetNodes);
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
@@ -10137,6 +10489,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       captured: Number(payload.captured || savedCount),
       loadedIds: thumbnailLoadedRef.current,
       issueCount,
+      unavailable: Number(payload.unavailable || 0),
     });
     const completed = progress.completed;
     const elapsed = Number(payload.elapsedMs || (thumbnailElapsedStartRef.current ? Date.now() - thumbnailElapsedStartRef.current : 0));
@@ -10803,7 +11156,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => scopedIds.has(node.id))
       : allNodes;
-    const orderedTargets = orderThumbnailNodes(scopedNodes.filter(isPageNode));
+    const orderedTargets = orderThumbnailNodes(scopedNodes.filter(isImageCaptureEligibleNode));
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
     let candidates = [];
@@ -12318,6 +12671,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (routeGatePreviewMapLoadedRef.current) {
       clearLoadedMapView();
     }
+    routeMapOpenRequestRef.current = null;
     setRouteMapGateState(null);
     setRouteAccessRequestMessage('');
   }, [clearLoadedMapView, currentRoute?.section, currentRoute?.surface]);
@@ -12338,14 +12692,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     ) {
       clearLoadedMapView();
     }
-    if (
-      routeGatePreviewMapLoadedRef.current
-      && sameId(routeGatePreviewMapIdRef.current, currentRoute.mapId)
-    ) {
+    if (canReuseRouteGatePreview({
+      previewLoaded: routeGatePreviewMapLoadedRef.current,
+      previewMapId: routeGatePreviewMapIdRef.current,
+      routeMapId: currentRoute.mapId,
+      isLoggedIn,
+      errorStatus: routeMapGateState?.errorStatus || null,
+    })) {
       return undefined;
     }
 
     if (!isLoggedIn) {
+      routeMapOpenRequestRef.current = null;
       if (isUnsavedScannedMap) {
         const promptKey = `${currentRoute.mapId}:${root?.id || 'draft'}`;
         navigateToRoute(createAppHomeRoute(), { replace: true });
@@ -12414,7 +12772,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       };
     }
 
-    let cancelled = false;
+    const existingRequest = routeMapOpenRequestRef.current;
+    if (existingRequest && sameId(existingRequest.mapId, currentRoute.mapId)) {
+      return undefined;
+    }
+    const openRequest = { mapId: currentRoute.mapId };
+    routeMapOpenRequestRef.current = openRequest;
     setRouteMapGateState((previous) => ({
       mapId: currentRoute.mapId,
       mapName: previous?.mapId === currentRoute.mapId ? previous?.mapName || '' : '',
@@ -12426,18 +12789,38 @@ export default function App({ currentRoute, navigateToRoute }) {
     }));
 
     loadSavedMapById(currentRoute.mapId, { skipNavigation: true, silent: true })
-      .then(() => {
-        if (cancelled) return;
-        setRouteMapGateState(null);
-        setRouteAccessRequestMessage('');
+      .then((loadedMap) => {
+        if (routeMapOpenRequestRef.current !== openRequest) return;
+        const awaitingScene = shouldUseLargeMapSurface({
+          nodeCount: loadedMap?.nodeCount,
+          hasSavedMap: true,
+        });
+        setRouteMapGateState((previous) => ({
+          ...previous,
+          mapId: currentRoute.mapId,
+          mapName: loadedMap?.name || previous?.mapName || '',
+          loading: true,
+          backgroundReady: true,
+          awaitingScene,
+        }));
+        if (awaitingScene) return;
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            if (routeMapOpenRequestRef.current !== openRequest) return;
+            routeMapOpenRequestRef.current = null;
+            setRouteMapGateState(null);
+            setRouteAccessRequestMessage('');
+          });
+        });
       })
       .catch(async (error) => {
-        if (cancelled) return;
+        if (routeMapOpenRequestRef.current !== openRequest) return;
         clearLoadedMapView();
         const preview = (error?.status === 404 || error?.status === 403)
           ? await api.getMapAccessPreview(currentRoute.mapId).catch(() => null)
           : null;
-        if (cancelled) return;
+        if (routeMapOpenRequestRef.current !== openRequest) return;
+        routeMapOpenRequestRef.current = null;
         const previewLoaded = loadAccessPreviewMap(preview?.map);
         setRouteMapGateState({
           mapId: currentRoute.mapId,
@@ -12456,9 +12839,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast(error.message || 'Failed to load map', 'error');
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return undefined;
   }, [
     authLoading,
     clearLoadedMapView,
@@ -12473,6 +12854,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     loadPendingMapInvites,
     loadSavedMapById,
     root?.id,
+    routeMapGateState?.errorStatus,
     navigateToRoute,
     showConfirm,
     showToast,
@@ -12774,27 +13156,18 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const startScanTimers = () => {
+    stopScanTimers();
     setScanElapsed(0);
-    setScanMessage(SCAN_MESSAGES[0]);
-    let elapsed = 0;
-    let msgIndex = 0;
-
+    setScanMessage('Starting scan...');
+    const startedAt = Date.now();
     scanTimerRef.current = setInterval(() => {
-      elapsed += 1;
-      setScanElapsed(elapsed);
+      setScanElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
     }, 1000);
-
-    messageTimerRef.current = setInterval(() => {
-      msgIndex = (msgIndex + 1) % SCAN_MESSAGES.length;
-      setScanMessage(SCAN_MESSAGES[msgIndex]);
-    }, 3000);
   };
 
   const stopScanTimers = () => {
     if (scanTimerRef.current) clearInterval(scanTimerRef.current);
-    if (messageTimerRef.current) clearInterval(messageTimerRef.current);
     scanTimerRef.current = null;
-    messageTimerRef.current = null;
   };
 
   const closeScanStream = () => {
@@ -12814,7 +13187,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowStopConfirm(false);
     setIsStoppingScan(false);
     if (clearProgress) {
-      setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+      setScanProgress(createEmptyScanProgress());
     }
     setScanLimitProgressNote('');
     if (clearError) {
@@ -12831,14 +13204,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowCancelConfirm(false);
     setShowStopConfirm(false);
     setIsStoppingScan(false);
-    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+    setScanProgress(createEmptyScanProgress());
     setScanLimitProgressNote('');
     setScanErrorMessage(message || 'Scan failed');
   };
 
   const dismissScanError = () => {
     setScanErrorMessage('');
-    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
+    setScanProgress(createEmptyScanProgress());
   };
 
   const requestCancelScan = () => {
@@ -12989,20 +13362,50 @@ export default function App({ currentRoute, navigateToRoute }) {
       user: effectiveCurrentUser,
       isLoggedIn: effectiveIsLoggedIn,
     });
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
+    setIsStoppingScan(false);
+    setScanErrorMessage('');
+    setScanLimitProgressNote(getScanLimitProgressNote(fallbackScanEntitlementPreview));
+    setShowScanOptions(false);
+    setLastHistoryId(null);
+    setLastScanUrl('');
+    setLoading(true);
+    setScanProgress(createEmptyScanProgress());
+    startScanTimers();
+
+    const entitlementPreviewPromise = api.getScanEntitlementPreview({ maxPages: requestedPages });
+    const authPrecheckPromise = effectiveIsLoggedIn
+      && AUTHENTICATED_SCAN_ENABLED
+      && activeScanOptions.authenticatedPages
+      && !authFlow.skipAuthPrecheck
+      ? api.precheckScanAuth({
+        url,
+        options: activeScanOptions,
+      })
+      : Promise.resolve(null);
+    const [entitlementResult, authPrecheckResult] = await Promise.allSettled([
+      entitlementPreviewPromise,
+      authPrecheckPromise,
+    ]);
+
     let scanEntitlementPreview = fallbackScanEntitlementPreview;
-    try {
-      const previewResponse = await api.getScanEntitlementPreview({ maxPages: requestedPages });
+    if (entitlementResult.status === 'fulfilled') {
+      const previewResponse = entitlementResult.value;
       scanEntitlementPreview = normalizeScanEntitlementPreview(
         previewResponse?.entitlement,
         fallbackScanEntitlementPreview
       );
-    } catch (err) {
+    } else {
+      const err = entitlementResult.reason;
+      resetScanUi();
       if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) return;
       console.warn('Scan entitlement preview failed:', err);
       showToast('Could not verify your scan limit. Please try again.', 'error');
       return;
     }
     if (scanEntitlementPreview.blocked) {
+      resetScanUi();
       showEntitlementLock({
         title: scanEntitlementPreview.title || 'Scan locked',
         message: scanEntitlementPreview.message || 'Your current plan does not allow a new scan.',
@@ -13010,6 +13413,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
     if (effectiveIsLoggedIn && scanEntitlementPreview.capped && !authFlow.skipScanLimitPrompt) {
+      resetScanUi();
       setUrlInput(url);
       setScanLimitPrompt({
         url,
@@ -13024,40 +13428,26 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     const maxPagesForRequest = requestedPages;
 
-    if (effectiveIsLoggedIn && AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
-      try {
-        const precheck = await api.precheckScanAuth({
+    if (authPrecheckResult.status === 'fulfilled') {
+      const precheck = authPrecheckResult.value;
+      if (precheck?.authRequired) {
+        resetScanUi();
+        setScanAuthPrompt({
           url,
-          options: activeScanOptions,
+          preserveName,
+          authCount: precheck.authCount || 0,
+          sampleUrls: precheck.sampleUrls || [],
+          interactiveLoginSupported: precheck.interactiveLoginSupported === true,
+          loading: false,
+          error: '',
         });
-        if (precheck?.authRequired) {
-          setScanAuthPrompt({
-            url,
-            preserveName,
-            authCount: precheck.authCount || 0,
-            sampleUrls: precheck.sampleUrls || [],
-            interactiveLoginSupported: precheck.interactiveLoginSupported === true,
-            loading: false,
-            error: '',
-          });
-          return;
-        }
-      } catch (err) {
-        console.warn('Authenticated scan pre-check failed:', err);
+        return;
       }
+    } else {
+      console.warn('Authenticated scan pre-check failed:', authPrecheckResult.reason);
     }
 
-    setShowCancelConfirm(false);
-    setShowStopConfirm(false);
-    setIsStoppingScan(false);
-    setScanErrorMessage('');
     setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
-    setShowScanOptions(false);
-    setLastHistoryId(null);
-    setLastScanUrl('');
-    setLoading(true);
-    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
-    startScanTimers();
     trackEvent('scan_started', {
       authenticated_pages: AUTHENTICATED_SCAN_ENABLED && scanOptions.authenticatedPages ? 'true' : 'false',
     });
@@ -13136,11 +13526,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     eventSourceRef.current = eventSource;
     let streamHandled = false;
     let streamErrorCount = 0;
-    const maxStreamErrorCount = 8;
+    let streamRecoveryInFlight = false;
+    const maxStreamErrorCount = 20;
 
     const handleCompletedJob = (job) => {
       if (streamHandled) return;
       if (ignoredScanJobIdsRef.current.has(jobId)) return;
+      if (job?.progress) {
+        setScanProgress((current) => reconcileScanProgress(current, job.progress));
+      }
 
       if (job?.status === 'failed') {
         streamHandled = true;
@@ -13203,6 +13597,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           scanDiagnostics: data.scanDiagnostics || null,
           entitlement: data.entitlement || null,
           discoveryManifest: data.discoveryManifest || null,
+          scanScope: data.scanScope || null,
+          pageCountSummary: data.pageCountSummary || null,
+          repetitiveGroups: data.repetitiveGroups || [],
+          blockedSections: data.blockedSections || [],
         });
         trackEvent('scan_completed', {
           hostname,
@@ -13230,6 +13628,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           scanDiagnostics: data.scanDiagnostics || null,
           entitlement: data.entitlement || null,
           discoveryManifest: data.discoveryManifest || null,
+          scanScope: data.scanScope || null,
+          pageCountSummary: data.pageCountSummary || null,
+          repetitiveGroups: data.repetitiveGroups || [],
+          blockedSections: data.blockedSections || [],
         });
         trackEvent('scan_failed', {
           phase: 'quality_gate',
@@ -13288,6 +13690,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanDiagnostics: data.scanDiagnostics || null,
         entitlement: data.entitlement || null,
         discoveryManifest: data.discoveryManifest || null,
+        scanScope: data.scanScope || null,
+        pageCountSummary: data.pageCountSummary || null,
+        repetitiveGroups: data.repetitiveGroups || [],
+        blockedSections: data.blockedSections || [],
       });
       setScanLayerAvailability(displayScanLayerAvailability);
       setScanLayerVisibility(displayScanLayerAvailability);
@@ -13318,7 +13724,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           setMapName('Untitled Map');
         }
       }
-      const pageCount = realPageCount;
+      const pageCount = Math.max(
+        realPageCount,
+        Math.max(0, Number(data.pageCountSummary?.totalDiscoveredPageCount || 0) || 0)
+      );
       addToHistory(url, displayMerged.root, pageCount, scanConfig, {
         orphans: displayMerged.orphans,
         connections: nextConnections,
@@ -13335,6 +13744,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
       } else if (normalizedPartialReason === 'scan_collapsed') {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (data.blockedSections?.length) {
+        const blockedUrl = data.blockedSections[0]?.url || hostname;
+        showToast(`Scan complete. Crawling was restricted at ${blockedUrl}.`, 'warning');
       } else if (isPartialResult) {
         showToast(`Scan complete with partial data${hostname ? `: ${hostname}` : ''}`, 'warning');
       } else {
@@ -13357,11 +13769,23 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     const loadCompletedJobWithResult = async (job) => {
       if (job?.status !== 'complete' || job?.result) return job;
-      const response = await api.getScanJob(jobId, {
-        includeResult: true,
-        accessToken: jobAccessToken,
-      });
-      return response?.job || job;
+      const retryDelays = [0, 500, 1500, 3000];
+      let lastError = null;
+      for (const delay of retryDelays) {
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+        try {
+          const response = await api.getScanJob(jobId, {
+            includeResult: true,
+            accessToken: jobAccessToken,
+          });
+          if (response?.job?.result) return response.job;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error('Scan completed but results could not be loaded');
     };
 
     eventSource.addEventListener('update', (e) => {
@@ -13369,7 +13793,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         const job = JSON.parse(e.data);
         streamErrorCount = 0;
         if (job?.progress) {
-          setScanProgress(job.progress);
+          setScanProgress((current) => reconcileScanProgress(current, job.progress));
         }
         if (job?.status === 'stopping') {
           setIsStoppingScan(true);
@@ -13404,7 +13828,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           phase: 'complete',
           message: err?.message || 'Scan completed but results could not be loaded',
         });
-        showScanError(err?.message || 'Scan completed but results could not be loaded');
+        showScanError('Scan completed, but the results could not be loaded. Please try the scan again.');
       }
     });
 
@@ -13424,7 +13848,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
 
     eventSource.onerror = async () => {
-      if (streamHandled) return;
+      if (streamHandled || streamRecoveryInFlight) return;
+      streamRecoveryInFlight = true;
 
       try {
         const { job } = await api.getScanJob(jobId, {
@@ -13437,7 +13862,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         if (job) {
           streamErrorCount = 0;
-          if (job.progress) setScanProgress(job.progress);
+          if (job.progress) {
+            setScanProgress((current) => reconcileScanProgress(current, job.progress));
+          }
           if (job.status === 'stopping') {
             setIsStoppingScan(true);
           }
@@ -13446,14 +13873,16 @@ export default function App({ currentRoute, navigateToRoute }) {
       } catch (err) {
         streamErrorCount += 1;
         if (streamErrorCount < maxStreamErrorCount) return;
-        const message = err?.message || 'Connection error';
+        const message = 'Lost connection while checking scan progress';
         streamHandled = true;
         trackEvent('scan_failed', {
           phase: 'stream',
           message,
         });
-        showScanError(message);
+        showScanError('Lost connection while checking scan progress. The scan may still be running.');
         return;
+      } finally {
+        streamRecoveryInFlight = false;
       }
 
       streamHandled = true;
@@ -13465,6 +13894,202 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   };
   scanRef.current = scan;
+
+  const captureDeferredGroup = async (placeholderNode) => {
+    const groupId = String(placeholderNode?.deferredGroupId || '').trim();
+    const entries = Array.isArray(placeholderNode?.deferredEntries)
+      ? placeholderNode.deferredEntries.filter((entry) => entry?.url)
+      : [];
+    if (!groupId || entries.length === 0 || capturingDeferredGroupIds.has(groupId)) return;
+
+    const scanScope = scanMetaRef.current?.scanScope || {};
+    const seedUrl = scanScope.seed || rootRef.current?.url;
+    if (!seedUrl) {
+      showToast('This page group cannot be captured because its scan URL is missing.', 'error');
+      return;
+    }
+
+    setCapturingDeferredGroupIds((current) => new Set([...current, groupId]));
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
+    setIsStoppingScan(false);
+    setScanErrorMessage('');
+    setScanProgress(createEmptyScanProgress());
+    setScanLimitProgressNote('');
+    setUrlInput(seedUrl);
+    setLoading(true);
+    startScanTimers();
+    setScanMessage('Capturing remaining pages...');
+    try {
+      const jobResponse = await api.createScanJob(
+        {
+          url: seedUrl,
+          maxPages: entries.length,
+          options: {
+            ...scanOptions,
+            subdomains: Boolean(scanScope.allowSubdomains),
+            repetitiveCapture: {
+              groupId,
+              entries,
+            },
+          },
+        },
+        {
+          idempotencyKey: [
+            'repetitive-capture',
+            groupId,
+            Math.max(0, Number(placeholderNode.capturedCount || 0) || 0),
+            entries.length,
+          ].join(':'),
+        }
+      );
+      const jobId = jobResponse?.jobId;
+      const accessToken = jobResponse?.jobAccessToken || null;
+      if (!jobId) throw new Error('Failed to start page capture');
+      scanJobIdRef.current = jobId;
+      scanJobAccessTokenRef.current = accessToken;
+
+      const completedJob = await new Promise((resolve, reject) => {
+        const eventSource = new EventSource(
+          api.getScanJobStreamUrl(jobId, { accessToken }),
+          { withCredentials: true }
+        );
+        eventSourceRef.current = eventSource;
+        let settled = false;
+        const timeoutId = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          eventSource.close();
+          reject(new Error('Page capture timed out'));
+        }, 30 * 60 * 1000);
+        const finish = (callback, value) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeoutId);
+          eventSource.close();
+          if (eventSourceRef.current === eventSource) eventSourceRef.current = null;
+          callback(value);
+        };
+        const handleTerminalJob = async (job) => {
+          if (!job) return false;
+          if (job.progress) {
+            setScanProgress((current) => reconcileScanProgress(current, job.progress));
+          }
+          if (job.status === 'failed') {
+            finish(reject, new Error(job.error || 'Page capture failed'));
+            return true;
+          }
+          if (job.status === 'canceled') {
+            finish(reject, new Error('Page capture was cancelled'));
+            return true;
+          }
+          if (job.status !== 'complete') return false;
+          try {
+            let completeJob = job;
+            if (!completeJob.result) {
+              const response = await api.getScanJob(jobId, { includeResult: true, accessToken });
+              completeJob = response?.job || completeJob;
+            }
+            if (!completeJob.result) throw new Error('Page capture completed without results');
+            finish(resolve, completeJob);
+          } catch (error) {
+            finish(reject, error);
+          }
+          return true;
+        };
+
+        eventSource.addEventListener('update', (event) => {
+          try {
+            const job = JSON.parse(event.data);
+            if (job?.progress) {
+              setScanProgress((current) => reconcileScanProgress(current, job.progress));
+            }
+            if (job?.status === 'stopping') setIsStoppingScan(true);
+          } catch {}
+        });
+        eventSource.addEventListener('complete', (event) => {
+          try {
+            handleTerminalJob(JSON.parse(event.data));
+          } catch (error) {
+            finish(reject, error);
+          }
+        });
+        eventSource.addEventListener('job-error', (event) => {
+          let message = 'Page capture failed';
+          try {
+            message = JSON.parse(event.data)?.error || message;
+          } catch {}
+          finish(reject, new Error(message));
+        });
+        eventSource.onerror = async () => {
+          if (settled) return;
+          try {
+            const response = await api.getScanJob(jobId, { includeResult: true, accessToken });
+            await handleTerminalJob(response?.job);
+          } catch {
+            // EventSource reconnects automatically; keep the shared stream open.
+          }
+        };
+      });
+
+      const applied = applyDeferredCaptureResult({
+        existingRoot: rootRef.current,
+        existingOrphans: orphansRef.current,
+        captureResult: completedJob.result,
+        placeholderNode,
+      });
+      if (applied.capturedCount <= 0 && applied.terminalCount <= 0) {
+        showToast('No additional pages could be captured. You can retry this group.', 'warning');
+        return;
+      }
+
+      rootRef.current = applied.root;
+      orphansRef.current = applied.orphans;
+      setRoot(applied.root);
+      setOrphans(applied.orphans);
+      const visiblePageCount = countPageNodes(applied.root)
+        + applied.orphans.reduce((total, orphan) => total + countPageNodes(orphan), 0);
+      setScanMeta((current) => reconcileDeferredCaptureScanMeta({
+        current,
+        groupId,
+        capturedCount: applied.capturedCount,
+        removedCount: applied.terminalCount,
+        remainingCount: applied.remainingCount,
+        visiblePageCount,
+      }));
+      setDraftVersionFromSnapshot({
+        root: applied.root,
+        orphans: applied.orphans,
+        connections,
+        colors,
+        connectionColors,
+      }, 'Captured');
+      setLastScanAt(new Date().toISOString());
+      setLargeMapSceneRefreshKey((value) => value + 1);
+      showToast(
+        applied.capturedCount > 0
+          ? (
+            applied.remainingCount > 0
+              ? `Captured ${applied.capturedCount.toLocaleString()} pages. ${applied.remainingCount.toLocaleString()} can be retried.`
+              : `Captured ${applied.capturedCount.toLocaleString()} pages.`
+          )
+          : `${applied.terminalCount.toLocaleString()} unavailable pages were removed from this group.`,
+        applied.remainingCount > 0 || applied.capturedCount === 0 ? 'warning' : 'success'
+      );
+      refreshCurrentUser();
+    } catch (error) {
+      if (!handleEntitlementError(error, 'Your plan has no active pages remaining.')) {
+        showToast(error.message || 'Failed to capture this page group', 'error');
+      }
+    } finally {
+      resetScanUi();
+      setCapturingDeferredGroupIds((current) => {
+        const next = new Set(current);
+        next.delete(groupId);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     if (authLoading || loading) return;
@@ -14551,7 +15176,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const getUsagePageCount = useCallback(() => {
     if (!root) return 0;
     return collectAllNodesWithOrphans(root, orphans)
-      .filter((node) => !isEntitlementLockedNode(node) && isPageNode(node))
+      .filter(isCapturedPageNode)
       .length;
   }, [orphans, root]);
 
@@ -14620,7 +15245,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: 'json',
       });
       const content = JSON.stringify(buildSitemapJsonPayload({
@@ -14635,7 +15260,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!await reserveDownloadUsage('export_json', {
         format: 'json',
         bytes: new Blob([content]).size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.json`, content);
       showToast('Downloaded JSON', 'success');
@@ -14717,14 +15342,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: 'xml',
       });
       const content = buildSitemapXml(rows, metadata);
       if (!await reserveDownloadUsage('export_xml', {
         format: 'xml',
         bytes: new Blob([content]).size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.xml`, content);
       showToast('Downloaded XML', 'success');
@@ -14743,7 +15368,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: 'ai-site-brief',
       });
       const mode = root.url ? 'Improve Existing Site' : 'Build New Site';
@@ -14809,7 +15434,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!await reserveDownloadUsage('export_ai_site_brief', {
         format: 'zip',
         bytes: zipBlob.size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
         packageFiles: 8,
       })) return;
       downloadBlob(`${baseFilename}.zip`, zipBlob);
@@ -14828,14 +15453,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: 'csv',
       });
       const content = buildSitemapCsv(rows, metadata);
       if (!await reserveDownloadUsage('export_csv', {
         format: 'csv',
         bytes: new Blob([content]).size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.csv`, content);
       showToast('Downloaded CSV', 'success');
@@ -15380,7 +16005,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
-        pageCount: rows.length,
+        pageCount: countCapturedExportRows(rows),
         format: `site-index-${normalizedFormat}`,
       });
       const content = formatConfig.build({
@@ -15393,7 +16018,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!await reserveDownloadUsage('export_site_index', {
         format: normalizedFormat,
         bytes: blob.size,
-        rows: rows.length,
+        rows: countCapturedExportRows(rows),
       })) return;
       downloadBlob(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.${formatConfig.extension}`, blob);
       showToast(`Site Index ${formatConfig.label} downloaded`, 'success');
@@ -16083,7 +16708,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const openNodeMenu = (nodeId, event) => {
     if (!nodeId || !event) return;
     const menuNode = findNodeInCurrentMap(nodeId);
-    if (menuNode?.nodeKind === 'import-ghost' || menuNode?.nodeKind === 'source-group') return;
+    if (isNonInteractiveScanNode(menuNode)) return;
     if (!canEdit()) return;
     if (!contentRef.current) return;
     event.preventDefault();
@@ -16122,7 +16747,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleNodeClick = (node, event) => {
     if (!node) return;
-    if (node.nodeKind === 'import-ghost' || node.nodeKind === 'source-group') return;
+    if (isNonInteractiveScanNode(node)) return;
     if (suppressNodeClickRef.current) {
       suppressNodeClickRef.current = false;
       return;
@@ -16168,7 +16793,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!nodeId || !event) return;
     const menuNode = largeMapNodeCacheRef.current.get(String(nodeId))
       || largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, nodeId));
-    if (menuNode?.nodeKind === 'import-ghost' || menuNode?.nodeKind === 'source-group') return;
+    if (isNonInteractiveScanNode(menuNode)) return;
     if (!canEdit()) return;
     if (!contentRef.current) return;
     event.preventDefault();
@@ -16199,7 +16824,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleLargeMapNodeDoubleClick = (nodeData) => {
     if (!nodeData || !canvasRef.current) return;
     const node = nodeData.node || nodeData;
-    if (node.nodeKind === 'import-ghost' || node.nodeKind === 'source-group') return;
+    if (isNonInteractiveScanNode(node)) return;
     if (isEntitlementLockedNode(nodeData.node || nodeData)) {
       openPlansModal('locked-node');
       return;
@@ -16215,6 +16840,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleLargeMapNodeExpand = async (sceneNode) => {
     if (!sceneNode?.id || !currentMap?.id) return;
+    if (isNonInteractiveScanNode(sceneNode.node || sceneNode)) return;
     if (isEntitlementLockedNode(sceneNode.node || sceneNode)) {
       openPlansModal('locked-node');
       return;
@@ -18944,16 +19570,36 @@ export default function App({ currentRoute, navigateToRoute }) {
   const zoomBounds = getZoomBounds();
   const showInviteAcceptGate = currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'invite_accept';
+  const isMapRoute = currentRoute?.surface === ROUTE_SURFACES.APP
+    && currentRoute?.section === 'map';
+  const routeMapMatchesCurrent = !!currentMap?.id && sameId(currentMap.id, currentRoute?.mapId);
+  const showInitialMapRouteOpeningGate = isMapRouteOpeningPending({
+    isMapRoute,
+    routeMapMatchesCurrent,
+    authLoading,
+    routeMapGateState,
+  });
+  const showAuthorizedMapOpeningGate = !!(
+    isLoggedIn
+    && routeMapMatchesCurrent
+    && routeMapGateState?.loading
+    && routeMapGateState?.backgroundReady
+  );
   const showMapAccessGate = (
-    currentRoute?.surface === ROUTE_SURFACES.APP
-      && currentRoute?.section === 'map'
+    isMapRoute
       && !isBillingReturnRoute
-      && (!currentMap?.id || !sameId(currentMap.id, currentRoute?.mapId))
       && (
-        !!routeMapGateState
-        || !isLoggedIn
-        || authLoading
-        || !!pendingInviteForCurrentRoute
+        showAuthorizedMapOpeningGate
+        || showInitialMapRouteOpeningGate
+        || (
+          !routeMapMatchesCurrent
+          && (
+            !isLoggedIn
+            || authLoading
+            || !!pendingInviteForCurrentRoute
+            || (!!routeMapGateState && !routeMapGateState.loading)
+          )
+        )
       )
   ) || (
     currentRoute?.surface === ROUTE_SURFACES.SHARE
@@ -19075,8 +19721,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       ? inviteAcceptState?.invite?.mapName
       : pendingInviteForCurrentRoute?.mapName || routeMapGateState?.mapName
   ) || currentMap?.name || mapName || 'Shared sitemap';
-  const showRouteGatePreviewCanvas = routeGateActive && !hasMap;
-
   const renderCompletedConnection = (conn) => {
     const path = generateConnectionPath(conn);
     if (!path) return null;
@@ -19313,29 +19957,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         onScroll={resetCanvasNativeScroll}
        
       >
-        {showRouteGatePreviewCanvas && (
-          <div className="route-gate-preview-map" aria-hidden="true">
-            <div className="route-gate-preview-content">
-              <div className="route-gate-preview-node route-gate-preview-node-root" />
-              <div className="route-gate-preview-branch route-gate-preview-branch-left">
-                {[0, 1, 2, 3].map((index) => (
-                  <div className="route-gate-preview-node" key={`left-${index}`} />
-                ))}
-              </div>
-              <div className="route-gate-preview-branch route-gate-preview-branch-right">
-                {[0, 1, 2, 3, 4].map((index) => (
-                  <div className="route-gate-preview-node" key={`right-${index}`} />
-                ))}
-              </div>
-              <div className="route-gate-preview-branch route-gate-preview-branch-bottom">
-                {[0, 1, 2].map((index) => (
-                  <div className="route-gate-preview-node" key={`bottom-${index}`} />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {showInviteAcceptGate && (
           <InviteAcceptGate
             status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
@@ -19351,7 +19972,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             isLoggedIn={isLoggedIn}
             authLoading={authLoading}
             invite={pendingInviteForCurrentRoute}
-            loading={!!routeMapGateState?.loading || (!!pendingInviteForCurrentRoute && pendingMapInvitesLoading)}
+            loading={showInitialMapRouteOpeningGate || !!routeMapGateState?.loading || (!!pendingInviteForCurrentRoute && pendingMapInvitesLoading)}
             requestStatus={routeMapGateState?.requestStatus || 'idle'}
             requestError={routeMapGateState?.requestError || ''}
             requestMessage={routeAccessRequestMessage}
@@ -19692,6 +20313,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                     activeBranchNodeIds={activeBranchNodeIds}
                     expandedStacks={expandedStacks}
                     onToggleStack={toggleExpandedStack}
+                    onCaptureDeferredGroup={captureDeferredGroup}
+                    capturingDeferredGroupIds={capturingDeferredGroupIds}
                   />
                 ) : (
                 <SitemapTree
@@ -19754,6 +20377,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                   viewportBounds={canvasViewportBounds}
                   activeBranchNodeIds={activeBranchNodeIds}
                   onToggleStack={toggleExpandedStack}
+                  onCaptureDeferredGroup={captureDeferredGroup}
+                  capturingDeferredGroupIds={capturingDeferredGroupIds}
                   selectedNodeIds={selectedNodeIds}
                 >
                   {/* SVG Connections Layer */}

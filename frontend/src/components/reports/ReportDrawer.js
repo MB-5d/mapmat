@@ -38,7 +38,7 @@ const REPORT_FILTER_META = {
   inactivePages: { label: 'Inactive', tone: getFindingTone('inactivePages') },
   subdomains: { label: 'Subdomain', tone: getFindingTone('subdomains') },
   files: { label: 'Files', tone: getFindingTone('files') },
-  authenticatedPages: { label: 'Authenticated', tone: getFindingTone('authenticatedPages') },
+  authenticatedPages: { label: 'Login required', tone: getFindingTone('authenticatedPages') },
   missingTitle: { label: 'No title', tone: getFindingTone('missingTitle') },
   shortTitle: { label: 'Short title', tone: getFindingTone('shortTitle') },
   longTitle: { label: 'Very long title', tone: getFindingTone('longTitle') },
@@ -251,6 +251,9 @@ const ReportDrawer = ({
   const scanCollapseReason = scanMeta?.partialReason === 'scan_collapsed'
     ? (scanMeta?.scanDiagnostics?.collapseReason || 'Root-only scan returned after discovery signals were found')
     : '';
+  const blockedSections = Array.isArray(scanMeta?.blockedSections)
+    ? scanMeta.blockedSections.filter((section) => section?.url)
+    : [];
   const isPartialImport = scanMeta?.partialReason === 'import_page_limit';
   const entitlementVisibleLimit = Number(
     scanMeta?.entitlement?.visiblePageLimit
@@ -513,6 +516,18 @@ const ReportDrawer = ({
             <div className="ui-status-alert__content">
               <strong>Scan only confirmed the homepage.</strong>
               <span>Reason: {scanCollapseReason}</span>
+            </div>
+          </div>
+        )}
+        {blockedSections.length > 0 && (
+          <div className="ui-status-alert ui-status-alert--warning report-scan-alert">
+            <AlertTriangle size={16} className="ui-status-alert__icon" />
+            <div className="ui-status-alert__content">
+              <strong>Some sections could not be scanned.</strong>
+              <span>
+                Blocked at {blockedSections[0].url}
+                {blockedSections.length > 1 ? ` and ${blockedSections.length - 1} more.` : '.'}
+              </span>
             </div>
           </div>
         )}

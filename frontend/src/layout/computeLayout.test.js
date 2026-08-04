@@ -82,4 +82,76 @@ describe('computeLayout orientation', () => {
     expect(layout.nodes.has('page')).toBe(true);
     expect(layout.connectors.length).toBeGreaterThan(0);
   });
+
+  test('uses preserved full-map numbers for focused scans', () => {
+    const focused = {
+      id: 'home-context',
+      title: 'example.com',
+      url: 'https://example.com/',
+      nodeKind: 'focus-ghost',
+      scanNumber: '0',
+      children: [{
+        id: 'blog-context',
+        title: 'Blog',
+        url: 'https://example.com/blog',
+        nodeKind: 'focus-ghost',
+        scanNumber: '3',
+        children: [{
+          id: 'target',
+          title: 'Post',
+          url: 'https://example.com/blog/post',
+          scanNumber: '3.2',
+          children: [],
+        }],
+      }],
+    };
+
+    const layout = computeLayout(focused, [], false);
+    expect(layout.nodes.get('home-context').number).toBe('0');
+    expect(layout.nodes.get('blog-context').number).toBe('3');
+    expect(layout.nodes.get('target').number).toBe('3.2');
+    expect(layout.nodes.get('target').number).not.toBe('0');
+  });
+
+  test('lays out unknown-prefix siblings in their numeric suffix order', () => {
+    const focused = {
+      id: 'root',
+      scanNumber: '0',
+      children: [
+        { id: 'ten', scanNumber: 'XX.10', children: [] },
+        { id: 'two', scanNumber: 'XX.2', children: [] },
+        { id: 'one', scanNumber: 'XX.1', children: [] },
+      ],
+    };
+
+    const layout = computeLayout(focused, [], false);
+    expect(layout.nodes.get('one').x).toBeLessThan(layout.nodes.get('two').x);
+    expect(layout.nodes.get('two').x).toBeLessThan(layout.nodes.get('ten').x);
+  });
+
+  test('keeps deferred pages inside the existing stack count', () => {
+    const posts = Array.from({ length: 10 }, (_, index) => ({
+      id: `post-${index + 1}`,
+      title: `Post ${index + 1}`,
+      children: [],
+    }));
+    const placeholder = {
+      id: 'more-posts',
+      nodeKind: 'deferred-group',
+      remainingCount: 358,
+      children: [],
+    };
+    const tree = {
+      id: 'root',
+      children: [{ id: 'blog', children: [...posts, placeholder] }],
+    };
+
+    const collapsed = computeLayout(tree, [], false, {});
+    expect(collapsed.nodes.get('post-1').stackInfo.totalCount).toBe(368);
+
+    const expanded = computeLayout(tree, [], false, { blog: true });
+    expect(expanded.nodes.get('more-posts').number).toBe('');
+    expect(expanded.nodes.get('more-posts').stackInfo.showCollapse).toBe(true);
+    expect(expanded.nodes.get('post-10').stackInfo.showCollapse).toBe(false);
+  });
 });

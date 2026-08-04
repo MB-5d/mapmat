@@ -343,6 +343,7 @@ async function main() {
         RUN_MODE: 'web',
         ALLOW_PRIVATE_NETWORKS: 'true',
         SCREENSHOT_STORAGE_PROVIDER: 'local',
+        SCAN_REQUEST_USER_AGENT: 'Mozilla/5.0 (compatible; VellicBot/1.0)',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

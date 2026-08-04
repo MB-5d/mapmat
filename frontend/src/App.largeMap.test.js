@@ -1,6 +1,29 @@
 import { __testing } from './App';
 
 describe('large map viewport behavior', () => {
+  test('shows the opening gate before a map-route load request initializes', () => {
+    expect(__testing.isMapRouteOpeningPending({
+      isMapRoute: true,
+      routeMapMatchesCurrent: false,
+      authLoading: false,
+      routeMapGateState: null,
+    })).toBe(true);
+
+    expect(__testing.isMapRouteOpeningPending({
+      isMapRoute: true,
+      routeMapMatchesCurrent: false,
+      authLoading: false,
+      routeMapGateState: { loading: true },
+    })).toBe(true);
+
+    expect(__testing.isMapRouteOpeningPending({
+      isMapRoute: true,
+      routeMapMatchesCurrent: false,
+      authLoading: false,
+      routeMapGateState: { loading: false, errorStatus: 403 },
+    })).toBe(false);
+  });
+
   test('stack toggles preserve the current viewport during normal map layout refresh', () => {
     expect(__testing.getNextExpandedStackState({ parentA: true }, 'parentB')).toEqual({
       parentA: true,
@@ -33,7 +56,7 @@ describe('large map viewport behavior', () => {
   test('imported normal maps queue home centering after layout is available', () => {
     const pendingInitialCenterRef = { current: false };
     const pendingInitialLargeMapCenterRef = { current: true };
-    const scheduleResetView = jest.fn();
+    const scheduleResetView = vi.fn();
 
     expect(__testing.queueNormalMapInitialCenter({
       pendingInitialCenterRef,
@@ -615,5 +638,268 @@ describe('large map viewport behavior', () => {
       scale: 1,
       pan: { x: 0, y: 0 },
     })).toEqual({ x: -132, y: -84 });
+  });
+});
+
+describe('deferred page capture', () => {
+  test('reconciles report entitlement counts after a partial group capture', () => {
+    const reconciled = __testing.reconcileDeferredCaptureScanMeta({
+      current: {
+        entitlement: {
+          capped: true,
+          allowedPages: 25,
+          visiblePageCount: 1,
+          lockedPageEstimate: 10,
+        },
+        repetitiveGroups: [{
+          id: 'blog-group',
+          capturedCount: 10,
+          deferredCount: 409,
+          totalCount: 419,
+        }],
+        pageCountSummary: {
+          capturedPageCount: 13,
+          deferredPageCount: 409,
+          estimatedRemainingPageCount: 409,
+          totalDiscoveredPageCount: 422,
+        },
+      },
+      groupId: 'blog-group',
+      capturedCount: 23,
+      remainingCount: 386,
+      visiblePageCount: 26,
+    });
+
+    expect(reconciled.entitlement).toMatchObject({
+      allowedPages: 25,
+      visiblePageCount: 25,
+      lockedPageEstimate: 10,
+    });
+    expect(reconciled.repetitiveGroups[0]).toMatchObject({
+      capturedCount: 33,
+      deferredCount: 386,
+      totalCount: 419,
+    });
+    expect(reconciled.pageCountSummary).toEqual({
+      capturedPageCount: 36,
+      deferredPageCount: 386,
+      estimatedRemainingPageCount: 386,
+      totalDiscoveredPageCount: 422,
+    });
+  });
+
+  test('replaces only the selected group placeholder with captured pages', () => {
+    const placeholder = {
+      id: 'placeholder-blog',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'blog-group',
+      capturedCount: 10,
+      remainingCount: 2,
+      deferredEntries: [
+        { url: 'https://example.com/blog/post-11', scanNumber: '2.11', order: 10 },
+        { url: 'https://example.com/blog/post-12', scanNumber: '2.12', order: 11 },
+      ],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [{
+        id: 'blog',
+        url: 'https://example.com/blog',
+        children: [placeholder],
+      }],
+    };
+    const captureResult = {
+      root: {
+        id: 'capture-root',
+        url: 'https://example.com/',
+        children: [{
+          id: 'post-11',
+          url: 'https://example.com/blog/post-11',
+          title: 'Post 11',
+          children: [],
+        }],
+      },
+      captureSummary: {
+        successfulEntries: [{ url: 'https://example.com/blog/post-11' }],
+      },
+    };
+
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      captureResult,
+      placeholderNode: placeholder,
+    });
+    const blogChildren = applied.root.children[0].children;
+    expect(applied.capturedCount).toBe(1);
+    expect(applied.remainingCount).toBe(1);
+    expect(blogChildren[0].url).toBe('https://example.com/blog/post-11');
+    expect(blogChildren[0].scanNumber).toBe('2.11');
+    expect(blogChildren[1].remainingCount).toBe(1);
+    expect(blogChildren[1].deferredEntries[0].url).toBe('https://example.com/blog/post-12');
+  });
+
+  test('applies deferred captures inside an orphan tree without changing the root', () => {
+    const placeholder = {
+      id: 'placeholder-subdomain',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'subdomain-group',
+      capturedCount: 10,
+      remainingCount: 1,
+      deferredEntries: [
+        { url: 'https://docs.example.com/guide', scanNumber: '0.1.11', order: 10 },
+      ],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [],
+    };
+    const existingOrphans = [{
+      id: 'docs',
+      url: 'https://docs.example.com/',
+      children: [placeholder],
+    }];
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      existingOrphans,
+      placeholderNode: placeholder,
+      captureResult: {
+        root: {
+          id: 'capture-root',
+          url: 'https://docs.example.com/',
+          children: [{
+            id: 'guide',
+            url: 'https://docs.example.com/guide',
+            title: 'Guide',
+            children: [],
+          }],
+        },
+        captureSummary: {
+          successfulEntries: [{ url: 'https://docs.example.com/guide' }],
+        },
+      },
+    });
+
+    expect(applied.root).toEqual(existingRoot);
+    expect(applied.orphans[0].children).toHaveLength(1);
+    expect(applied.orphans[0].children[0].url).toBe('https://docs.example.com/guide');
+    expect(applied.orphans[0].children[0].scanNumber).toBe('0.1.11');
+    expect(applied.capturedCount).toBe(1);
+    expect(applied.remainingCount).toBe(0);
+  });
+
+  test('replaces a matching virtual Missing ancestor and stays idempotent on retry', () => {
+    const placeholder = {
+      id: 'placeholder-blog',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'blog-group',
+      capturedCount: 10,
+      remainingCount: 1,
+      deferredEntries: [
+        { url: 'https://example.com/blog/2026', scanNumber: '2.X', order: 10 },
+      ],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [{
+        id: 'blog',
+        url: 'https://example.com/blog',
+        children: [{
+          id: 'virtual-year',
+          url: 'https://example.com/blog/2026',
+          isMissing: true,
+          isVirtualMissing: true,
+          scanStatus: 'missing',
+          children: [{
+            id: 'story',
+            url: 'https://example.com/blog/2026/story',
+            children: [],
+          }],
+        }, placeholder],
+      }],
+    };
+    const captureResult = {
+      root: {
+        id: 'capture-root',
+        url: 'https://example.com/',
+        children: [{
+          id: 'captured-year',
+          url: 'https://example.com/blog/2026',
+          title: '2026 archive',
+          httpStatus: 200,
+          children: [],
+        }],
+      },
+      captureSummary: {
+        successfulEntries: [{ url: 'https://example.com/blog/2026', scanNumber: '2.X' }],
+      },
+    };
+
+    const first = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      captureResult,
+      placeholderNode: placeholder,
+    });
+    const replaced = first.root.children[0].children[0];
+    expect(first.capturedCount).toBe(1);
+    expect(replaced.title).toBe('2026 archive');
+    expect(replaced.isVirtualMissing).toBe(false);
+    expect(replaced.children[0].id).toBe('story');
+
+    const retry = __testing.applyDeferredCaptureResult({
+      existingRoot: first.root,
+      captureResult,
+      placeholderNode: placeholder,
+    });
+    expect(retry.capturedCount).toBe(0);
+    expect(retry.root.children[0].children.filter((node) => node.url === replaced.url)).toHaveLength(1);
+  });
+
+  test('removes terminal deferred pages instead of offering an endless retry', () => {
+    const placeholder = {
+      id: 'placeholder-blog',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'blog-group',
+      capturedCount: 10,
+      remainingCount: 2,
+      deferredEntries: [
+        { url: 'https://example.com/blog/post-11', scanNumber: '2.11', order: 10 },
+        { url: 'https://example.com/blog/post-12', scanNumber: '2.12', order: 11 },
+      ],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [{
+        id: 'blog',
+        url: 'https://example.com/blog',
+        children: [placeholder],
+      }],
+    };
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      placeholderNode: placeholder,
+      captureResult: {
+        root: { id: 'capture-root', url: 'https://example.com/', children: [] },
+        captureSummary: {
+          successfulEntries: [],
+          terminalEntries: [
+            { url: 'https://example.com/blog/post-11', status: 404, reason: 'http_error' },
+            { url: 'https://example.com/blog/post-12', status: 403, reason: 'blocked' },
+          ],
+        },
+      },
+    });
+
+    expect(applied.capturedCount).toBe(0);
+    expect(applied.terminalCount).toBe(2);
+    expect(applied.remainingCount).toBe(0);
+    expect(applied.root.children[0].children).toHaveLength(0);
   });
 });

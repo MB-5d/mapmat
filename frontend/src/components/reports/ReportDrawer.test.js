@@ -84,7 +84,7 @@ describe('ReportDrawer', () => {
   const renderDrawer = (nextProps = {}) => {
     props = {
       isOpen: true,
-      onClose: jest.fn(),
+      onClose: vi.fn(),
       entries,
       stats: {
         total: 3,
@@ -105,9 +105,9 @@ describe('ReportDrawer', () => {
         { key: 'errorPages', label: 'Error pages' },
         { key: 'missing', label: 'Missing' },
       ],
-      onDownload: jest.fn(),
-      onLocateNode: jest.fn(),
-      onLocateUrl: jest.fn(),
+      onDownload: vi.fn(),
+      onLocateNode: vi.fn(),
+      onLocateUrl: vi.fn(),
       reportTitle: 'QA Report',
       reportTimestamp: 'Today',
       ...nextProps,
@@ -380,7 +380,7 @@ describe('ReportDrawer', () => {
   });
 
   test('passes visible report details to the download action', () => {
-    const onDownload = jest.fn();
+    const onDownload = vi.fn();
     renderDrawer({ onDownload });
 
     const downloadButton = container.querySelector('.report-download-button');
@@ -397,7 +397,7 @@ describe('ReportDrawer', () => {
   });
 
   test('uses page titles for duplicate and parent locate links', () => {
-    const onLocateNode = jest.fn();
+    const onLocateNode = vi.fn();
     renderDrawer({ onLocateNode });
 
     const pricingRow = Array.from(container.querySelectorAll('.report-row-main')).find((row) =>
@@ -558,7 +558,7 @@ describe('ReportDrawer', () => {
       'No H1',
       'Broken links',
       'Files',
-      'Authenticated',
+      'Login required',
     ]);
   });
 
@@ -588,7 +588,7 @@ describe('ReportDrawer', () => {
   });
 
   test('locates a report row on the map from the row action', () => {
-    const onLocateNode = jest.fn();
+    const onLocateNode = vi.fn();
     renderDrawer({ onLocateNode });
 
     const seeOnMapButton = container.querySelector('.report-map-link[aria-label="See on map"]');
@@ -619,6 +619,22 @@ describe('ReportDrawer', () => {
 
     expect(container.textContent).toContain('Scan only confirmed the homepage.');
     expect(container.textContent).toContain('root_links_found');
+  });
+
+  test('shows the blocked section boundary in the report', () => {
+    renderDrawer({
+      scanMeta: {
+        partialReason: 'blocked_sections',
+        blockedSections: [{
+          url: 'https://example.com/private',
+          status: 403,
+          reason: 'crawler_limited',
+        }],
+      },
+    });
+
+    expect(container.textContent).toContain('Some sections could not be scanned.');
+    expect(container.textContent).toContain('https://example.com/private');
   });
 
   test('hides stale scan-limit warning when a saved map only has one real page', () => {

@@ -88,6 +88,8 @@ const MapSurfaceV2 = ({
   activeBranchNodeIds,
   expandedStacks,
   onToggleStack,
+  onCaptureDeferredGroup,
+  capturingDeferredGroupIds,
 }) => {
   const surfaceRef = useRef(null);
   const worldRef = useRef(null);
@@ -351,6 +353,8 @@ const MapSurfaceV2 = ({
                   onToggleStack?.(stackToggleParentId);
                 }
               }}
+              onCaptureDeferredGroup={onCaptureDeferredGroup}
+              deferredCaptureLoading={capturingDeferredGroupIds?.has(node.deferredGroupId)}
               isSelected={isSelected}
             />
           );

@@ -14,6 +14,8 @@ A visual sitemap generator that crawls websites and creates interactive tree dia
 
 ## Local Development
 
+Use Node.js `24.18.0` (see `.nvmrc`) and npm `11.16.0`.
+
 ### Backend (Port 4002)
 ```bash
 cd vellic
@@ -146,6 +148,7 @@ railway up
 Railway runtime config in `railway.json` uses:
 - `startCommand`: `node server.js`
 - health check endpoint: `GET /health` (returns `200` with JSON `{ "ok": true }`)
+- health check timeout: 300 seconds; failed deployments retain the prior healthy version
 
 **Frontend → Vercel:**
 ```bash

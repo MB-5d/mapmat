@@ -35,12 +35,22 @@ describe('node finding badges', () => {
       authRequired: true,
       isInactive: true,
       statusCode: 401,
-    })).toEqual(['Auth']);
+    })).toEqual(['Login required']);
 
     expect(getFindingBadgesForNode({
       id: 'inactive',
       url: 'https://example.com/old',
       isInactive: true,
     })).toEqual(['Inactive']);
+  });
+
+  test('keeps scan-limited pages distinct from authenticated pages', () => {
+    expect(getFindingBadgesForNode({
+      id: 'blocked',
+      url: 'https://example.com/private',
+      scanStatus: 'scan_limited',
+      isBlocked: true,
+      statusCode: 403,
+    })).toEqual(['Crawl restricted']);
   });
 });

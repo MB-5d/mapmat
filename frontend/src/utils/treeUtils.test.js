@@ -1,5 +1,11 @@
 import { computeLayout } from '../layout/computeLayout';
-import { countPageNodes, isPageNode, shouldStackChildren } from './treeUtils';
+import {
+  compareScanNumberStrings,
+  countPageNodes,
+  isImageCaptureEligibleNode,
+  isPageNode,
+  shouldStackChildren,
+} from './treeUtils';
 import { STACK_THRESHOLD } from './constants';
 
 const makeNode = (id, overrides = {}) => ({
@@ -71,5 +77,68 @@ describe('page node contract', () => {
     expect(isPageNode(root.children[0])).toBe(false);
     expect(isPageNode(root.children[0].children[0])).toBe(true);
     expect(countPageNodes(root)).toBe(1);
+  });
+
+  test('excludes focused context and deferred placeholders from captured page counts', () => {
+    const root = makeNode('home', {
+      nodeKind: 'focus-ghost',
+      isStructuralContext: true,
+      children: [
+        makeNode('target'),
+        makeNode('deferred', {
+          nodeKind: 'deferred-group',
+          url: '',
+          remainingCount: 50,
+        }),
+      ],
+    });
+
+    expect(isPageNode(root)).toBe(true);
+    expect(isPageNode(root.children[1])).toBe(false);
+    expect(countPageNodes(root)).toBe(1);
+  });
+
+  test('keeps inspected focused ancestors out of captured page counts', () => {
+    const root = makeNode('home', {
+      isStructuralContext: true,
+      children: [makeNode('target')],
+    });
+
+    expect(isPageNode(root)).toBe(true);
+    expect(countPageNodes(root)).toBe(1);
+  });
+
+  test('excludes virtual Missing nodes from captured page counts', () => {
+    const root = makeNode('home', {
+      children: [
+        makeNode('captured'),
+        makeNode('virtual', {
+          isMissing: true,
+          isVirtualMissing: true,
+          scanStatus: 'missing',
+        }),
+      ],
+    });
+
+    expect(isPageNode(root.children[1])).toBe(true);
+    expect(countPageNodes(root)).toBe(2);
+  });
+
+  test('allows every real page to be selected for image capture', () => {
+    expect(isImageCaptureEligibleNode(makeNode('ok', { httpStatus: 200 }))).toBe(true);
+    expect(isImageCaptureEligibleNode(makeNode('virtual', { isVirtualMissing: true }))).toBe(true);
+    expect(isImageCaptureEligibleNode(makeNode('ghost', { nodeKind: 'focus-ghost' }))).toBe(true);
+    expect(isImageCaptureEligibleNode(makeNode('blocked', { isBlocked: true }))).toBe(true);
+    expect(isImageCaptureEligibleNode(makeNode('error', { httpStatus: 404 }))).toBe(true);
+    expect(isImageCaptureEligibleNode(makeNode('untyped-error', { isError: true }))).toBe(true);
+    expect(isImageCaptureEligibleNode(makeNode('server-coded', {
+      captureEligible: false,
+      captureReasonCode: 'authentication',
+    }))).toBe(true);
+  });
+
+  test('compares numeric suffixes after unknown focused prefixes', () => {
+    expect(compareScanNumberStrings('XX.4.3.5', 'XX.4.3.10')).toBeLessThan(0);
+    expect(compareScanNumberStrings('X.1.2', 'XX.1.10')).toBeLessThan(0);
   });
 });

@@ -158,7 +158,7 @@ assert.ok(insights.findings.some((finding) => (
     && finding.evidence?.statusLabel === 'HTTP 404 / Not Found'
 )));
 assert.ok(insights.findings.some((finding) => (
-  finding.title === 'Scan limited by site protection'
+  finding.title === 'Crawl restricted by site protection'
     && finding.url === 'https://example.com/b'
     && finding.evidence?.statusCode === 403
 )));

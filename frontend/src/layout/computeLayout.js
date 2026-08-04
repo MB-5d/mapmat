@@ -1,5 +1,15 @@
 import { LAYOUT } from '../utils/constants';
-import { shouldStackChildren } from '../utils/treeUtils';
+import { getOrderedChildren, shouldStackChildren } from '../utils/treeUtils';
+
+const getStackTotalCount = (children = []) => children.reduce((total, child) => (
+  total + (child?.nodeKind === 'deferred-group'
+    ? Math.max(0, Number(child.remainingCount || 0) || 0)
+    : 1)
+), 0);
+
+const getLastPageChildIndex = (children = []) => {
+  return children.length - 1;
+};
 
 // Get node height based on display mode
 export const getNodeH = (showThumbnails) => showThumbnails ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED;
@@ -58,7 +68,7 @@ export const computeLayout = (
       w: NODE_W,
       h: NODE_H,
       depth,
-      number,
+      number: node?.nodeKind === 'deferred-group' ? '' : (node?.scanNumber || number),
       node,
       ...extra,
     });
@@ -85,7 +95,7 @@ export const computeLayout = (
       return horizontalChildrenCache.get(cacheKey);
     }
 
-    const children = node.children || [];
+    const children = getOrderedChildren(node);
     if (!children.length) {
       if (cacheKey) horizontalChildrenCache.set(cacheKey, []);
       return [];
@@ -104,7 +114,7 @@ export const computeLayout = (
         child,
         stackInfo: {
           parentId: node.id,
-          totalCount: children.length,
+          totalCount: getStackTotalCount(children),
           collapsed: true,
         },
       }];
@@ -117,9 +127,9 @@ export const computeLayout = (
       stackInfo: shouldStack
         ? {
             parentId: node.id,
-            totalCount: children.length,
+            totalCount: getStackTotalCount(children),
             expanded: true,
-            showCollapse: idx === 0 || idx === children.length - 1,
+            showCollapse: idx === 0 || idx === getLastPageChildIndex(children),
         }
         : null,
     }));
@@ -340,11 +350,12 @@ export const computeLayout = (
     const parentLayout = nodes.get(parentNode.id);
     if (!parentLayout) return NODE_H;
 
-    const shouldStack = shouldStackChildren(parentNode.children, parentDepth);
+    const orderedChildren = getOrderedChildren(parentNode);
+    const shouldStack = shouldStackChildren(orderedChildren, parentDepth);
     const isExpanded = !!expandedStacks[parentNode.id];
 
     // If no children: subtree is just the parent card
-    if (!parentNode.children?.length) {
+    if (!orderedChildren.length) {
       return NODE_H;
     }
 
@@ -354,14 +365,14 @@ export const computeLayout = (
     let cursorY = parentY + NODE_H + GAP_STACK_Y;
 
     if (shouldStack && !isExpanded) {
-      const stackChild = parentNode.children[0];
+      const stackChild = orderedChildren[0];
       if (!stackChild) return NODE_H;
       const childNumber = `${numberPrefix}.1`;
       setNode(stackChild, childX, cursorY, parentDepth + 1, childNumber, {
         ...context,
         stackInfo: {
           parentId: parentNode.id,
-          totalCount: parentNode.children.length,
+          totalCount: getStackTotalCount(orderedChildren),
           collapsed: true,
         },
       });
@@ -390,14 +401,14 @@ export const computeLayout = (
 
     const childIdsInOrder = [];
 
-    parentNode.children.forEach((child, idx) => {
+    orderedChildren.forEach((child, idx) => {
       const childNumber = `${numberPrefix}.${idx + 1}`;
       const stackInfo = shouldStack
         ? {
             parentId: parentNode.id,
-            totalCount: parentNode.children.length,
+            totalCount: getStackTotalCount(orderedChildren),
             expanded: true,
-            showCollapse: idx === 0 || idx === parentNode.children.length - 1,
+            showCollapse: idx === 0 || idx === getLastPageChildIndex(orderedChildren),
           }
         : null;
       setNode(child, childX, cursorY, parentDepth + 1, childNumber, stackInfo ? { ...context, stackInfo } : { ...context });
@@ -453,8 +464,9 @@ export const computeLayout = (
     const level1Positions = [];
     let level1X = startX;
 
-    if (rootNode.children?.length) {
-      rootNode.children.forEach((child, idx) => {
+    const rootChildren = getOrderedChildren(rootNode);
+    if (rootChildren.length) {
+      rootChildren.forEach((child, idx) => {
         const childNumber = `${rootNumber}.${idx + 1}`;
         setNode(child, level1X, level1Y, 1, childNumber, context);
 
@@ -555,8 +567,9 @@ export const computeLayout = (
   let level1X = rootX;
   let maxTreeHeight = NODE_H;
 
-  if (root.children?.length) {
-    root.children.forEach((child, idx) => {
+  const orderedRootChildren = getOrderedChildren(root);
+  if (orderedRootChildren.length) {
+    orderedRootChildren.forEach((child, idx) => {
       const childNumber = `${idx + 1}`; // Level 1 = 1, 2, 3, etc.
       setNode(child, level1X, level1Y, 1, childNumber);
 

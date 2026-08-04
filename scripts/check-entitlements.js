@@ -20,6 +20,7 @@ const {
   resolveAccountEntitlementsAsync,
   checkAccountActionAsync,
   recordMeterDebitAsync,
+  getScanJobDebitIdempotencyKey,
   getScreenshotCreditCost,
 } = require('../utils/entitlements');
 
@@ -50,6 +51,11 @@ async function main() {
   assert.equal(summary.limits.scanPagesPerRun.limit, 100);
   assert.equal(summary.screenshotCreditCosts.desktop_full_page, 1);
   assert.equal(getScreenshotCreditCost({ type: 'full' }), 1);
+  assert.equal(getScanJobDebitIdempotencyKey('job-a'), 'scan-job:job-a:crawl-pages');
+  assert.notEqual(
+    getScanJobDebitIdempotencyKey('job-a'),
+    getScanJobDebitIdempotencyKey('job-b')
+  );
 
   const freeScanCheck = await checkAccountActionAsync(user, ACTIONS.scanStart, { requestedPages: 5000 });
   assert.equal(freeScanCheck.allowed, true);

@@ -21,12 +21,12 @@ describe('ScanProgressModal', () => {
     scanProgress: { scanned: 12, queued: 4 },
     scanElapsed: 95,
     urlInput: 'https://example.com',
-    onRequestCancel: jest.fn(),
-    onRequestStop: jest.fn(),
-    onStopScan: jest.fn(),
-    onCancelScan: jest.fn(),
-    onContinueScan: jest.fn(),
-    onDismissScanError: jest.fn(),
+    onRequestCancel: vi.fn(),
+    onRequestStop: vi.fn(),
+    onStopScan: vi.fn(),
+    onCancelScan: vi.fn(),
+    onContinueScan: vi.fn(),
+    onDismissScanError: vi.fn(),
   };
 
   beforeEach(() => {
@@ -42,7 +42,7 @@ describe('ScanProgressModal', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('shows cancel and stop actions while scanning', () => {
@@ -82,27 +82,73 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-limit-note')).not.toBeNull();
   });
 
-  test('shows captured page count when scan progress includes mapped pages', () => {
+  test('calculates progress from processed outcomes and shows the outcome split', () => {
     act(() => {
       root.render(
         <ScanProgressModal
           {...baseProps}
-          scanProgress={{ scanned: 1357, mapped: 384, queued: 23 }}
+          scanProgress={{
+            processed: 384,
+            captured: 350,
+            deferred: 30,
+            blocked: 2,
+            failed: 2,
+            queued: 23,
+            discovered: 407,
+          }}
         />
       );
     });
 
     expect(container.textContent).toContain('384');
-    expect(container.textContent).toContain('Pages captured');
+    expect(container.textContent).toContain('Pages processed');
     expect(container.textContent).toContain('384 of 407');
     const pagesSection = container.querySelector('.scan-chart-section--pages');
     const findingsSection = container.querySelector('.scan-chart-section--findings');
-    expect(pagesSection.querySelector('.scan-queue-note').textContent).toContain('23in queue');
+    expect(pagesSection.querySelector('.scan-queue-note').textContent).toContain('23remaining');
     expect(findingsSection.querySelector('.scan-queue-note')).toBeNull();
     expect(findingsSection.querySelector('.scan-findings-bar')).not.toBeNull();
     expect(findingsSection.querySelector('.scan-findings-empty').textContent).toBe('No findings yet');
     expect(pagesSection.querySelector('.scan-inline-note').textContent).toBe('(94%)');
-    expect(container.textContent).not.toContain('1357Scanned');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Captured 350');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Deferred 30');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Crawl restricted 2');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Failed 2');
+  });
+
+  test('uses the discovered total when it is larger than the active queue', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanProgress={{
+            scanned: 30,
+            mapped: 30,
+            queued: 0,
+            discovered: 48,
+            sequence: 14,
+          }}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('30 of 48');
+    expect(container.querySelector('.scan-queue-note').textContent).toContain('18remaining');
+  });
+
+  test('uses stable backend phase messages instead of rotating status copy', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanMessage="Older rotating message"
+          scanProgress={{ scanned: 12, mapped: 10, queued: 4, discovered: 16, phase: 'scanning' }}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Capturing pages...');
+    expect(container.textContent).not.toContain('Older rotating message');
   });
 
   test('uses the requested scan chart dimensions and spacing', () => {
@@ -166,7 +212,7 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-finding-dot--brokenLinks')?.className).toContain('ui-tone--red');
   });
 
-  test('uses fallback estimate buckets when total time is not known', () => {
+  test('does not invent an estimate before enough progress is known', () => {
     act(() => {
       root.render(
         <ScanProgressModal
@@ -178,7 +224,7 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('0:34');
-    expect(container.textContent).toContain('1:00');
+    expect(container.querySelector('.scan-time-total').textContent).toBe('0:34');
 
     act(() => {
       root.render(
@@ -191,7 +237,36 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('1:34');
-    expect(container.textContent).toContain('5:00');
+    expect(container.querySelector('.scan-time-total').textContent).toBe('1:34');
+  });
+
+  test('shows an unknown estimate until pages begin completing', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanElapsed={18}
+          scanProgress={{ scanned: 0, mapped: 0, queued: 1, discovered: 1 }}
+        />
+      );
+    });
+
+    expect(container.querySelector('.scan-time-total').textContent).toBe('--');
+    expect(container.querySelector('.scan-time-chart').getAttribute('aria-label')).toContain('still being estimated');
+  });
+
+  test('uses completed pages and remaining work for a real estimate', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanElapsed={20}
+          scanProgress={{ scanned: 4, mapped: 4, queued: 6, discovered: 10 }}
+        />
+      );
+    });
+
+    expect(container.querySelector('.scan-time-total').textContent).toBe('0:50');
   });
 
   test('shows the existing cancel confirmation flow', () => {

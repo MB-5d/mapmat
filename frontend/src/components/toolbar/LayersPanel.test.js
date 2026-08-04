@@ -14,15 +14,15 @@ const renderPanel = (root, props = {}) => {
     embedded: true,
     layers: { userFlows: true, crossLinks: true, brokenLinks: true },
     connectionTool: null,
-    onToggleUserFlows: jest.fn(),
-    onToggleCrossLinks: jest.fn(),
-    onToggleBrokenLinks: jest.fn(),
+    onToggleUserFlows: vi.fn(),
+    onToggleCrossLinks: vi.fn(),
+    onToggleBrokenLinks: vi.fn(),
     connectionAvailability: {},
     scanLayerAvailability: {},
     scanLayerVisibility: {},
-    onToggleScanLayer: jest.fn(),
+    onToggleScanLayer: vi.fn(),
     changeFilters: { statuses: {} },
-    onToggleChangeStatus: jest.fn(),
+    onToggleChangeStatus: vi.fn(),
     changeStatusOptions: [],
     showChangeSection: false,
   };
@@ -51,11 +51,11 @@ describe('LayersPanel', () => {
     container.remove();
     container = null;
     root = null;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('hides unavailable placement options and shows every available status option', () => {
-    const onToggleScanLayer = jest.fn();
+    const onToggleScanLayer = vi.fn();
     renderPanel(root, {
       scanLayerAvailability: {
         placementPrimary: true,
@@ -91,7 +91,7 @@ describe('LayersPanel', () => {
     expect(container.textContent).toContain('Broken link');
     expect(container.textContent).toContain('Error');
     expect(container.textContent).toContain('Inactive');
-    expect(container.textContent).toContain('Auth required');
+    expect(container.textContent).toContain('Login required');
     expect(container.querySelector('.ui-menu-item--selected')).toBeNull();
 
     act(() => {
@@ -108,7 +108,7 @@ describe('LayersPanel', () => {
   });
 
   test('keeps available subdomain and orphan options functional', () => {
-    const onToggleScanLayer = jest.fn();
+    const onToggleScanLayer = vi.fn();
     renderPanel(root, {
       scanLayerAvailability: {
         placementPrimary: true,
@@ -133,7 +133,7 @@ describe('LayersPanel', () => {
   });
 
   test('shows marker label filters only when marker labels are available', () => {
-    const onToggleChangeStatus = jest.fn();
+    const onToggleChangeStatus = vi.fn();
     renderPanel(root, {
       showChangeSection: true,
       changeStatusOptions: [{ value: 'moved', label: 'Moved' }],

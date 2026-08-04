@@ -144,7 +144,7 @@ const EditNodeModal = ({
     statusCode !== null ? ['', httpErrorLabel || `HTTP ${statusCode}`] : null,
     node?.isViewableError ? ['Error type', 'Viewable HTTP error'] : null,
     isVirtualMissingNode(node) ? ['Scan label', 'Missing virtual page'] : null,
-    node?.authRequired ? ['Scan label', 'Auth required'] : null,
+    node?.authRequired ? ['Scan label', 'Login required'] : null,
     node?.isInactive ? ['Scan label', 'Inactive'] : null,
     node?.blockedReason ? ['Reason', node.blockedReason.replace(/_/g, ' ')] : null,
   ].filter(Boolean);

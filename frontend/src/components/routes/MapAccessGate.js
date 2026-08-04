@@ -37,12 +37,17 @@ export default function MapAccessGate({
   const requestPending = requestStatus === 'submitting';
   const requestSubmitted = requestStatus === 'submitted';
   const requestDisabled = requestStatus === 'disabled';
+  const resolvingAccess = authLoading || loading;
 
   let title = 'You do not currently have access to this map';
   let description = 'If the map owners allow it, you can request access from here.';
   let badge = 'Access blocked';
 
-  if (!isLoggedIn) {
+  if (resolvingAccess) {
+    title = 'Opening map…';
+    description = 'Checking your access and loading the latest map state.';
+    badge = 'Loading';
+  } else if (!isLoggedIn) {
     title = 'Sign in to continue';
     description = 'This map is inside the app. Sign in first to open it, accept an invite, or request access.';
     badge = 'Authentication required';
@@ -58,10 +63,6 @@ export default function MapAccessGate({
     badge = 'Waiting for review';
   } else if (requestDisabled) {
     description = 'The owners are not accepting access requests for this map right now. Ask an owner to invite this account directly.';
-  } else if (loading) {
-    title = 'Opening map…';
-    description = 'Checking your access and loading the latest map state.';
-    badge = 'Loading';
   }
 
   return (
@@ -88,7 +89,7 @@ export default function MapAccessGate({
           </div>
         ) : null}
 
-        {isLoggedIn && !hasPendingInvite && !requestSubmitted && !loading ? (
+        {isLoggedIn && !hasPendingInvite && !requestSubmitted && !resolvingAccess ? (
           <div className="route-gate-request">
             <label className="route-gate-label" htmlFor="access-request-message">
               Message to owners (optional)
@@ -122,17 +123,7 @@ export default function MapAccessGate({
             <span>Back to app</span>
           </Button>
 
-          {!isLoggedIn ? (
-            <Button
-              type="button"
-              variant="primary"
-              onClick={onLogin}
-              loading={authLoading}
-            >
-              {!authLoading ? <LogIn size={16} /> : null}
-              <span>Sign in</span>
-            </Button>
-          ) : loading ? (
+          {resolvingAccess ? (
             <Button
               type="button"
               variant="primary"
@@ -140,6 +131,15 @@ export default function MapAccessGate({
               loading
             >
               <span>Opening map</span>
+            </Button>
+          ) : !isLoggedIn ? (
+            <Button
+              type="button"
+              variant="primary"
+              onClick={onLogin}
+            >
+              <LogIn size={16} />
+              <span>Sign in</span>
             </Button>
           ) : hasPendingInvite ? (
             <>

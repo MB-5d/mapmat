@@ -3,19 +3,22 @@ import { createRoot } from 'react-dom/client';
 
 import App, { WELCOME_MODAL_STORAGE_KEY } from './App';
 import * as api from './api';
+import { LocaleProvider } from './contexts/LocaleContext';
 import { ROUTE_SURFACES, createAppHomeRoute } from './utils/appRoutes';
 
-jest.mock('./api', () => ({
-  getMe: jest.fn(),
-  getShare: jest.fn(),
-  getShareStatus: jest.fn(),
-  getProjects: jest.fn(),
-  getMaps: jest.fn(),
-  getHistory: jest.fn(),
-  getPendingMapInvites: jest.fn(),
-  getPendingAccessRequests: jest.fn(),
-  login: jest.fn(),
-  signup: jest.fn(),
+vi.mock('./api', () => ({
+  getMe: vi.fn(),
+  getShare: vi.fn(),
+  getShareStatus: vi.fn(),
+  getProjects: vi.fn(),
+  getMaps: vi.fn(),
+  getHistory: vi.fn(),
+  getPendingMapInvites: vi.fn(),
+  getPendingAccessRequests: vi.fn(),
+  getMapInvitePreview: vi.fn(),
+  getMapAccessPreview: vi.fn(),
+  login: vi.fn(),
+  signup: vi.fn(),
 }));
 
 describe('App blank home and welcome modal', () => {
@@ -35,9 +38,13 @@ describe('App blank home and welcome modal', () => {
   };
 
   const renderApp = async (currentRoute = baseRoute) => {
-    const navigateToRoute = jest.fn();
+    const navigateToRoute = vi.fn();
     await act(async () => {
-      root.render(<App currentRoute={currentRoute} navigateToRoute={navigateToRoute} />);
+      root.render(
+        <LocaleProvider>
+          <App currentRoute={currentRoute} navigateToRoute={navigateToRoute} />
+        </LocaleProvider>
+      );
       await flushAsync();
     });
     return { navigateToRoute };
@@ -111,12 +118,14 @@ describe('App blank home and welcome modal', () => {
     api.getHistory.mockResolvedValue({ history: [] });
     api.getPendingMapInvites.mockResolvedValue({ invites: [] });
     api.getPendingAccessRequests.mockResolvedValue({ accessRequests: [] });
+    api.getMapInvitePreview.mockResolvedValue({ invite: null });
+    api.getMapAccessPreview.mockResolvedValue({ map: null });
     api.login.mockResolvedValue({ user: defaultUser });
     api.signup.mockResolvedValue({ user: defaultUser });
 
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -126,8 +135,8 @@ describe('App blank home and welcome modal', () => {
     container.remove();
     container = null;
     root = null;
-    jest.restoreAllMocks();
-    jest.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
     window.localStorage.clear();
     Object.defineProperty(window, 'opener', {
       configurable: true,
@@ -141,8 +150,8 @@ describe('App blank home and welcome modal', () => {
 
   test('Google auth popup fallback tells the main window and closes', async () => {
     suppressWelcomeModal();
-    const postMessage = jest.fn();
-    const closeSpy = jest.spyOn(window, 'close').mockImplementation(() => {});
+    const postMessage = vi.fn();
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
     Object.defineProperty(window, 'opener', {
       configurable: true,
       value: { postMessage },
@@ -169,7 +178,7 @@ describe('App blank home and welcome modal', () => {
 
   test('Google auth popup fallback uses storage when opener is unavailable', async () => {
     suppressWelcomeModal();
-    const closeSpy = jest.spyOn(window, 'close').mockImplementation(() => {});
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
     Object.defineProperty(window, 'opener', {
       configurable: true,
       value: null,
@@ -451,7 +460,7 @@ describe('App blank home and welcome modal', () => {
   });
 
   test('localStorage failures do not crash the app', async () => {
-    const setItemSpy = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('storage blocked');
     });
 

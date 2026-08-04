@@ -39,6 +39,15 @@ function countTree(node) {
   return 1 + (node.children || []).reduce((sum, child) => sum + countTree(child), 0);
 }
 
+function countCapturedTree(node) {
+  if (!node) return 0;
+  const structural = node.isStructuralContext
+    || node.nodeKind === 'focus-ghost'
+    || node.nodeKind === 'deferred-group';
+  return (structural ? 0 : 1)
+    + (node.children || []).reduce((sum, child) => sum + countCapturedTree(child), 0);
+}
+
 async function waitForHealth() {
   const startedAt = Date.now();
   while (Date.now() - startedAt < 30000) {
@@ -220,19 +229,19 @@ async function runCheck() {
 
   await withFixture('static', async (base) => {
     const staticResult = await scan(`${base}/static`);
-    assert(countTree(staticResult.root) > 1, 'static links should produce multiple nodes');
+    assert(countCapturedTree(staticResult.root) > 1, 'static links should produce multiple captured pages');
     assert.notStrictEqual(staticResult.partialReason, 'scan_collapsed', 'static linked scan should not collapse');
   });
 
   await withFixture('sitemap', async (base) => {
     const sitemapResult = await scan(`${base}/sitemap-only`);
-    assert(countTree(sitemapResult.root) > 1, 'sitemap-only scan should include sitemap URLs');
+    assert(countCapturedTree(sitemapResult.root) > 1, 'sitemap-only scan should include sitemap URLs');
     assert(sitemapResult.scanDiagnostics?.sitemapUrlsQueued > 0, 'sitemap diagnostics should count queued URLs');
   });
 
   await withFixture('robots', async (base) => {
     const robotsResult = await scan(`${base}/robots-only`);
-    assert(countTree(robotsResult.root) > 1, 'robots sitemap scan should include robots sitemap URLs');
+    assert(countCapturedTree(robotsResult.root) > 1, 'robots sitemap scan should include robots sitemap URLs');
     assert(robotsResult.scanDiagnostics?.robotsSitemapUrlsFound > 0, 'robots diagnostics should count sitemap directives');
   });
 
@@ -244,7 +253,7 @@ async function runCheck() {
 
   await withFixture('rendered', async (base) => {
     const renderedResult = await scan(`${base}/rendered`);
-    assert(countTree(renderedResult.root) > 1, 'rendered fallback should include JS-rendered links');
+    assert(countCapturedTree(renderedResult.root) > 1, 'rendered fallback should include JS-rendered links');
     assert.strictEqual(renderedResult.scanDiagnostics?.renderedDiscoveryTried, true, 'rendered fallback should be used');
     assert(renderedResult.scanDiagnostics?.renderedLinksQueued > 0, 'rendered diagnostics should count queued links');
   });
@@ -257,7 +266,10 @@ async function runCheck() {
 
   await withFixture('one-page', async (base) => {
     const onePageResult = await scan(`${base}/one-page`);
-    assert.strictEqual(countTree(onePageResult.root), 1, 'true one-page scan should stay one node');
+    assert.strictEqual(countCapturedTree(onePageResult.root), 1, 'true one-page scan should keep one captured page');
+    assert.strictEqual(onePageResult.root?.nodeKind, undefined, 'reachable homepage context should use its real page state');
+    assert.strictEqual(onePageResult.root?.isStructuralContext, true, 'homepage context should stay outside focused page counts');
+    assert.strictEqual(countTree(onePageResult.root), 2, 'deep one-page scan should render homepage context plus target');
     assert.notStrictEqual(onePageResult.partialReason, 'scan_collapsed', 'true one-page scan should not be marked collapsed');
     assert.notStrictEqual(onePageResult.partialReason, 'root_discovery_failed', 'true one-page scan should not be marked discovery failed');
   });
@@ -277,9 +289,27 @@ async function runCheck() {
   });
 
   await withFixture('access-denied', async (base) => {
-    const deniedJob = await scanExpectingFailure(`${base}/access-denied`);
-    assert.strictEqual(deniedJob.status, 'failed', 'blocked root should fail instead of creating a one-node map');
-    assert(/No map was created/.test(deniedJob.error || ''), 'blocked root failure should explain that no map was created');
+    const deniedResult = await scan(`${base}/access-denied`);
+    assert.strictEqual(
+      deniedResult.partialReason,
+      'root_discovery_failed',
+      'focused blocked pages should keep the limited-result reason'
+    );
+    assert.strictEqual(
+      deniedResult.scanDiagnostics?.rootClassification,
+      'scan_limited',
+      'focused blocked pages should preserve the challenge classification'
+    );
+    assert.strictEqual(
+      deniedResult.root?.nodeKind,
+      undefined,
+      'reachable ancestor context should keep its real page state'
+    );
+    assert.strictEqual(
+      deniedResult.root?.isStructuralContext,
+      true,
+      'ancestor context should remain outside focused page counts'
+    );
   });
   console.log('scan collapse fixture ok');
 }

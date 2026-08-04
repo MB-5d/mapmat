@@ -851,9 +851,12 @@ function buildScanJobPath(id, { includeResult = true, accessToken = null, suffix
   return `/scan-jobs/${id}${suffix}${query ? `?${query}` : ''}`;
 }
 
-export async function createScanJob(payload) {
+export async function createScanJob(payload, { idempotencyKey = '' } = {}) {
   return fetchApi('/scan-jobs', {
     method: 'POST',
+    headers: idempotencyKey
+      ? { 'Idempotency-Key': String(idempotencyKey).slice(0, 160) }
+      : undefined,
     body: JSON.stringify(payload),
   });
 }

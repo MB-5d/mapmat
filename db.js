@@ -193,6 +193,8 @@ db.exec(`
     api_key TEXT,
     ip_hash TEXT,
     payload TEXT,
+    idempotency_key TEXT,
+    request_url TEXT,
     progress TEXT,
     result TEXT,
     error TEXT

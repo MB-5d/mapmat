@@ -25,7 +25,8 @@ export const NODE_BADGE_TONE_BY_LABEL = Object.freeze({
   Missing: 'amber',
   File: 'blue',
   'Broken Link': 'red',
-  Auth: 'violet',
+  'Login required': 'violet',
+  'Crawl restricted': 'red',
   Error: 'red',
   Inactive: 'slate',
 });

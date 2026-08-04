@@ -122,7 +122,7 @@ function startFixtureServer(port) {
   });
 }
 
-function startBackend(port, dbPath, screenshotDir) {
+function startBackend(port, dbPath, screenshotDir, extraEnv = {}) {
   const child = childProcess.spawn(process.execPath, ['server.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: {
@@ -148,6 +148,7 @@ function startBackend(port, dbPath, screenshotDir) {
       SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS: '3000',
       EMAIL_PROVIDER: 'log',
       NODE_ENV: 'test',
+      ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -305,6 +306,20 @@ function stripPersistedMapImageAssetFields(dbPath, mapId) {
   }
 }
 
+function persistLegacyMapImageAssetFields(dbPath, mapId, map) {
+  const db = new Database(dbPath, { fileMustExist: true });
+  try {
+    db.prepare('UPDATE maps SET root_data = ?, orphans_data = ? WHERE id = ?')
+      .run(
+        JSON.stringify(map.root),
+        map.orphans?.length ? JSON.stringify(map.orphans) : null,
+        mapId
+      );
+  } finally {
+    db.close();
+  }
+}
+
 function getPersistedMapNode(dbPath, mapId, nodeId) {
   const db = new Database(dbPath, { readonly: true, fileMustExist: true });
   try {
@@ -365,6 +380,22 @@ function getImageActivityCount(dbPath, mapId) {
       WHERE map_id = ? AND event_type = 'content.images.updated'
     `).get(mapId);
     return Number(row?.count || 0);
+  } finally {
+    db.close();
+  }
+}
+
+function getImageCaptureDebitQuantity(dbPath, jobId) {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db.prepare(`
+      SELECT COALESCE(SUM(quantity), 0) AS quantity
+      FROM usage_ledger_entries
+      WHERE meter = 'screenshot_credits'
+        AND entry_type = 'debit'
+        AND metadata LIKE ?
+    `).get(`%"jobId":"${jobId}"%`);
+    return Number(row?.quantity || 0);
   } finally {
     db.close();
   }
@@ -510,6 +541,19 @@ async function run() {
         children: [],
         scanStatus: 'inactive',
       }, {
+        id: 'virtual-0',
+        url: `${fixtureBase}/virtual`,
+        title: 'Virtual structural page',
+        children: [],
+        isMissing: true,
+        isVirtualMissing: true,
+      }, {
+        id: 'focus-ghost-0',
+        url: `${fixtureBase}/section`,
+        title: 'Focused structural context',
+        children: [],
+        nodeKind: 'focus-ghost',
+      }, {
         id: 'slow-0',
         url: `${fixtureBase}/slow`,
         title: 'Slow page',
@@ -651,6 +695,7 @@ async function run() {
       method: 'POST',
       body: JSON.stringify({ captureType: 'thumb', scope: 'all' }),
     }, cookieJar);
+    assert.strictEqual(thumbStart.estimatedCredits, 14, 'capture estimate must include every screenshot-capable page');
     assert.notStrictEqual(
       getJobStatus(dbPath, thumbStart.jobId),
       'queued',
@@ -668,11 +713,26 @@ async function run() {
       method: 'POST',
     }, cookieJar);
     const thumbJob = await pollImageCaptureJob(apiBase, mapId, thumbStart.jobId, cookieJar);
-    assert.strictEqual(thumbJob.result.total, 13, 'thumbnail total mismatch');
-    assert.strictEqual(thumbJob.result.captured, 12, 'thumbnail captured mismatch');
+    assert.strictEqual(thumbJob.result.total, 15, 'thumbnail eligible total mismatch');
+    assert.strictEqual(thumbJob.result.eligibleTotal, 15, 'thumbnail eligible summary mismatch');
+    assert.strictEqual(thumbJob.result.excluded, 0, 'thumbnail excluded total mismatch');
+    assert.deepStrictEqual(thumbJob.result.excludedReasons, {});
+    assert.strictEqual(thumbJob.result.exclusions.length, 0, 'capture exclusions should be machine-readable');
+    assert(
+      thumbJob.result.captured >= 13,
+      'every reachable screenshot-capable page should be captured'
+    );
     assert.strictEqual(thumbJob.result.skipped, 1, 'thumbnail skipped mismatch');
     assert.strictEqual(thumbJob.result.phase, 'needs_review', 'thumbnail job should surface skipped files for review');
-    assert.strictEqual(thumbJob.result.failed + thumbJob.result.blocked + thumbJob.result.missingAsset, 0, 'thumbnail failures found');
+    assert.strictEqual(
+      thumbJob.result.captured
+        + thumbJob.result.failed
+        + thumbJob.result.blocked
+        + thumbJob.result.missingAsset
+        + thumbJob.result.skipped,
+      thumbJob.result.total,
+      'every eligible page should reach a terminal capture result'
+    );
     assert(Number(thumbJob.result.assetUpdateCursor) >= 10, 'missing asset update cursor');
     assert(
       (fixtureServer.hitCounts.get('/slow') || 0) >= 2,
@@ -687,18 +747,31 @@ async function run() {
       'thumbnail primary pass should capture more than one page at a time'
     );
     assert(
+      (fixtureServer.hitCounts.get('/rendered-404') || 0) >= 1,
+      'HTTP error pages should remain available for user-selected screenshot capture'
+    );
+    assert(
+      (fixtureServer.hitCounts.get('/login') || 0) >= 1,
+      'authenticated pages should remain available for user-selected screenshot capture'
+    );
+    assert(
       getImageActivityCount(dbPath, mapId) >= 1,
       'thumbnail capture should add an activity entry'
+    );
+    assert.strictEqual(
+      getImageCaptureDebitQuantity(dbPath, thumbStart.jobId),
+      thumbJob.result.captured,
+      'capture billing must include saved screenshots only'
     );
 
     const withThumbs = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
     const thumbNodes = collectNodes(withThumbs.map.root, withThumbs.map.orphans);
-    assert.strictEqual(thumbNodes.length, 13, 'loaded node count mismatch');
+    assert.strictEqual(thumbNodes.length, 15, 'loaded node count mismatch');
     const storedThumbnailCount = thumbNodes.filter((page) => page.thumbnailUrl).length;
     assert.strictEqual(storedThumbnailCount, thumbJob.result.captured, 'saved count exceeded stored thumbnails');
     const skippedIds = new Set(['file-0']);
     thumbNodes
-      .filter((page) => !skippedIds.has(page.id))
+      .filter((page) => !skippedIds.has(page.id) && page.id !== 'inactive-0')
       .forEach((page) => assert(page.thumbnailUrl, `missing thumbnailUrl for ${page.id}`));
     thumbNodes
       .filter((page) => skippedIds.has(page.id))
@@ -706,7 +779,12 @@ async function run() {
         assert(!page.thumbnailUrl, `skipped page should not keep thumbnailUrl for ${page.id}`);
         assert(page.thumbnailCaptureFailed, `skipped page missing failure marker for ${page.id}`);
       });
-    ['text-0', 'error-0', 'auth-0', 'inactive-0', 'slow-0', 'slow-1'].forEach((nodeId) => {
+    const inactivePage = thumbNodes.find((page) => page.id === 'inactive-0');
+    assert(
+      inactivePage?.thumbnailUrl || inactivePage?.thumbnailCaptureFailed,
+      'unreachable page should still be attempted and record its result'
+    );
+    ['text-0', 'slow-0', 'slow-1'].forEach((nodeId) => {
       const page = thumbNodes.find((node) => node.id === nodeId);
       assert(page?.thumbnailUrl, `expected rendered page thumbnail for ${nodeId}`);
       assert(!page.thumbnailCaptureFailed, `rendered page should not be marked failed for ${nodeId}`);
@@ -851,6 +929,7 @@ async function run() {
     await assertAssetLoads(apiBase, repairedNode.node.thumbnailUrl);
     await assertAssetLoads(apiBase, repairedNode.node.fullScreenshotUrl);
 
+    persistLegacyMapImageAssetFields(dbPath, mapId, repairedReload.map);
     deleteImageAssetManifestRows(dbPath, mapId);
     assert.strictEqual(
       getSavedManifestCount(dbPath, mapId),
@@ -958,10 +1037,84 @@ async function run() {
     assert(!staleSave.map.root.fullScreenshotUrl, 'URL change should clear stale fullScreenshotUrl');
     assert(getStaleManifestCount(dbPath, mapId, 'main-0') >= 1, 'URL change should mark manifest assets stale');
 
+    const storagePort = await getFreePort();
+    const storageDbPath = path.join(tempDir, 'storage-exhaustion.db');
+    const storageScreenshotDir = path.join(tempDir, 'storage-exhaustion-screenshots');
+    const storageApiBase = `http://127.0.0.1:${storagePort}`;
+    const storageBackend = startBackend(
+      storagePort,
+      storageDbPath,
+      storageScreenshotDir,
+      { SCREENSHOT_MIN_FREE_BYTES: String(Number.MAX_SAFE_INTEGER) }
+    );
+    try {
+      await storageBackend.waitUntilReady();
+      const storageCookieJar = { value: '' };
+      await fetchJson(`${storageApiBase}/auth/login`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email: `storage_capture_${Date.now()}@test.vellic.local`,
+          password: 'testpass123',
+          name: 'Storage Capture QA',
+        }),
+      }, storageCookieJar);
+      const storageRoot = {
+        id: 'storage-root',
+        url: `${fixtureBase}/`,
+        title: 'Storage root',
+        children: Array.from({ length: 8 }, (_, index) => ({
+          id: `storage-${index + 1}`,
+          url: `${fixtureBase}/storage-${index + 1}`,
+          title: `Storage ${index + 1}`,
+          children: [],
+        })),
+      };
+      const storageMap = await fetchJson(`${storageApiBase}/api/maps`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Storage exhaustion',
+          url: `${fixtureBase}/`,
+          root: storageRoot,
+          orphans: [],
+          connections: [],
+          colors: ['#111111'],
+        }),
+      }, storageCookieJar);
+      const storageMapId = storageMap.map?.id;
+      assert(storageMapId, 'missing storage-exhaustion map id');
+      const storageStart = await fetchJson(
+        `${storageApiBase}/api/maps/${storageMapId}/image-capture-jobs`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ captureType: 'thumb', scope: 'all' }),
+        },
+        storageCookieJar
+      );
+      const storageJob = await pollImageCaptureJob(
+        storageApiBase,
+        storageMapId,
+        storageStart.jobId,
+        storageCookieJar
+      );
+      assert.strictEqual(storageStart.estimatedCredits, 9);
+      assert.strictEqual(storageJob.result.captured, 0, 'storage exhaustion must not save images');
+      assert.strictEqual(storageJob.result.storageFailure?.code, 'storage_exhausted');
+      assert(storageJob.result.storageUnavailable >= 7, 'storage circuit should stop the remaining batch');
+      assert.strictEqual(storageJob.result.completed, storageJob.result.total);
+      assert.strictEqual(
+        getImageCaptureDebitQuantity(storageDbPath, storageStart.jobId),
+        0,
+        'storage failures must not consume screenshot credits'
+      );
+    } finally {
+      await stopChild(storageBackend.child);
+    }
+
     console.log('image capture job smoke ok');
   } finally {
     await closeServer(fixtureServer);
     await stopChild(backend.child);
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 

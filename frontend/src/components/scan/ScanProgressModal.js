@@ -12,8 +12,8 @@ const FINDING_ITEMS = [
   { key: 'errorPages', label: 'Error' },
   { key: 'inactivePages', label: 'Inactive' },
   { key: 'redirects', label: 'Redirects' },
-  { key: 'authenticatedPages', label: 'Auth required' },
-  { key: 'scanLimited', label: 'Scan limited' },
+  { key: 'authenticatedPages', label: 'Login required' },
+  { key: 'scanLimited', label: 'Crawl restricted' },
 ];
 
 const formatCount = (value) => new Intl.NumberFormat().format(Math.max(0, Number(value || 0) || 0));
@@ -25,17 +25,15 @@ const formatDuration = (seconds) => {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 };
 
-const getFallbackEstimateSeconds = (elapsedSeconds) => {
-  if (elapsedSeconds < 60) return 60;
-  return Math.max(300, Math.ceil(elapsedSeconds / 300) * 300);
-};
-
-const getTimeEstimateSeconds = ({ elapsedSeconds, scannedCount, queuedCount }) => {
-  if (scannedCount > 2 && queuedCount > 0) {
-    const avgTimePerPage = elapsedSeconds / scannedCount;
-    return Math.max(elapsedSeconds, Math.ceil(elapsedSeconds + (avgTimePerPage * queuedCount)));
+const getTimeEstimateSeconds = ({ elapsedSeconds, completedCount, remainingCount }) => {
+  if (completedCount > 1 && remainingCount > 0) {
+    const avgTimePerPage = elapsedSeconds / completedCount;
+    return Math.max(elapsedSeconds, Math.ceil(elapsedSeconds + (avgTimePerPage * remainingCount)));
   }
-  return getFallbackEstimateSeconds(elapsedSeconds);
+  if (completedCount > 0 && remainingCount === 0) {
+    return elapsedSeconds;
+  }
+  return null;
 };
 
 const ScanProgressModal = ({
@@ -57,21 +55,42 @@ const ScanProgressModal = ({
   onDismissScanError,
 }) => {
   if (!loading && !scanErrorMessage) return null;
-  const scannedCount = Math.max(0, Number(scanProgress.scanned || 0) || 0);
-  const mappedCount = Number.isFinite(Number(scanProgress.mapped))
-    ? Math.max(0, Number(scanProgress.mapped || 0) || 0)
-    : null;
+  const processedCount = Math.max(
+    0,
+    Number(scanProgress.processed ?? scanProgress.scanned ?? 0) || 0
+  );
+  const capturedCount = Math.max(
+    0,
+    Number(scanProgress.captured ?? scanProgress.mapped ?? 0) || 0
+  );
+  const deferredCount = Math.max(0, Number(scanProgress.deferred || 0) || 0);
+  const blockedCount = Math.max(0, Number(scanProgress.blocked || 0) || 0);
+  const failedCount = Math.max(0, Number(scanProgress.failed || 0) || 0);
   const queuedCount = Math.max(0, Number(scanProgress.queued || 0) || 0);
-  const primaryCount = mappedCount === null ? scannedCount : mappedCount;
-  const primaryLabel = mappedCount === null ? 'Scanned' : 'Captured';
-  const hasQueue = queuedCount > 0;
-  const pageTotal = Math.max(primaryCount, primaryCount + queuedCount);
-  const pagePercent = pageTotal > 0 ? Math.min(100, Math.round((primaryCount / pageTotal) * 100)) : 0;
+  const discoveredCount = Math.max(0, Number(scanProgress.discovered || 0) || 0);
+  const pageTotal = Math.max(
+    processedCount,
+    processedCount + queuedCount,
+    discoveredCount
+  );
+  const remainingCount = Math.max(0, pageTotal - processedCount);
+  const hasRemaining = remainingCount > 0;
+  const pagePercent = pageTotal > 0 ? Math.min(100, Math.round((processedCount / pageTotal) * 100)) : 0;
   const elapsedSeconds = Math.max(0, Math.floor(Number(scanElapsed || 0) || 0));
-  const estimatedTotalSeconds = getTimeEstimateSeconds({ elapsedSeconds, scannedCount, queuedCount });
-  const timePercent = estimatedTotalSeconds > 0
+  const estimatedTotalSeconds = getTimeEstimateSeconds({
+    elapsedSeconds,
+    completedCount: processedCount,
+    remainingCount,
+  });
+  const timePercent = estimatedTotalSeconds !== null && estimatedTotalSeconds > 0
     ? Math.min(100, Math.max(0, (elapsedSeconds / estimatedTotalSeconds) * 100))
     : 0;
+  const estimatedTotalLabel = estimatedTotalSeconds === null
+    ? '--'
+    : formatDuration(estimatedTotalSeconds);
+  const timeChartLabel = estimatedTotalSeconds === null
+    ? `Elapsed ${formatDuration(elapsedSeconds)}; total time is still being estimated`
+    : `Elapsed ${formatDuration(elapsedSeconds)} of estimated ${formatDuration(estimatedTotalSeconds)}`;
   const findingCounts = scanProgress.findings || {};
   const findingItems = FINDING_ITEMS
     .map((item) => ({
@@ -83,9 +102,14 @@ const ScanProgressModal = ({
     0,
     Number(scanProgress.totalFindings || findingItems.reduce((sum, item) => sum + item.count, 0)) || 0
   );
+  const phaseMessage = {
+    discovering: 'Finding pages...',
+    scanning: 'Capturing pages...',
+    finalizing: 'Preparing your map...',
+  }[scanProgress.phase];
   const displayMessage = isStoppingScan
     ? 'Stopping scan and preparing current results...'
-    : scanMessage;
+    : (phaseMessage || scanMessage);
 
   let body = null;
   let footer = null;
@@ -110,7 +134,7 @@ const ScanProgressModal = ({
           <div className="scan-message">{displayMessage}</div>
           <div className="scan-url">{urlInput}</div>
 
-          <div className="scan-time-chart" role="img" aria-label={`Elapsed ${formatDuration(elapsedSeconds)} of estimated ${formatDuration(estimatedTotalSeconds)}`}>
+          <div className="scan-time-chart" role="img" aria-label={timeChartLabel}>
             <div
               className="scan-time-donut"
               style={{ '--scan-time-progress': `${timePercent}%` }}
@@ -121,32 +145,38 @@ const ScanProgressModal = ({
               <span className="scan-time-label scan-time-label--elapsed">Elapsed</span>
               <span className="scan-time-separator" aria-hidden="true" />
               <span className="scan-time-label scan-time-label--estimate">Est. total</span>
-              <span className="scan-time-total">{formatDuration(estimatedTotalSeconds)}</span>
+              <span className="scan-time-total">{estimatedTotalLabel}</span>
             </div>
           </div>
 
           <div className="scan-chart-section scan-chart-section--pages">
             <div className="scan-chart-heading">
-              <span>Pages {primaryLabel.toLowerCase()}</span>
+              <span>Pages processed</span>
               <span>
-                <strong>{formatCount(primaryCount)} of {formatCount(pageTotal)}</strong>
+                <strong>{formatCount(processedCount)} of {formatCount(pageTotal)}</strong>
                 {pageTotal > 0 ? (
                   <span className="scan-inline-note">({pagePercent}%)</span>
                 ) : null}
               </span>
             </div>
-            <div className="scan-progress-track" role="img" aria-label={`${formatCount(primaryCount)} of ${formatCount(pageTotal)} pages ${primaryLabel.toLowerCase()}`}>
+            <div className="scan-progress-track" role="img" aria-label={`${formatCount(processedCount)} of ${formatCount(pageTotal)} pages processed`}>
               <span
                 className="scan-progress-fill"
                 style={{ width: `${pagePercent}%` }}
               />
             </div>
-            {hasQueue ? (
+            {hasRemaining ? (
               <div className="scan-queue-note">
-                <span>{formatCount(queuedCount)}</span>
-                <span>in queue</span>
+                <span>{formatCount(remainingCount)}</span>
+                <span>remaining</span>
               </div>
             ) : null}
+            <div className="scan-outcome-note">
+              <span>Captured {formatCount(capturedCount)}</span>
+              {deferredCount > 0 ? <span>Deferred {formatCount(deferredCount)}</span> : null}
+              {blockedCount > 0 ? <span>Crawl restricted {formatCount(blockedCount)}</span> : null}
+              {failedCount > 0 ? <span>Failed {formatCount(failedCount)}</span> : null}
+            </div>
           </div>
 
           <div className="scan-chart-section scan-chart-section--findings">

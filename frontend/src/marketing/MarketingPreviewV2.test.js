@@ -17,10 +17,10 @@ import {
 import { parseCurrentRoute, ROUTE_SURFACES } from '../utils/appRoutes';
 import vercelConfig from '../../vercel.json';
 
-jest.mock('../api', () => ({
-  getBillingConfig: jest.fn(),
-  submitMarketingContact: jest.fn(),
-  submitMarketingMailingListSignup: jest.fn(),
+vi.mock('../api', () => ({
+  getBillingConfig: vi.fn(),
+  submitMarketingContact: vi.fn(),
+  submitMarketingMailingListSignup: vi.fn(),
 }));
 
 function setInputValue(input, value) {
@@ -52,7 +52,7 @@ describe('MarketingPreviewV2', () => {
   let originalScrollTo;
   let scrollTo;
 
-  const renderAt = (path, navigateToRoute = jest.fn(), props = {}) => {
+  const renderAt = (path, navigateToRoute = vi.fn(), props = {}) => {
     window.history.pushState({}, '', path);
     const route = parseCurrentRoute(window.location);
     act(() => {
@@ -60,7 +60,7 @@ describe('MarketingPreviewV2', () => {
         <MarketingPreviewV2
           route={route}
           navigateToRoute={navigateToRoute}
-          onOpenApp={jest.fn()}
+          onOpenApp={vi.fn()}
           {...props}
         />
       );
@@ -120,8 +120,8 @@ describe('MarketingPreviewV2', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    scrollIntoView = jest.fn();
-    scrollTo = jest.fn();
+    scrollIntoView = vi.fn();
+    scrollTo = vi.fn();
     originalScrollTo = window.scrollTo;
     window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
     window.scrollTo = scrollTo;
@@ -141,7 +141,7 @@ describe('MarketingPreviewV2', () => {
     delete window.HTMLElement.prototype.scrollIntoView;
     window.scrollTo = originalScrollTo;
     window.history.pushState({}, '', '/');
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('renders a direct V2 section route with route-aware metadata', () => {
@@ -280,7 +280,7 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('uses real nav links and intercepts V2 routing for SPA navigation', () => {
-    const navigateToRoute = jest.fn();
+    const navigateToRoute = vi.fn();
     renderAt('/', navigateToRoute);
     const examplesLink = Array.from(container.querySelectorAll('a')).find((link) => (
       link.getAttribute('href') === '/examples'
@@ -339,8 +339,8 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('opens the app scan URL on desktop', () => {
-    const openApp = jest.fn();
-    renderAt('/', jest.fn(), { onOpenApp: openApp });
+    const openApp = vi.fn();
+    renderAt('/', vi.fn(), { onOpenApp: openApp });
 
     const input = container.querySelector('.marketing-scan-bar input');
     act(() => {
@@ -359,7 +359,7 @@ describe('MarketingPreviewV2', () => {
 
   test('shows the mobile scan modal instead of routing phones to the removed start section', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    const navigateToRoute = jest.fn();
+    const navigateToRoute = vi.fn();
     renderAt('/', navigateToRoute);
 
     const input = container.querySelector('.marketing-scan-bar input');
@@ -534,8 +534,8 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('renders supplied product screenshot examples', () => {
-    const openApp = jest.fn();
-    renderAt('/examples', jest.fn(), { onOpenApp: openApp });
+    const openApp = vi.fn();
+    renderAt('/examples', vi.fn(), { onOpenApp: openApp });
 
     expect(container.textContent).toContain('Large site audit');
     expect(container.textContent).toContain('Nearly 5k page site scan, 7 levels deep with top-of-page screenshots.');
@@ -646,8 +646,8 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('routes pricing CTAs to signup or checkout instead of scan', () => {
-    const openApp = jest.fn();
-    renderAt('/pricing', jest.fn(), { onOpenApp: openApp });
+    const openApp = vi.fn();
+    renderAt('/pricing', vi.fn(), { onOpenApp: openApp });
 
     const yearlyButton = Array.from(container.querySelectorAll('.marketing-v2-pricing-cycle button'))
       .find((button) => button.textContent === 'Yearly');
