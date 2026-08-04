@@ -265,19 +265,6 @@ ensureColumn('scan_history', 'map_id', 'TEXT');
 ensureColumn('scan_history', 'insights_data', 'TEXT');
 ensureColumn('scan_history', 'insights_generated_at', 'DATETIME');
 ensureColumn('usage_events', 'meta', 'TEXT');
-ensureColumn('jobs', 'idempotency_key', 'TEXT');
-ensureColumn('jobs', 'request_url', 'TEXT');
-db.exec(`
-  CREATE INDEX IF NOT EXISTS idx_jobs_user_idempotency
-  ON jobs(type, user_id, idempotency_key, request_url, status)
-  WHERE idempotency_key IS NOT NULL AND user_id IS NOT NULL;
-  CREATE INDEX IF NOT EXISTS idx_jobs_api_key_idempotency
-  ON jobs(type, api_key, idempotency_key, request_url, status)
-  WHERE idempotency_key IS NOT NULL AND api_key IS NOT NULL;
-  CREATE INDEX IF NOT EXISTS idx_jobs_ip_idempotency
-  ON jobs(type, ip_hash, idempotency_key, request_url, status)
-  WHERE idempotency_key IS NOT NULL AND ip_hash IS NOT NULL;
-`);
 ensureColumn('pages', 'placement', "TEXT NOT NULL DEFAULT 'Primary'");
 ensureColumn('pages', 'status', "TEXT NOT NULL DEFAULT 'Active'");
 ensureColumn('pages', 'severity', "TEXT NOT NULL DEFAULT 'Healthy'");
