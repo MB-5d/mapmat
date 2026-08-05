@@ -3562,6 +3562,16 @@ const DISTINCT_COLLECTION_QUERY_KEYS = new Set([
   'year',
 ]);
 
+const TRANSIENT_PAGINATION_QUERY_KEYS = new Set([
+  'after',
+  'before',
+  'cursor',
+  'offset',
+  'p',
+  'page',
+  'start',
+]);
+
 function getPageIdentityUrl(meta = {}) {
   const sourceUrl = normalizeUrl(meta.finalUrl || meta.url);
   const canonicalUrl = normalizeUrl(meta.canonicalUrl);
@@ -4445,6 +4455,8 @@ function extractFocusedContentLinks(html, baseUrl) {
     '[class*="Teaser"]',
     '[class*="story"]',
     '[class*="Story"]',
+    '[class*="content-grid"] [class*="list-item"]',
+    '[class*="contentGrid"] [class*="listItem"]',
   ].join(', ');
   const normalizeLink = (el) => {
     const $link = $(el);
@@ -4481,7 +4493,14 @@ function extractFocusedContentLinks(html, baseUrl) {
 
   $(containerSelector).each((_, container) => {
     const $container = $(container);
-    const headingLinks = $container.find('h1 a[href], h2 a[href], h3 a[href], h4 a[href]')
+    const headingLinks = $container.find([
+      'h1 a[href]',
+      'h2 a[href]',
+      'h3 a[href]',
+      'h4 a[href]',
+      'a[class*="title"][href]',
+      'a[class*="Title"][href]',
+    ].join(', '))
       .get()
       .map((link, index) => ({ link, index, ...getHeadingLinkScore(link) }))
       .filter((candidate) => candidate.normalized)
@@ -4530,6 +4549,24 @@ async function extractRenderedLinks(url, context = null) {
       waitUntil: 'domcontentloaded',
       timeout: 12000,
     });
+    await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+    await page.evaluate(async () => {
+      const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+      let unchangedAtBottom = 0;
+      let previousHeight = 0;
+      for (let step = 0; step < 24; step += 1) {
+        const height = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
+        const nextTop = Math.min(height, (step + 1) * Math.max(window.innerHeight * 0.8, 500));
+        window.scrollTo(0, nextTop);
+        await wait(100);
+        const nextHeight = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
+        const atBottom = window.scrollY + window.innerHeight >= nextHeight - 8;
+        unchangedAtBottom = atBottom && nextHeight === previousHeight ? unchangedAtBottom + 1 : 0;
+        previousHeight = nextHeight;
+        if (unchangedAtBottom >= 2) break;
+      }
+      window.scrollTo(0, 0);
+    }).catch(() => {});
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
     const renderedLinks = await page.evaluate(() => (
       Array.from(document.querySelectorAll('a[href]'))
@@ -4599,7 +4636,7 @@ function normalizeRepetitiveCaptureRequest(options = {}, scanScope = null, pageA
     if (pageAllowance !== null && entries.length >= pageAllowance) return;
     const url = normalizeUrl(typeof entry === 'string' ? entry : entry?.url);
     if (!url || seen.has(url)) return;
-    if (scanScope?.focused && !isUrlWithinFocusedPath(url, scanScope)) return;
+    if (scanScope?.focused && !sameOrigin(url, scanScope.origin)) return;
     if (scanScope && !scanScope.focused && !getPlacementForUrl(url, scanScope)) return;
     seen.add(url);
     entries.push({
@@ -4659,6 +4696,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const focusedDiscoveryHelperUrls = new Set();
   const focusedDiscoveryOwnerByUrl = new Map();
   const focusedPathAliases = new Set();
+  if (targetedGroupCapture && scanScope.focused) {
+    captureUrlSet.forEach((url) => {
+      if (sameOrigin(url, origin)) focusedContentUrls.add(url);
+    });
+  }
   const focusedAncestorUrlSet = new Set(
     scanScope.focused ? getFocusedAncestorUrls(seed).map((url) => normalizeUrl(url)).filter(Boolean) : []
   );
@@ -4683,7 +4725,24 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!normalized || !normalizedSource) return false;
     const parsed = new URL(normalized);
     const source = new URL(normalizedSource);
-    return Boolean(parsed.search && parsed.pathname === source.pathname);
+    if (!parsed.search || parsed.origin !== source.origin) return false;
+    const hasTransientPagination = Array.from(parsed.searchParams.keys()).some((key) => (
+      TRANSIENT_PAGINATION_QUERY_KEYS.has(String(key).toLowerCase())
+    ));
+    if (!hasTransientPagination) return false;
+    return parsed.pathname === source.pathname || isWithinFocusedPathAlias(normalized);
+  };
+  const getFocusedDiscoveryCollectionUrl = (candidate) => {
+    const normalized = normalizeUrl(candidate);
+    if (!normalized) return null;
+    const parsed = new URL(normalized);
+    let removed = false;
+    Array.from(parsed.searchParams.keys()).forEach((key) => {
+      if (!TRANSIENT_PAGINATION_QUERY_KEYS.has(String(key).toLowerCase())) return;
+      parsed.searchParams.delete(key);
+      removed = true;
+    });
+    return removed ? normalizeUrl(parsed.toString()) : null;
   };
   const scanDiagnostics = {
     seedUrl: seed,
@@ -4815,8 +4874,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const normalized = normalizeUrl(url);
     if (!scanScope.focused || !normalized || !sameOrigin(normalized, origin) || isScanFileUrl(normalized)) return;
     if (isFocusedDiscoveryHelperUrl(normalized, seed)) {
+      const collectionUrl = getFocusedDiscoveryCollectionUrl(normalized);
       focusedDiscoveryHelperUrls.add(normalized);
-      focusedDiscoveryOwnerByUrl.set(normalized, seed);
+      focusedDiscoveryOwnerByUrl.set(normalized, collectionUrl || seed);
       focusedContentUrls.add(normalized);
     }
     const candidateSegments = new URL(normalized).pathname.split('/').filter(Boolean);
@@ -5174,6 +5234,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const extraHeaders = {};
   let partialReason = null;
   let stopRequested = false;
+  let rootMayNeedRenderedDiscovery = false;
 
   const getCrawlBrowserContext = async (url) => {
     const host = normalizeHost(new URL(url).hostname);
@@ -5821,6 +5882,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     if (url === seed) {
+      rootMayNeedRenderedDiscovery = /(?:q:container|__NEXT_DATA__|__NUXT__|data-reactroot|id=["'](?:app|root)["'])/i.test(html);
       const normalizedFinalUrl = normalizeUrl(finalUrl || url);
       if (
         scanScope.focused
@@ -5947,11 +6009,23 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       });
     }
     if (scanScope.focused) {
+      const helperCollectionLinks = [];
       links.forEach((link) => {
         if (!isFocusedDiscoveryHelperUrl(link, url)) return;
+        const collectionUrl = getFocusedDiscoveryCollectionUrl(link);
         focusedDiscoveryHelperUrls.add(link);
-        focusedDiscoveryOwnerByUrl.set(link, getFocusedDiscoveryOwner(url));
+        focusedDiscoveryOwnerByUrl.set(link, collectionUrl || getFocusedDiscoveryOwner(url));
         focusedContentUrls.add(link);
+        if (
+          collectionUrl
+          && collectionUrl !== normalizeUrl(url)
+          && isWithinFocusedPathAlias(collectionUrl)
+        ) {
+          helperCollectionLinks.push(collectionUrl);
+        }
+      });
+      helperCollectionLinks.forEach((link) => {
+        if (!links.includes(link)) links.push(link);
       });
     }
     const allowedLinks = links.filter((link) => (
@@ -6179,7 +6253,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (stopRequested) return false;
     if (scanDiagnostics.renderedDiscoveryTried) return false;
     if (pageLimit !== null && visited.size >= pageLimit) return false;
-    if (pageMap.size > 1) return false;
+    if (
+      pageMap.size > 1
+      && !(scanScope.focused && rootMayNeedRenderedDiscovery && pageMap.size <= 20)
+    ) return false;
     return true;
   };
 
@@ -6205,11 +6282,19 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         registerFocusedContentLink(link, seed, index);
         if (!normalizedRenderedLinks.includes(link)) normalizedRenderedLinks.push(link);
       });
+    const renderedCollectionLinks = [];
     normalizedRenderedLinks.forEach((link) => {
       if (!isFocusedDiscoveryHelperUrl(link, seed)) return;
+      const collectionUrl = getFocusedDiscoveryCollectionUrl(link);
       focusedDiscoveryHelperUrls.add(link);
-      focusedDiscoveryOwnerByUrl.set(link, seed);
+      focusedDiscoveryOwnerByUrl.set(link, collectionUrl || seed);
       focusedContentUrls.add(link);
+      if (collectionUrl && collectionUrl !== seed && isWithinFocusedPathAlias(collectionUrl)) {
+        renderedCollectionLinks.push(collectionUrl);
+      }
+    });
+    renderedCollectionLinks.forEach((link) => {
+      if (!normalizedRenderedLinks.includes(link)) normalizedRenderedLinks.push(link);
     });
     const allowedRenderedLinks = normalizedRenderedLinks.filter((link) => (
       allowPageUrl(link) && !focusedDiscoveryHelperUrls.has(normalizeUrl(link))
@@ -6650,7 +6735,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (scanScope.focused && !allowUrl(parentUrl) && !allowFocusedContentAncestors) break;
       const canonicalMatch = canonicalToUrl.get(getCanonicalKey(parentUrl));
       if (canonicalMatch) return;
+      const isStoppedStructuralContext = partialReason === 'stopped_by_user';
       const isFocusedStructuralContext = scanScope.focused && allowFocusedContentAncestors;
+      const isStructuralContext = isFocusedStructuralContext || isStoppedStructuralContext;
       nodes.set(parentUrl, {
         id: safeIdFromUrl(parentUrl),
         url: parentUrl,
@@ -6661,10 +6748,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         thumbnailUrl: undefined,
         nodeKind: isFocusedStructuralContext ? 'focus-ghost' : undefined,
         isFocusAncestor: isFocusedStructuralContext,
-        isStructuralContext: isFocusedStructuralContext,
-        isMissing: !isFocusedStructuralContext,
-        isVirtualMissing: !isFocusedStructuralContext,
-        scanStatus: isFocusedStructuralContext ? 'structural' : 'missing',
+        isStructuralContext,
+        isMissing: !isStructuralContext,
+        isVirtualMissing: !isStructuralContext,
+        scanStatus: isStructuralContext ? 'structural' : 'missing',
         metadataAvailable: false,
         children: [],
       });
@@ -7080,14 +7167,23 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         && capturedEntries.length <= REPETITIVE_GROUP_CAPTURE_LIMIT
       ) return;
       const placeholderParentUrl = normalizeUrl(group.parentUrl);
-      const parentNode = (
+      const primaryParentNode = (
         placeholderParentUrl
         && nodes.has(placeholderParentUrl)
         && visiblePrimaryUrls.has(placeholderParentUrl)
         && !nodes.get(placeholderParentUrl)?.isDuplicate
-      )
-        ? nodes.get(placeholderParentUrl)
-        : nodes.get(seed);
+      ) ? nodes.get(placeholderParentUrl) : null;
+      const subdomainParentNode = (
+        placeholderParentUrl
+        && subdomainSet.has(placeholderParentUrl)
+      ) ? nodes.get(placeholderParentUrl) : null;
+      const orphanParentNode = placeholderParentUrl
+        ? orphanMap.get(placeholderParentUrl)
+        : null;
+      const parentNode = primaryParentNode
+        || subdomainParentNode
+        || orphanParentNode
+        || nodes.get(seed);
       if (!parentNode) return;
       const parentKey = normalizeUrl(parentNode.url) || seed;
       const stableGroupId = getStableRepetitiveGroupId(`${parentKey}|visible-parent`);

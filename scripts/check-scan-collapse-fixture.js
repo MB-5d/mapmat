@@ -48,6 +48,16 @@ function countCapturedTree(node) {
     + (node.children || []).reduce((sum, child) => sum + countCapturedTree(child), 0);
 }
 
+function findTreeNode(node, predicate) {
+  if (!node) return null;
+  if (predicate(node)) return node;
+  for (const child of node.children || []) {
+    const match = findTreeNode(child, predicate);
+    if (match) return match;
+  }
+  return null;
+}
+
 async function waitForHealth() {
   const startedAt = Date.now();
   while (Date.now() - startedAt < 30000) {
@@ -145,6 +155,36 @@ function createFixtureServer(mode) {
     }
     if (url.pathname === '/rendered/child') return send(200, '<title>Rendered Child</title>');
 
+    if (url.pathname === '/lazy-rendered') {
+      return send(200, [
+        '<title>Lazy rendered</title>',
+        '<main id="root" style="min-height:3200px"><a href="/lazy-rendered/static">Static child</a></main>',
+        '<script>',
+        'window.addEventListener("scroll", () => {',
+        '  if (document.querySelector("[data-lazy-child]")) return;',
+        '  const a = document.createElement("a");',
+        '  a.href = "/lazy-rendered/child";',
+        '  a.dataset.lazyChild = "true";',
+        '  a.textContent = "Lazy Child";',
+        '  document.body.appendChild(a);',
+        '});',
+        '</script>',
+      ].join(''));
+    }
+    if (url.pathname === '/lazy-rendered/child') return send(200, '<title>Lazy Rendered Child</title>');
+    if (url.pathname === '/lazy-rendered/static') return send(200, '<title>Static Child</title>');
+
+    if (url.pathname === '/stop-tree') {
+      const slowLinks = Array.from({ length: 12 }, (_, index) => (
+        `<a href="/stop-tree/slow-${index + 1}">Slow ${index + 1}</a>`
+      )).join('');
+      return send(200, `<title>Stop tree</title><a href="/stop-tree/deep/page">Deep page</a>${slowLinks}`);
+    }
+    if (url.pathname === '/stop-tree/deep/page') return send(200, '<title>Deep page</title>');
+    if (/^\/stop-tree\/slow-\d+$/.test(url.pathname)) {
+      return setTimeout(() => send(200, `<title>${url.pathname.split('/').at(-1)}</title>`), 1500);
+    }
+
     if (url.pathname === '/one-page') {
       return send(200, '<title>One Page</title>');
     }
@@ -215,6 +255,18 @@ async function waitForJobStatus(jobId, accessToken, expectedStatus) {
   throw new Error(`Timed out waiting for job status ${expectedStatus}`);
 }
 
+async function waitForMappedCount(jobId, accessToken, expectedCount) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 15000) {
+    const data = await fetchJson(`${API_BASE}/scan-jobs/${jobId}?include_result=false&access_token=${accessToken}`);
+    const job = data?.job;
+    if (Number(job?.progress?.mapped || job?.progress?.captured || 0) >= expectedCount) return job;
+    if (['failed', 'canceled', 'complete'].includes(job?.status)) return job;
+    await sleep(100);
+  }
+  throw new Error(`Timed out waiting for ${expectedCount} mapped pages`);
+}
+
 async function runCheck() {
   await waitForHealth();
   const withFixture = async (mode, callback) => {
@@ -258,6 +310,14 @@ async function runCheck() {
     assert(renderedResult.scanDiagnostics?.renderedLinksQueued > 0, 'rendered diagnostics should count queued links');
   });
 
+  await withFixture('lazy-rendered', async (base) => {
+    const renderedResult = await scan(`${base}/lazy-rendered`);
+    assert(
+      findTreeNode(renderedResult.root, (node) => node.url === `${base}/lazy-rendered/child`),
+      'rendered discovery should scroll enough to expose lazy-loaded section links'
+    );
+  });
+
   await withFixture('broken-robots-sitemap', async (base) => {
     const brokenJob = await scanExpectingFailure(`${base}/broken-robots-sitemap`);
     assert.strictEqual(brokenJob.status, 'failed', 'broken discovery fixture should fail instead of creating a one-node map');
@@ -286,6 +346,25 @@ async function runCheck() {
     const stoppedJob = await waitForScanJob(created.jobId, created.jobAccessToken, { allowFailure: true });
     assert.strictEqual(stoppedJob.status, 'failed', 'root-only stopped scan should fail instead of creating a one-node map');
     assert(/No map was created/.test(stoppedJob.error || ''), 'stopped root-only failure should explain that no map was created');
+  });
+
+  await withFixture('stop-tree', async (base) => {
+    const created = await createScanJob(`${base}/stop-tree`);
+    await waitForMappedCount(created.jobId, created.jobAccessToken, 2);
+    await fetchJson(`${API_BASE}/scan-jobs/${created.jobId}/stop`, {
+      method: 'POST',
+      body: JSON.stringify({ access_token: created.jobAccessToken }),
+    });
+    const stoppedJob = await waitForScanJob(created.jobId, created.jobAccessToken);
+    assert.strictEqual(stoppedJob.result?.partialReason, 'stopped_by_user');
+    const inferredParent = findTreeNode(
+      stoppedJob.result?.root,
+      (node) => node.url === `${base}/stop-tree/deep`
+    );
+    assert(inferredParent, 'a stopped partial map should keep the captured page hierarchy');
+    assert.strictEqual(inferredParent.isMissing, false, 'unverified parents must not be mislabeled as missing after Stop');
+    assert.strictEqual(inferredParent.isVirtualMissing, false, 'stopped structural parents must not render a missing badge');
+    assert.strictEqual(inferredParent.isStructuralContext, true, 'stopped unverified parents should be structural context');
   });
 
   await withFixture('access-denied', async (base) => {
