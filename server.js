@@ -3572,7 +3572,29 @@ const TRANSIENT_PAGINATION_QUERY_KEYS = new Set([
   'start',
 ]);
 
+const STABLE_COLLECTION_QUERY_KEYS = new Set(
+  Array.from(DISTINCT_COLLECTION_QUERY_KEYS)
+    .filter((key) => !TRANSIENT_PAGINATION_QUERY_KEYS.has(key))
+);
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function hasStableCollectionQuery(urlStr) {
+  try {
+    return Array.from(new URL(urlStr).searchParams.keys()).some((key) => (
+      STABLE_COLLECTION_QUERY_KEYS.has(String(key).toLowerCase())
+    ));
+  } catch {
+    return false;
+  }
+}
+
 function getPageIdentityUrl(meta = {}) {
+  const requestUrl = normalizeUrl(meta.url);
+  if (meta.preserveRouteIdentity && requestUrl) return requestUrl;
   const sourceUrl = normalizeUrl(meta.finalUrl || meta.url);
   const canonicalUrl = normalizeUrl(meta.canonicalUrl);
   if (!sourceUrl) return canonicalUrl;
@@ -3596,6 +3618,47 @@ function getPageIdentityUrl(meta = {}) {
     return canonicalUrl || sourceUrl;
   }
   return canonicalUrl;
+}
+
+function getFocusedCollectionTitle(meta = {}) {
+  const currentTitle = String(meta.title || meta.url || '').trim();
+  if (!meta.preserveRouteIdentity || !meta.url) return currentTitle;
+  try {
+    const requestUrl = new URL(meta.url);
+    const dateValue = requestUrl.searchParams.get('date');
+    const monthValue = requestUrl.searchParams.get('month');
+    const yearValue = requestUrl.searchParams.get('year');
+    let label = '';
+    if (dateValue) {
+      const match = String(dateValue).match(/^(\d{1,2})[-/]\d{1,2}[-/](\d{4})$/);
+      if (match) {
+        const monthIndex = Number(match[1]) - 1;
+        const year = Number(match[2]);
+        if (monthIndex >= 0 && monthIndex < 12) {
+          label = `${MONTH_NAMES[monthIndex]} ${year}`;
+        }
+      }
+    }
+    if (!label && monthValue && yearValue) {
+      const numericMonth = Number(monthValue);
+      const monthLabel = numericMonth >= 1 && numericMonth <= 12
+        ? MONTH_NAMES[numericMonth - 1]
+        : String(monthValue).trim();
+      label = `${monthLabel} ${String(yearValue).trim()}`.trim();
+    }
+    if (!label && yearValue) label = String(yearValue).trim();
+    if (!label && meta.canonicalUrl) {
+      const canonicalUrl = new URL(meta.canonicalUrl, requestUrl);
+      if (canonicalUrl.pathname !== requestUrl.pathname) {
+        label = getTitleFromUrl(requestUrl.toString())
+          .replace(/\b\w/g, (character) => character.toUpperCase());
+      }
+    }
+    if (!label || currentTitle.toLowerCase().includes(label.toLowerCase())) return currentTitle;
+    return `${currentTitle} — ${label}`;
+  } catch {
+    return currentTitle;
+  }
 }
 
 function getPageIdentityKey(meta = {}) {
@@ -4534,7 +4597,7 @@ function extractFocusedContentLinks(html, baseUrl) {
   return Array.from(links);
 }
 
-async function extractRenderedLinks(url, context = null) {
+async function extractRenderedLinks(url, context = null, options = {}) {
   let page = null;
   let ownedContext = null;
   try {
@@ -4568,19 +4631,95 @@ async function extractRenderedLinks(url, context = null) {
       window.scrollTo(0, 0);
     }).catch(() => {});
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
-    const renderedLinks = await page.evaluate(() => (
-      Array.from(document.querySelectorAll('a[href]'))
-        .map((anchor) => anchor.href)
-        .filter(Boolean)
-    ));
-    const renderedHtml = await page.content();
-    const contentLinks = extractFocusedContentLinks(
-      renderedHtml,
-      response?.url?.() || page.url() || url
+    const renderedLinks = new Set();
+    const contentLinks = new Set();
+    const maxContentLinks = Math.max(
+      1,
+      Math.min(5000, Number(options.maxContentLinks || 5000) || 5000)
     );
+    const maxPaginationPages = Math.max(
+      1,
+      Math.min(300, Number(options.maxPaginationPages || 300) || 300)
+    );
+    let paginationPagesVisited = 0;
+    const getContentSignature = () => page.evaluate(() => {
+      const scope = document.querySelector('main') || document.body;
+      return Array.from(scope?.querySelectorAll('a[href]') || [])
+        .filter((anchor) => !anchor.closest('header, nav, footer, aside, [role="navigation"]'))
+        .map((anchor) => `${anchor.href}|${String(anchor.textContent || '').trim()}`)
+        .join('\n');
+    });
+    const collectRenderedPage = async () => {
+      const pageLinks = await page.evaluate(() => (
+        Array.from(document.querySelectorAll('a[href]'))
+          .map((anchor) => anchor.href)
+          .filter(Boolean)
+      ));
+      pageLinks.forEach((link) => renderedLinks.add(link));
+      const renderedHtml = await page.content();
+      extractFocusedContentLinks(
+        renderedHtml,
+        page.url() || response?.url?.() || url
+      ).forEach((link) => contentLinks.add(link));
+      paginationPagesVisited += 1;
+      return getContentSignature();
+    };
+    let contentSignature = await collectRenderedPage();
+    while (
+      paginationPagesVisited < maxPaginationPages
+      && contentLinks.size < maxContentLinks
+    ) {
+      if (typeof options.shouldStop === 'function' && await options.shouldStop()) break;
+      const clickedNext = await page.evaluate(() => {
+        const candidates = Array.from(document.querySelectorAll('a[href], button'));
+        const nextControl = candidates.find((candidate) => {
+          if (
+            candidate.disabled
+            || candidate.getAttribute('aria-disabled') === 'true'
+            || candidate.hasAttribute('disabled')
+          ) {
+            return false;
+          }
+          const rel = String(candidate.getAttribute('rel') || '').toLowerCase();
+          if (rel.split(/\s+/).includes('next')) return true;
+          const label = String(
+            candidate.getAttribute('aria-label')
+            || candidate.getAttribute('title')
+            || candidate.textContent
+            || ''
+          ).trim();
+          if (!/^next(?:\s+(?:page|results?))?$/i.test(label)) return false;
+          const navigation = candidate.closest('nav, [role="navigation"]');
+          if (!navigation) return false;
+          const numberedControls = Array.from(navigation.querySelectorAll('a, button')).filter((control) => {
+            const controlLabel = String(
+              control.getAttribute('aria-label') || control.textContent || ''
+            ).trim();
+            return /^page\s+\d+/i.test(controlLabel) || /^\d+$/.test(controlLabel);
+          });
+          return numberedControls.length >= 2;
+        });
+        if (!nextControl) return false;
+        nextControl.click();
+        return true;
+      });
+      if (!clickedNext) break;
+      await page.waitForFunction((previousSignature) => {
+        const scope = document.querySelector('main') || document.body;
+        const nextSignature = Array.from(scope?.querySelectorAll('a[href]') || [])
+          .filter((anchor) => !anchor.closest('header, nav, footer, aside, [role="navigation"]'))
+          .map((anchor) => `${anchor.href}|${String(anchor.textContent || '').trim()}`)
+          .join('\n');
+        return nextSignature !== previousSignature;
+      }, contentSignature, { timeout: 3000 }).catch(() => {});
+      const nextSignature = await getContentSignature();
+      if (!nextSignature || nextSignature === contentSignature) break;
+      contentSignature = await collectRenderedPage();
+    }
     return {
-      links: Array.from(new Set(renderedLinks)),
-      contentLinks: Array.from(new Set(contentLinks)),
+      links: Array.from(renderedLinks),
+      contentLinks: Array.from(contentLinks).slice(0, maxContentLinks),
+      paginationPagesVisited,
       status: response?.status?.() || null,
       finalUrl: response?.url?.() || url,
       error: null,
@@ -4589,6 +4728,7 @@ async function extractRenderedLinks(url, context = null) {
     return {
       links: [],
       contentLinks: [],
+      paginationPagesVisited: 0,
       status: null,
       finalUrl: url,
       error: error?.message || 'rendered discovery failed',
@@ -4693,12 +4833,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const allowSubdomains = scanScope.allowSubdomains;
   const focusedContentUrls = new Set();
   const focusedListingUrls = new Set();
+  const focusedCollectionUrls = new Set();
   const focusedDiscoveryHelperUrls = new Set();
   const focusedDiscoveryOwnerByUrl = new Map();
   const focusedPathAliases = new Set();
   if (targetedGroupCapture && scanScope.focused) {
     captureUrlSet.forEach((url) => {
-      if (sameOrigin(url, origin)) focusedContentUrls.add(url);
+      if (!sameOrigin(url, origin)) return;
+      focusedContentUrls.add(url);
+      if (hasStableCollectionQuery(url)) focusedCollectionUrls.add(url);
     });
   }
   const focusedAncestorUrlSet = new Set(
@@ -4744,6 +4887,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
     return removed ? normalizeUrl(parsed.toString()) : null;
   };
+  const isFocusedCollectionVariantUrl = (candidate, sourceUrl) => {
+    const normalized = normalizeUrl(candidate);
+    const normalizedSource = normalizeUrl(sourceUrl);
+    if (!normalized || !normalizedSource || !hasStableCollectionQuery(normalized)) return false;
+    try {
+      const parsed = new URL(normalized);
+      const source = new URL(normalizedSource);
+      return parsed.origin === source.origin && parsed.pathname === source.pathname;
+    } catch {
+      return false;
+    }
+  };
   const scanDiagnostics = {
     seedUrl: seed,
     focused: scanScope.focused,
@@ -4779,6 +4934,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     renderedDiscoveryTried: false,
     renderedLinksFound: 0,
     renderedLinksQueued: 0,
+    renderedPaginationPagesVisited: 0,
     renderedDiscoveryError: null,
     treeRepairApplied: false,
     treeRepairAdded: 0,
@@ -4878,6 +5034,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       focusedDiscoveryHelperUrls.add(normalized);
       focusedDiscoveryOwnerByUrl.set(normalized, collectionUrl || seed);
       focusedContentUrls.add(normalized);
+      if (collectionUrl) {
+        focusedCollectionUrls.add(collectionUrl);
+        focusedContentUrls.add(collectionUrl);
+      }
     }
     const candidateSegments = new URL(normalized).pathname.split('/').filter(Boolean);
     const focusSegments = scanScope.focusPath.split('/').filter(Boolean);
@@ -5036,10 +5196,22 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       return false;
     }
     const listingOwner = getFocusedDiscoveryOwner(normalizedSource);
+    if (isFocusedCollectionVariantUrl(normalized, normalizedSource)) {
+      focusedCollectionUrls.add(normalizedSource);
+      focusedCollectionUrls.add(normalized);
+      focusedContentUrls.add(normalizedSource);
+      focusedContentUrls.add(normalized);
+      return false;
+    }
     if (isFocusedDiscoveryHelperUrl(normalized, normalizedSource)) {
       focusedDiscoveryHelperUrls.add(normalized);
       focusedDiscoveryOwnerByUrl.set(normalized, listingOwner);
       focusedContentUrls.add(normalized);
+      const collectionUrl = getFocusedDiscoveryCollectionUrl(normalized);
+      if (collectionUrl) {
+        focusedCollectionUrls.add(collectionUrl);
+        focusedContentUrls.add(collectionUrl);
+      }
       return false;
     }
     const sourceListingKey = focusedListingOrder.get(normalizedSource);
@@ -6011,11 +6183,21 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (scanScope.focused) {
       const helperCollectionLinks = [];
       links.forEach((link) => {
+        if (isFocusedCollectionVariantUrl(link, url)) {
+          focusedCollectionUrls.add(normalizeUrl(url));
+          focusedCollectionUrls.add(normalizeUrl(link));
+          focusedContentUrls.add(normalizeUrl(url));
+          focusedContentUrls.add(normalizeUrl(link));
+        }
         if (!isFocusedDiscoveryHelperUrl(link, url)) return;
         const collectionUrl = getFocusedDiscoveryCollectionUrl(link);
         focusedDiscoveryHelperUrls.add(link);
         focusedDiscoveryOwnerByUrl.set(link, collectionUrl || getFocusedDiscoveryOwner(url));
         focusedContentUrls.add(link);
+        if (collectionUrl) {
+          focusedCollectionUrls.add(collectionUrl);
+          focusedContentUrls.add(collectionUrl);
+        }
         if (
           collectionUrl
           && collectionUrl !== normalizeUrl(url)
@@ -6262,8 +6444,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const runRenderedDiscoveryFallback = async () => {
     scanDiagnostics.renderedDiscoveryTried = true;
-    const rendered = await extractRenderedLinks(seed, authContext);
+    const rendered = await extractRenderedLinks(seed, authContext, {
+      maxContentLinks: pageLimit === null ? 5000 : Math.max(1, pageLimit - 1),
+      shouldStop: pollJobStatus,
+    });
     scanDiagnostics.renderedLinksFound = rendered.links.length;
+    scanDiagnostics.renderedPaginationPagesVisited = rendered.paginationPagesVisited || 0;
     if (rendered.error) {
       scanDiagnostics.renderedDiscoveryError = rendered.error;
       recordDiscoveryError({
@@ -6284,11 +6470,20 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       });
     const renderedCollectionLinks = [];
     normalizedRenderedLinks.forEach((link) => {
+      if (isFocusedCollectionVariantUrl(link, seed)) {
+        focusedCollectionUrls.add(seed);
+        focusedCollectionUrls.add(link);
+        focusedContentUrls.add(link);
+      }
       if (!isFocusedDiscoveryHelperUrl(link, seed)) return;
       const collectionUrl = getFocusedDiscoveryCollectionUrl(link);
       focusedDiscoveryHelperUrls.add(link);
       focusedDiscoveryOwnerByUrl.set(link, collectionUrl || seed);
       focusedContentUrls.add(link);
+      if (collectionUrl) {
+        focusedCollectionUrls.add(collectionUrl);
+        focusedContentUrls.add(collectionUrl);
+      }
       if (collectionUrl && collectionUrl !== seed && isWithinFocusedPathAlias(collectionUrl)) {
         renderedCollectionLinks.push(collectionUrl);
       }
@@ -6550,6 +6745,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   }
 
   if (scanScope.focused) {
+    focusedCollectionUrls.forEach((url) => {
+      const meta = pageMap.get(url);
+      if (meta) meta.preserveRouteIdentity = true;
+    });
     const seedIdentity = getPageIdentityKey(pageMap.get(seed));
     pageMap.forEach((meta, url) => {
       if (url === seed || focusedDiscoveryHelperUrls.has(url)) return;
@@ -6598,7 +6797,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       url,
       finalUrl: meta.finalUrl || url,
       canonicalUrl: meta.canonicalUrl || null,
-      title: meta.title || url,
+      title: getFocusedCollectionTitle(meta) || url,
       pageType: url === seed && !scanScope.focused ? PAGE_TYPE_HOME : PAGE_TYPE_PAGE,
       nodeKind: undefined,
       isBlockedBoundary: Boolean(
@@ -6668,7 +6867,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     nodes.delete(url);
   });
 
-  const canonicalKeyFor = (node) => getPageIdentityKey(node);
+  const canonicalKeyFor = (node) => getPageIdentityKey(
+    focusedCollectionUrls.has(node?.url)
+      ? { ...node, preserveRouteIdentity: true }
+      : node
+  );
   const rootNodeBeforeGrouping = nodes.get(rootUrl);
   const rootRedirectAliasUrl = normalizeUrl(rootNodeBeforeGrouping?.finalUrl);
   const shouldInferPathParents = (node) => {

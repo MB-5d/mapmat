@@ -187,26 +187,50 @@ function createFixtureServer() {
     }
     if (url.pathname === '/section/archive-months') {
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end('<html><head><title>Art and design</title></head><body><main><a href="/section/archive-months/archive?start=25">Load more stories</a></main></body></html>');
+      res.end('<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><a href="/section/archive-months/archive?start=25">Load more stories</a></main></body></html>');
       return;
     }
     if (url.pathname === '/section/archive-months/archive' && !url.searchParams.has('date')) {
-      const monthLinks = Array.from({ length: 21 }, (_, index) => (
-        `<a href="/section/archive-months/archive?date=${index + 1}-28-2026">Month ${index + 1}</a>`
-      )).join('');
+      const monthLinks = Array.from({ length: 21 }, (_, index) => {
+        const month = (index % 12) + 1;
+        const year = 2026 - Math.floor(index / 12);
+        return `<a href="/section/archive-months/archive?date=${month}-28-${year}">Month ${month} ${year}</a>`;
+      }).join('');
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<html><head><title>Archive months</title></head><body><main><ol><li>${monthLinks}</li></ol></main></body></html>`);
+      res.end(`<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><ol><li>${monthLinks}</li></ol></main></body></html>`);
       return;
     }
     if (url.pathname === '/section/archive-months/archive' && url.searchParams.has('date')) {
-      const month = Math.max(1, Number(String(url.searchParams.get('date')).split('-')[0]) || 1);
+      const [monthValue, , yearValue] = String(url.searchParams.get('date')).split('-');
+      const month = Math.max(1, Number(monthValue) || 1);
+      const year = Math.max(2000, Number(yearValue) || 2026);
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<html><head><title>Archive month ${month}</title><link rel="canonical" href="/section/archive-months/archive"></head><body><main><ol><li><p><a href="/2026/${String(month).padStart(2, '0')}/28/archive-story-${month}">Archive story ${month}</a></p></li></ol></main></body></html>`);
+      res.end(`<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><ol><li><p><a href="/${year}/${String(month).padStart(2, '0')}/28/archive-story-${year}-${month}">Archive story ${month} ${year}</a></p></li></ol></main></body></html>`);
       return;
     }
-    if (/^\/2026\/\d{2}\/28\/archive-story-\d+$/.test(url.pathname)) {
+    if (/^\/20\d{2}\/\d{2}\/28\/archive-story-20\d{2}-\d+$/.test(url.pathname)) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Archive story</h1></article></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/client-pagination') {
+      const page = Math.max(1, Math.min(3, Number(url.searchParams.get('clientPage') || 1) || 1));
+      const start = (page - 1) * 10 + 1;
+      const end = Math.min(25, start + 9);
+      const jobs = Array.from({ length: end - start + 1 }, (_, index) => {
+        const job = start + index;
+        return `<article><h2><a href="/jobs/client-result-${job}">Client result ${job}</a></h2></article>`;
+      }).join('');
+      const nextButton = page < 3
+        ? `<button type="button" aria-label="Next page" onclick="window.location.search='?clientPage=${page + 1}'">Next</button>`
+        : '<button type="button" aria-label="Next page" disabled>Next</button>';
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Client pagination</title></head><body><main id="app">${jobs}<nav aria-label="Page selection"><button type="button" aria-label="Page 1"${page === 1 ? ' aria-current="page"' : ''}>1</button><button type="button" aria-label="Page 2"${page === 2 ? ' aria-current="page"' : ''}>2</button><button type="button" aria-label="Page 3. Last page"${page === 3 ? ' aria-current="page"' : ''}>3</button>${nextButton}</nav></main></body></html>`);
+      return;
+    }
+    if (/^\/jobs\/client-result-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Client result</h1></article></body></html>`);
       return;
     }
     if (url.pathname === '/section/content-grid') {
@@ -869,6 +893,31 @@ async function main() {
       'nested pagination listings should keep the primary article under the focused page'
     );
 
+    const clientPaginationResult = await createScan({
+      url: `${fixtureOrigin}/section/client-pagination`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const clientPaginationNodes = flattenTree(clientPaginationResult.root);
+    const clientPaginationTarget = clientPaginationNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/client-pagination`
+    );
+    const clientPaginationJobs = clientPaginationNodes.filter((node) => (
+      String(node.url || '').startsWith(`${fixtureOrigin}/jobs/client-result-`)
+    ));
+    const clientPaginationPlaceholder = clientPaginationNodes.find(
+      (node) => node.nodeKind === 'deferred-group'
+    );
+    assert.equal(
+      clientPaginationJobs.length,
+      20,
+      'client-rendered result pagination should expose the representative sample'
+    );
+    assert.equal(clientPaginationPlaceholder?.remainingCount, 5);
+    assert.equal(clientPaginationPlaceholder?.capturedCount, 20);
+    assert.equal(clientPaginationPlaceholder?.parentUrl, clientPaginationTarget.url);
+    assert.equal(clientPaginationResult.pageCountSummary.totalDiscoveredPageCount, 26);
+
     // NYT-style dated article hierarchy discovered from month listing pages.
     const archiveResult = await createScan({
       url: `${fixtureOrigin}/section/archive-months`,
@@ -888,15 +937,30 @@ async function main() {
     const archiveMonthNodes = archiveNodes.filter((node) => (
       String(node.url || '').startsWith(`${fixtureOrigin}/section/archive-months/archive?date=`)
     ));
-    const archivePlaceholder = archivePage.children.find(
+    const archivePlaceholder = archivePage?.children?.find(
       (node) => node.nodeKind === 'deferred-group'
     );
-    const archiveArticleNodes = archiveNodes.filter((node) => (
-      String(node.url || '').startsWith(`${fixtureOrigin}/2026/`)
-      && /\/archive-story-\d+$/.test(node.url)
-    ));
-    assert.equal(archivePage?.parentUrl, archiveTarget.url, 'the archive should remain a visible child of the focused section');
+    const archiveArticleNodes = archiveNodes.filter((node) => {
+      try {
+        const articleUrl = new URL(node.url);
+        return articleUrl.origin === fixtureOrigin
+          && /^\/20\d{2}\//.test(articleUrl.pathname)
+          && /\/archive-story-20\d{2}-\d+$/.test(articleUrl.pathname);
+      } catch {
+        return false;
+      }
+    });
+    assert.equal(
+      archivePage?.parentUrl,
+      archiveTarget.url,
+      'the archive should remain a visible child of the focused section'
+    );
     assert.equal(archiveMonthNodes.length, 20, 'dated archive views should remain visible, distinct pages');
+    assert.equal(
+      archiveMonthNodes.every((node) => node.isDuplicate !== true),
+      true,
+      'dated collection views with a shared canonical URL must not become duplicate orphans'
+    );
     assert.equal(
       archiveNodes.some((node) => String(node.url || '').includes('?start=')),
       false,
@@ -921,6 +985,11 @@ async function main() {
       false,
       'off-path article URL folders must not become structural map nodes'
     );
+    assert.equal(
+      new Set(archiveMonthNodes.map((node) => node.title)).size,
+      archiveMonthNodes.length,
+      'dated collection views should use distinct month and year labels'
+    );
     archiveArticleNodes.forEach((node) => {
       assert.equal(
         archiveMonthNodes.some((monthNode) => monthNode.url === node.parentUrl),
@@ -928,6 +997,25 @@ async function main() {
         'archive stories should remain under the month page that discovered them'
       );
     });
+    const archiveCaptureResult = await createScan({
+      url: `${fixtureOrigin}/section/archive-months`,
+      maxPages: archivePlaceholder.deferredEntries.length,
+      options: {
+        repetitiveCapture: {
+          groupId: archivePlaceholder.deferredGroupId,
+          entries: archivePlaceholder.deferredEntries,
+        },
+      },
+    }, authToken);
+    const capturedArchiveMonthUrl = archivePlaceholder.deferredEntries[0].url;
+    const capturedArchiveMonth = [
+      ...flattenTree(archiveCaptureResult.root),
+      ...(archiveCaptureResult.orphans || []).flatMap((node) => flattenTree(node, [])),
+    ].find((node) => node.url === capturedArchiveMonthUrl);
+    assert.equal(archiveCaptureResult.captureSummary?.capturedCount, 1);
+    assert.ok(capturedArchiveMonth, 'Capture now should return the deferred archive month');
+    assert.notEqual(capturedArchiveMonth.isDuplicate, true);
+    assert.match(capturedArchiveMonth.title, /December 2026/);
 
     const contentGridResult = await createScan({
       url: `${fixtureOrigin}/section/content-grid`,
