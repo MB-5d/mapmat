@@ -1296,6 +1296,25 @@ const DEFAULT_CAPTURE_LAYERS = Object.freeze({
   pageNumbers: true,
 });
 
+const DEFERRED_CAPTURE_BATCH_SIZE = 20;
+
+const createDefaultLayerToggleState = () => ({
+  layers: { ...DEFAULT_CAPTURE_LAYERS },
+  scanLayerVisibility: { ...DEFAULT_SCAN_LAYER_VISIBILITY },
+  changeFilters: {
+    statuses: ANNOTATION_STATUS_OPTIONS.reduce((acc, option) => {
+      acc[option.value] = true;
+      return acc;
+    }, {}),
+  },
+});
+
+const getDeferredCaptureBatchEntries = (entries = []) => (
+  (Array.isArray(entries) ? entries : [])
+    .filter((entry) => entry?.url)
+    .slice(0, DEFERRED_CAPTURE_BATCH_SIZE)
+);
+
 const buildFigmaCaptureCommentsByNode = ({ focusNode, secondaryNode }) => {
   const primaryNodeId = String(focusNode?.id || '');
   const secondaryNodeId = String(
@@ -3404,6 +3423,8 @@ export const __testing = {
   mergeRescanResults,
   applyDeferredCaptureResult,
   reconcileDeferredCaptureScanMeta,
+  createDefaultLayerToggleState,
+  getDeferredCaptureBatchEntries,
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
   getPersistedScanMetaFromRoot,
@@ -3847,13 +3868,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [mapOrientation, setMapOrientation] = useState(() => (
     currentRoute?.orientation || normalizeMapOrientation(currentRoute?.searchParams?.get('orientation'))
   ));
-  const [layers, setLayers] = useState(() => ({ ...DEFAULT_CAPTURE_LAYERS }));
-  const [changeFilters, setChangeFilters] = useState(() => ({
-    statuses: ANNOTATION_STATUS_OPTIONS.reduce((acc, option) => {
-      acc[option.value] = true;
-      return acc;
-    }, {}),
-  }));
+  const [layers, setLayers] = useState(() => createDefaultLayerToggleState().layers);
+  const [changeFilters, setChangeFilters] = useState(() => createDefaultLayerToggleState().changeFilters);
   const [selectedNodeIds, setSelectedNodeIds] = useState(new Set());
   const [selectionBox, setSelectionBox] = useState(null);
 
@@ -6266,11 +6282,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [getScreenshotCreditPreview, guardAccountCanCreateWork, showConfirm, showEntitlementLock]);
 
+  const resetLayerToggles = useCallback(() => {
+    const defaults = createDefaultLayerToggleState();
+    setLayers(defaults.layers);
+    setScanLayerVisibility(defaults.scanLayerVisibility);
+    setChangeFilters(defaults.changeFilters);
+  }, []);
+
   const resetScanLayers = useCallback(() => {
     setScanMeta({ brokenLinks: [] });
     setScanLayerAvailability({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
-    setScanLayerVisibility({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
-  }, []);
+    resetLayerToggles();
+  }, [resetLayerToggles]);
 
   const clearCanvas = async () => {
     if (hasMap && !currentMap?.id) {
@@ -12056,7 +12079,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setConnectionColors(version.connectionColors || DEFAULT_CONNECTION_COLORS);
     setScanMeta(hydratedVersionScanMeta);
     setScanLayerAvailability(versionScanLayerAvailability);
-    setScanLayerVisibility(versionScanLayerAvailability);
+    resetLayerToggles();
     setUrlInput(hydratedVersion.root?.url || '');
     setActiveVersionId(version.id);
     setShowVersionEditPrompt(false);
@@ -12507,7 +12530,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setScanMeta(hydratedScanMeta);
     setScanLayerAvailability(displayScanLayerAvailability);
-    setScanLayerVisibility(displayScanLayerAvailability);
     setCurrentMap({
       ...map,
       root: hydratedMap.root,
@@ -13696,7 +13718,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         blockedSections: data.blockedSections || [],
       });
       setScanLayerAvailability(displayScanLayerAvailability);
-      setScanLayerVisibility(displayScanLayerAvailability);
+      resetLayerToggles();
       setCurrentMap(null);
       navigateToRoute(createAppHomeRoute(), { replace: true });
       try {
@@ -13897,9 +13919,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const captureDeferredGroup = async (placeholderNode) => {
     const groupId = String(placeholderNode?.deferredGroupId || '').trim();
-    const entries = Array.isArray(placeholderNode?.deferredEntries)
-      ? placeholderNode.deferredEntries.filter((entry) => entry?.url)
-      : [];
+    const entries = getDeferredCaptureBatchEntries(placeholderNode?.deferredEntries);
     if (!groupId || entries.length === 0 || capturingDeferredGroupIds.has(groupId)) return;
 
     const scanScope = scanMetaRef.current?.scanScope || {};
@@ -13940,6 +13960,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             groupId,
             Math.max(0, Number(placeholderNode.capturedCount || 0) || 0),
             entries.length,
+            Date.now(),
           ].join(':'),
         }
       );
@@ -14066,15 +14087,22 @@ export default function App({ currentRoute, navigateToRoute }) {
       }, 'Captured');
       setLastScanAt(new Date().toISOString());
       setLargeMapSceneRefreshKey((value) => value + 1);
+      const retryableBatchCount = Array.isArray(completedJob.result.captureSummary?.remainingEntries)
+        ? completedJob.result.captureSummary.remainingEntries.length
+        : 0;
       showToast(
         applied.capturedCount > 0
           ? (
             applied.remainingCount > 0
-              ? `Captured ${applied.capturedCount.toLocaleString()} pages. ${applied.remainingCount.toLocaleString()} can be retried.`
+              ? (
+                retryableBatchCount > 0
+                  ? `Captured ${applied.capturedCount.toLocaleString()} pages. ${retryableBatchCount.toLocaleString()} could not be captured; ${applied.remainingCount.toLocaleString()} remaining.`
+                  : `Captured ${applied.capturedCount.toLocaleString()} pages. ${applied.remainingCount.toLocaleString()} remaining.`
+              )
               : `Captured ${applied.capturedCount.toLocaleString()} pages.`
           )
           : `${applied.terminalCount.toLocaleString()} unavailable pages were removed from this group.`,
-        applied.remainingCount > 0 || applied.capturedCount === 0 ? 'warning' : 'success'
+        retryableBatchCount > 0 || applied.capturedCount === 0 ? 'warning' : 'success'
       );
       refreshCurrentUser();
     } catch (error) {

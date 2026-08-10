@@ -642,6 +642,22 @@ describe('large map viewport behavior', () => {
 });
 
 describe('deferred page capture', () => {
+  test('captures large deferred groups in stable batches', () => {
+    const entries = Array.from({ length: 45 }, (_, index) => ({
+      url: `https://example.com/jobs/${index + 1}`,
+    }));
+
+    expect(__testing.getDeferredCaptureBatchEntries(entries)).toEqual(entries.slice(0, 20));
+  });
+
+  test('resets every layer toggle to on', () => {
+    const defaults = __testing.createDefaultLayerToggleState();
+
+    expect(Object.values(defaults.layers).every(Boolean)).toBe(true);
+    expect(Object.values(defaults.scanLayerVisibility).every(Boolean)).toBe(true);
+    expect(Object.values(defaults.changeFilters.statuses).every(Boolean)).toBe(true);
+  });
+
   test('reconciles report entitlement counts after a partial group capture', () => {
     const reconciled = __testing.reconcileDeferredCaptureScanMeta({
       current: {

@@ -4770,10 +4770,13 @@ function normalizeRepetitiveCaptureRequest(options = {}, scanScope = null, pageA
   const request = options?.repetitiveCapture;
   if (!request || typeof request !== 'object') return null;
   const groupId = String(request.groupId || '').trim().slice(0, 120);
+  const captureLimit = pageAllowance === null
+    ? REPETITIVE_GROUP_CAPTURE_LIMIT
+    : Math.min(REPETITIVE_GROUP_CAPTURE_LIMIT, pageAllowance);
   const seen = new Set();
   const entries = [];
   (Array.isArray(request.entries) ? request.entries : []).forEach((entry, index) => {
-    if (pageAllowance !== null && entries.length >= pageAllowance) return;
+    if (entries.length >= captureLimit) return;
     const url = normalizeUrl(typeof entry === 'string' ? entry : entry?.url);
     if (!url || seen.has(url)) return;
     if (scanScope?.focused && !sameOrigin(url, scanScope.origin)) return;
@@ -6868,7 +6871,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   });
 
   const canonicalKeyFor = (node) => getPageIdentityKey(
-    focusedCollectionUrls.has(node?.url)
+    (
+      focusedCollectionUrls.has(node?.url)
+      || (scanScope.focused && hasStableCollectionQuery(node?.url))
+    )
       ? { ...node, preserveRouteIdentity: true }
       : node
   );

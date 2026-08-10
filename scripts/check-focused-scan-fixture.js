@@ -187,7 +187,12 @@ function createFixtureServer() {
     }
     if (url.pathname === '/section/archive-months') {
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end('<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><a href="/section/archive-months/archive?start=25">Load more stories</a></main></body></html>');
+      res.end('<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><a href="/section/archive-months/archive?start=25">Load more stories</a><a href="/section/archive-months/direct-date?date=1-31-2026">January archive</a></main></body></html>');
+      return;
+    }
+    if (url.pathname === '/section/archive-months/direct-date' && url.searchParams.has('date')) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main>January archive</main></body></html>');
       return;
     }
     if (url.pathname === '/section/archive-months/archive' && !url.searchParams.has('date')) {
@@ -934,6 +939,9 @@ async function main() {
     const archivePage = archiveNodes.find(
       (node) => node.url === `${fixtureOrigin}/section/archive-months/archive`
     );
+    const directlyDiscoveredArchiveDate = archiveNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/archive-months/direct-date?date=1-31-2026`
+    );
     const archiveMonthNodes = archiveNodes.filter((node) => (
       String(node.url || '').startsWith(`${fixtureOrigin}/section/archive-months/archive?date=`)
     ));
@@ -960,6 +968,11 @@ async function main() {
       archiveMonthNodes.every((node) => node.isDuplicate !== true),
       true,
       'dated collection views with a shared canonical URL must not become duplicate orphans'
+    );
+    assert.notEqual(
+      directlyDiscoveredArchiveDate?.isDuplicate,
+      true,
+      'directly discovered stable date routes must keep their URL identity even outside the archive pager'
     );
     assert.equal(
       archiveNodes.some((node) => String(node.url || '').includes('?start=')),
