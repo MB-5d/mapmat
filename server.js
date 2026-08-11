@@ -4837,6 +4837,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const focusedContentUrls = new Set();
   const focusedListingUrls = new Set();
   const focusedCollectionUrls = new Set();
+  const targetedCollectionChildrenByParent = new Map();
   const focusedDiscoveryHelperUrls = new Set();
   const focusedDiscoveryOwnerByUrl = new Map();
   const focusedPathAliases = new Set();
@@ -5241,6 +5242,30 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       referrerMap.set(normalized, listingOwner);
     }
     return true;
+  };
+
+  const recordTargetedCollectionChild = (candidate, sourceUrl, sourceOrder = 0) => {
+    if (!targetedGroupCapture || !scanScope.focused) return;
+    const normalized = normalizeUrl(candidate);
+    const normalizedSource = normalizeUrl(sourceUrl);
+    if (
+      !normalized
+      || !normalizedSource
+      || !captureUrlSet.has(normalizedSource)
+      || !(focusedCollectionUrls.has(normalizedSource) || hasStableCollectionQuery(normalizedSource))
+    ) {
+      return;
+    }
+    if (!targetedCollectionChildrenByParent.has(normalizedSource)) {
+      targetedCollectionChildrenByParent.set(normalizedSource, new Map());
+    }
+    const children = targetedCollectionChildrenByParent.get(normalizedSource);
+    if (children.has(normalized)) return;
+    children.set(normalized, {
+      url: normalized,
+      source: 'focused_collection_child',
+      order: Math.max(0, Math.floor(Number(sourceOrder) || 0)),
+    });
   };
 
   const recordDiscoveryError = ({ source, url, status = null, message = '' }) => {
@@ -6182,7 +6207,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       && classification.shouldExtractLinks
     ) {
       extractFocusedContentLinks(html, finalUrl || url).forEach((link, index) => {
-        registerFocusedContentLink(link, url, index);
+        const registered = registerFocusedContentLink(link, url, index);
+        if (registered) recordTargetedCollectionChild(link, url, index);
         if (!links.includes(link)) links.push(link);
       });
     }
@@ -7340,6 +7366,56 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   }
 
   const repetitiveGroups = [];
+  if (targetedGroupCapture) {
+    targetedCollectionChildrenByParent.forEach((childrenByUrl, parentUrl) => {
+      const parentNode = nodes.get(parentUrl) || orphanMap.get(parentUrl);
+      if (!parentNode) return;
+      const entries = Array.from(childrenByUrl.values())
+        .sort((left, right) => left.order - right.order || compareNaturalScanUrls(left.url, right.url))
+        .map((entry) => {
+          const preservedScanNumber = preservedNumberMap.get(entry.url) || '';
+          const nestedScanNumber = parentNode.scanNumber
+            ? `${parentNode.scanNumber}.${entry.order + 1}`
+            : preservedScanNumber;
+          return {
+            ...entry,
+            scanNumber: (
+              parentNode.scanNumber
+              && !preservedScanNumber.startsWith(`${parentNode.scanNumber}.`)
+            ) ? nestedScanNumber : preservedScanNumber || nestedScanNumber,
+          };
+        });
+      if (entries.length === 0) return;
+      const groupKey = `${parentUrl}|visible-parent`;
+      const groupId = getStableRepetitiveGroupId(groupKey);
+      entries.forEach((entry) => deferredOutcomeUrls.add(entry.url));
+      repetitiveGroups.push({
+        id: groupId,
+        key: groupKey,
+        parentUrl,
+        shape: 'focused_collection_child',
+        sourceGroupIds: [],
+        capturedCount: 0,
+        deferredCount: entries.length,
+        totalCount: entries.length,
+        entries,
+      });
+      pushUniqueChild(parentNode, {
+        id: `placeholder_${groupId}`,
+        url: '',
+        title: `${entries.length} more pages like this`,
+        nodeKind: 'deferred-group',
+        deferredGroupId: groupId,
+        deferredGroupKey: groupKey,
+        parentUrl,
+        capturedCount: 0,
+        remainingCount: entries.length,
+        totalCount: entries.length,
+        deferredEntries: entries,
+        children: [],
+      });
+    });
+  }
   if (!targetedGroupCapture) {
     const groupsByVisibleParent = new Map();
     repetitiveGroupsById.forEach((group) => {

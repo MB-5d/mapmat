@@ -1041,6 +1041,25 @@ async function main() {
     assert.ok(capturedArchiveMonth, 'Capture now should return the deferred archive month');
     assert.notEqual(capturedArchiveMonth.isDuplicate, true);
     assert.match(capturedArchiveMonth.title, /December 2026/);
+    const capturedArchiveArticlePlaceholder = capturedArchiveMonth.children?.find(
+      (node) => node.nodeKind === 'deferred-group'
+    );
+    assert.equal(
+      capturedArchiveArticlePlaceholder?.remainingCount,
+      1,
+      'capturing a deferred collection page should expose its newly discovered article group'
+    );
+    assert.equal(capturedArchiveArticlePlaceholder?.parentUrl, capturedArchiveMonth.url);
+    assert.match(
+      capturedArchiveArticlePlaceholder?.deferredEntries?.[0]?.url || '',
+      /\/archive-story-20\d{2}-\d+$/
+    );
+    const capturedArchiveArticleNumber = capturedArchiveArticlePlaceholder?.deferredEntries?.[0]?.scanNumber || '';
+    assert.equal(
+      capturedArchiveArticleNumber.startsWith(`${capturedArchiveMonth.scanNumber}.`),
+      true,
+      `newly discovered archive articles should stay beneath ${capturedArchiveMonth.scanNumber}; got ${capturedArchiveArticleNumber}`
+    );
 
     const contentGridResult = await createScan({
       url: `${fixtureOrigin}/section/content-grid`,

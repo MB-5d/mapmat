@@ -684,6 +684,12 @@ describe('deferred page capture', () => {
       capturedCount: 23,
       remainingCount: 386,
       visiblePageCount: 26,
+      discoveredGroups: [{
+        id: 'archive-article-group',
+        capturedCount: 0,
+        deferredCount: 3,
+        totalCount: 3,
+      }],
     });
 
     expect(reconciled.entitlement).toMatchObject({
@@ -696,11 +702,17 @@ describe('deferred page capture', () => {
       deferredCount: 386,
       totalCount: 419,
     });
+    expect(reconciled.repetitiveGroups[1]).toMatchObject({
+      id: 'archive-article-group',
+      capturedCount: 0,
+      deferredCount: 3,
+      totalCount: 3,
+    });
     expect(reconciled.pageCountSummary).toEqual({
       capturedPageCount: 36,
-      deferredPageCount: 386,
-      estimatedRemainingPageCount: 386,
-      totalDiscoveredPageCount: 422,
+      deferredPageCount: 389,
+      estimatedRemainingPageCount: 389,
+      totalDiscoveredPageCount: 425,
     });
   });
 
@@ -734,7 +746,18 @@ describe('deferred page capture', () => {
           id: 'post-11',
           url: 'https://example.com/blog/post-11',
           title: 'Post 11',
-          children: [],
+          children: [{
+            id: 'placeholder-post-11-articles',
+            nodeKind: 'deferred-group',
+            deferredGroupId: 'post-11-articles',
+            remainingCount: 3,
+            deferredEntries: [
+              { url: 'https://example.com/articles/1' },
+              { url: 'https://example.com/articles/2' },
+              { url: 'https://example.com/articles/3' },
+            ],
+            children: [],
+          }],
         }],
       },
       captureSummary: {
@@ -752,6 +775,11 @@ describe('deferred page capture', () => {
     expect(applied.remainingCount).toBe(1);
     expect(blogChildren[0].url).toBe('https://example.com/blog/post-11');
     expect(blogChildren[0].scanNumber).toBe('2.11');
+    expect(blogChildren[0].children[0]).toMatchObject({
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'post-11-articles',
+      remainingCount: 3,
+    });
     expect(blogChildren[1].remainingCount).toBe(1);
     expect(blogChildren[1].deferredEntries[0].url).toBe('https://example.com/blog/post-12');
   });

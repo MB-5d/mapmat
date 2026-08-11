@@ -3234,7 +3234,7 @@ const applyDeferredCaptureResult = ({
     if (!normalized || !successfulUrls.has(normalized)) return;
     capturedNodesByUrl.set(normalized, {
       ...node,
-      children: [],
+      children: (node.children || []).map(cloneNodeTree),
       repetitiveGroupId: placeholderNode.deferredGroupId,
     });
   });
@@ -3351,6 +3351,7 @@ const reconcileDeferredCaptureScanMeta = ({
   removedCount = 0,
   remainingCount,
   visiblePageCount,
+  discoveredGroups = [],
 }) => {
   const currentSummary = current?.pageCountSummary || {};
   const normalizedCapturedCount = Math.max(0, Number(capturedCount || 0) || 0);
@@ -3362,7 +3363,7 @@ const reconcileDeferredCaptureScanMeta = ({
   const reconciledVisiblePageCount = entitlementVisibleLimit
     ? Math.min(normalizedVisiblePageCount, entitlementVisibleLimit)
     : normalizedVisiblePageCount;
-  const repetitiveGroups = (current?.repetitiveGroups || []).map((group) => (
+  const currentRepetitiveGroups = (current?.repetitiveGroups || []).map((group) => (
     group?.id === groupId
       ? {
         ...group,
@@ -3372,6 +3373,18 @@ const reconcileDeferredCaptureScanMeta = ({
       }
       : group
   )).filter((group) => Math.max(0, Number(group?.deferredCount || 0) || 0) > 0);
+  const currentGroupIds = new Set(currentRepetitiveGroups.map((group) => group?.id).filter(Boolean));
+  const newRepetitiveGroups = (Array.isArray(discoveredGroups) ? discoveredGroups : [])
+    .filter((group) => (
+      group?.id
+      && !currentGroupIds.has(group.id)
+      && Math.max(0, Number(group?.deferredCount || 0) || 0) > 0
+    ));
+  const newlyDiscoveredDeferredCount = newRepetitiveGroups.reduce(
+    (total, group) => total + Math.max(0, Number(group?.deferredCount || 0) || 0),
+    0
+  );
+  const repetitiveGroups = [...currentRepetitiveGroups, ...newRepetitiveGroups];
 
   return {
     ...current,
@@ -3387,16 +3400,22 @@ const reconcileDeferredCaptureScanMeta = ({
         + normalizedCapturedCount,
       deferredPageCount: Math.max(
         0,
-        Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0) - normalizedResolvedCount
+        Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
+          - normalizedResolvedCount
+          + newlyDiscoveredDeferredCount
       ),
       estimatedRemainingPageCount: Math.max(
         0,
-        Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0) - normalizedResolvedCount
+        Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0)
+          - normalizedResolvedCount
+          + newlyDiscoveredDeferredCount
       ),
       totalDiscoveredPageCount: Math.max(
-        Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0),
+        Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0)
+          + newlyDiscoveredDeferredCount,
         Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
           + Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
+          + newlyDiscoveredDeferredCount
       ),
     },
   };
@@ -14077,6 +14096,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         removedCount: applied.terminalCount,
         remainingCount: applied.remainingCount,
         visiblePageCount,
+        discoveredGroups: completedJob.result.repetitiveGroups,
       }));
       setDraftVersionFromSnapshot({
         root: applied.root,
