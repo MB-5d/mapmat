@@ -6114,7 +6114,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const title = classification.shouldExtractMetadata
       ? extractTitle(html, finalUrl || url)
       : (classification.isErrorStatus ? (classification.title || classification.fallbackTitle) : classification.fallbackTitle);
-    const parentUrl = getParentUrl(finalUrl || url);
+    const preserveFocusedCollectionRoute = scanScope.focused && (
+      focusedCollectionUrls.has(url) || hasStableCollectionQuery(url)
+    );
+    const parentUrl = getParentUrl(preserveFocusedCollectionRoute ? url : (finalUrl || url));
     const canonicalUrl = classification.shouldExtractMetadata
       ? (normalizeUrl(seoMetadata.canonicalUrl) || extractCanonicalUrl(html, finalUrl || url))
       : null;

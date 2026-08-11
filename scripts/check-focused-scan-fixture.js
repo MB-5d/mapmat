@@ -206,6 +206,13 @@ function createFixtureServer() {
       return;
     }
     if (url.pathname === '/section/archive-months/archive' && url.searchParams.has('date')) {
+      res.writeHead(302, {
+        location: `/section/archive-months/archive-rendered?date=${encodeURIComponent(url.searchParams.get('date'))}`,
+      });
+      res.end();
+      return;
+    }
+    if (url.pathname === '/section/archive-months/archive-rendered' && url.searchParams.has('date')) {
       const [monthValue, , yearValue] = String(url.searchParams.get('date')).split('-');
       const month = Math.max(1, Number(monthValue) || 1);
       const year = Math.max(2000, Number(yearValue) || 2026);
@@ -968,6 +975,11 @@ async function main() {
       archiveMonthNodes.every((node) => node.isDuplicate !== true),
       true,
       'dated collection views with a shared canonical URL must not become duplicate orphans'
+    );
+    assert.equal(
+      archiveMonthNodes.every((node) => node.parentUrl === archivePage.url),
+      true,
+      'redirected dated collection views must keep the requested archive route as their structural parent'
     );
     assert.notEqual(
       directlyDiscoveredArchiveDate?.isDuplicate,
