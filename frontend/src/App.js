@@ -1315,6 +1315,11 @@ const getDeferredCaptureBatchEntries = (entries = []) => (
     .slice(0, DEFERRED_CAPTURE_BATCH_SIZE)
 );
 
+const getDeferredCapturePageAllowance = (entries = []) => {
+  const batchSize = getDeferredCaptureBatchEntries(entries).length;
+  return Math.max(1, batchSize * (DEFERRED_CAPTURE_BATCH_SIZE + 1));
+};
+
 const buildFigmaCaptureCommentsByNode = ({ focusNode, secondaryNode }) => {
   const primaryNodeId = String(focusNode?.id || '');
   const secondaryNodeId = String(
@@ -3201,6 +3206,8 @@ const applyDeferredCaptureResult = ({
       root: existingRoot,
       orphans: orphanNodes,
       capturedCount: 0,
+      alreadyPresentCount: 0,
+      insertedPageCount: 0,
       terminalCount: 0,
       remainingCount: placeholderNode?.remainingCount || 0,
     };
@@ -3211,13 +3218,21 @@ const applyDeferredCaptureResult = ({
   const terminalEntries = Array.isArray(captureResult.captureSummary?.terminalEntries)
     ? captureResult.captureSummary.terminalEntries
     : [];
+  const discoveredSuccessfulEntries = Array.isArray(captureResult.captureSummary?.discoveredSuccessfulEntries)
+    ? captureResult.captureSummary.discoveredSuccessfulEntries
+    : [];
   const successfulUrls = new Set(successfulEntries.map((entry) => normalizeUrlForCompare(entry?.url)).filter(Boolean));
+  const discoveredSuccessfulUrls = new Set(
+    discoveredSuccessfulEntries.map((entry) => normalizeUrlForCompare(entry?.url)).filter(Boolean)
+  );
   const terminalUrls = new Set(terminalEntries.map((entry) => normalizeUrlForCompare(entry?.url)).filter(Boolean));
   if (successfulUrls.size === 0 && terminalUrls.size === 0) {
     return {
       root: existingRoot,
       orphans: orphanNodes,
       capturedCount: 0,
+      alreadyPresentCount: 0,
+      insertedPageCount: 0,
       terminalCount: 0,
       remainingCount: placeholderNode?.remainingCount || 0,
     };
@@ -3241,7 +3256,80 @@ const applyDeferredCaptureResult = ({
 
   const nextRoot = existingRoot ? cloneNodeTree(existingRoot) : null;
   const nextOrphans = orphanNodes.map(cloneNodeTree);
+  const visiblePageKey = (node) => {
+    if (
+      !node
+      || node.nodeKind === 'deferred-group'
+      || node.nodeKind === 'focus-ghost'
+      || node.isVirtualMissing
+      || node.isMissing
+      || node.isStructuralContext
+      || node.isEntitlementLocked
+      || node.entitlementLocked
+    ) return '';
+    return normalizeUrlForCompare(node.url) || String(node.id || '');
+  };
+  const existingPageKeys = new Set(
+    collectNodesDeep(nextRoot, nextOrphans).map(visiblePageKey).filter(Boolean)
+  );
+  const relocatedNodesByUrl = new Map();
+  const detachDiscoveredPages = (parent) => {
+    if (!Array.isArray(parent?.children)) return;
+    parent.children = parent.children.filter((child) => {
+      const normalized = normalizeUrlForCompare(child?.url);
+      if (
+        normalized
+        && discoveredSuccessfulUrls.has(normalized)
+        && !(child?.isVirtualMissing || child?.isMissing)
+      ) {
+        if (!relocatedNodesByUrl.has(normalized)) relocatedNodesByUrl.set(normalized, child);
+        return false;
+      }
+      detachDiscoveredPages(child);
+      return true;
+    });
+  };
+  detachDiscoveredPages(nextRoot);
+  nextOrphans.forEach(detachDiscoveredPages);
+  for (let index = nextOrphans.length - 1; index >= 0; index -= 1) {
+    const normalized = normalizeUrlForCompare(nextOrphans[index]?.url);
+    if (!normalized || !discoveredSuccessfulUrls.has(normalized)) continue;
+    if (!relocatedNodesByUrl.has(normalized)) relocatedNodesByUrl.set(normalized, nextOrphans[index]);
+    nextOrphans.splice(index, 1);
+  }
+  const hydrateRelocatedPage = (node) => {
+    if (!node) return node;
+    const normalized = normalizeUrlForCompare(node.url);
+    const existing = relocatedNodesByUrl.get(normalized);
+    const next = {
+      ...node,
+      children: (node.children || []).map(hydrateRelocatedPage),
+    };
+    if (!existing) return next;
+    [
+      'id',
+      'title',
+      'pageType',
+      'annotations',
+      'comments',
+      'thumbnailUrl',
+      'thumbnailFullUrl',
+      'fullScreenshotUrl',
+      'thumbnailCaptureFailed',
+      'thumbnailCaptureError',
+      'thumbnailCaptureFailedAt',
+      'description',
+      'metaTags',
+      'seoMetadata',
+    ].forEach((field) => {
+      const value = existing[field];
+      if (value !== undefined && value !== null && value !== '') next[field] = value;
+    });
+    return next;
+  };
   let capturedCount = 0;
+  let alreadyPresentCount = relocatedNodesByUrl.size;
+  const replacedUrls = new Set();
   const replaceCapturedVirtualNodes = (node) => {
     if (!node) return node;
     const normalized = normalizeUrlForCompare(node.url);
@@ -3252,13 +3340,30 @@ const applyDeferredCaptureResult = ({
       && (node.isVirtualMissing || node.isMissing)
     ) {
       capturedCount += 1;
+      replacedUrls.add(normalized);
+      const capturedChildren = (capturedNode.children || [])
+        .map(hydrateRelocatedPage)
+        .map(replaceCapturedVirtualNodes);
+      const capturedChildKeys = new Set(capturedChildren.map((child) => (
+        normalizeUrlForCompare(child?.url)
+        || child?.deferredGroupId
+        || child?.id
+      )).filter(Boolean));
+      const preservedChildren = (node.children || [])
+        .map(replaceCapturedVirtualNodes)
+        .filter((child) => {
+          const key = normalizeUrlForCompare(child?.url)
+            || child?.deferredGroupId
+            || child?.id;
+          return !key || !capturedChildKeys.has(key);
+        });
       return {
         ...capturedNode,
         parentUrl: node.parentUrl || capturedNode.parentUrl,
         scanNumber: successfulEntryByUrl.get(normalized)?.scanNumber
           || node.scanNumber
           || capturedNode.scanNumber,
-        children: (node.children || []).map(replaceCapturedVirtualNodes),
+        children: [...capturedChildren, ...preservedChildren],
         isMissing: false,
         isVirtualMissing: false,
       };
@@ -3293,7 +3398,11 @@ const applyDeferredCaptureResult = ({
       const capturedNodes = [];
       originalEntries.forEach((entry) => {
         const normalized = normalizeUrlForCompare(entry?.url);
-        if (!successfulUrls.has(normalized) || existingUrls.has(normalized)) return;
+        if (!successfulUrls.has(normalized) || replacedUrls.has(normalized)) return;
+        if (existingUrls.has(normalized)) {
+          alreadyPresentCount += 1;
+          return;
+        }
         const capturedNode = capturedNodesByUrl.get(normalized);
         if (!capturedNode) return;
         capturedNodes.push({
@@ -3304,7 +3413,13 @@ const applyDeferredCaptureResult = ({
         capturedCount += 1;
       });
       const remainingEntries = originalEntries.filter((entry) => (
-        !successfulUrls.has(normalizeUrlForCompare(entry?.url))
+        !(
+          successfulUrls.has(normalizeUrlForCompare(entry?.url))
+          && (
+            replacedUrls.has(normalizeUrlForCompare(entry?.url))
+            || existingUrls.has(normalizeUrlForCompare(entry?.url))
+          )
+        )
         && !terminalUrls.has(normalizeUrlForCompare(entry?.url))
       ));
       terminalCount += originalEntries.filter((entry) => (
@@ -3335,10 +3450,17 @@ const applyDeferredCaptureResult = ({
   if (!updatedRoot) {
     orphansWithCapturedAncestors.some(updateParent);
   }
+  const insertedPageCount = collectNodesDeep(rootWithCapturedAncestors, orphansWithCapturedAncestors)
+    .map(visiblePageKey)
+    .filter((key) => key && !existingPageKeys.has(key))
+    .filter((key, index, keys) => keys.indexOf(key) === index)
+    .length;
   return {
     root: rootWithCapturedAncestors,
     orphans: orphansWithCapturedAncestors,
     capturedCount,
+    alreadyPresentCount,
+    insertedPageCount,
     terminalCount,
     remainingCount,
   };
@@ -3348,6 +3470,8 @@ const reconcileDeferredCaptureScanMeta = ({
   current,
   groupId,
   capturedCount,
+  existingCount = 0,
+  visibleAddedCount = capturedCount,
   removedCount = 0,
   remainingCount,
   visiblePageCount,
@@ -3355,8 +3479,11 @@ const reconcileDeferredCaptureScanMeta = ({
 }) => {
   const currentSummary = current?.pageCountSummary || {};
   const normalizedCapturedCount = Math.max(0, Number(capturedCount || 0) || 0);
+  const normalizedExistingCount = Math.max(0, Number(existingCount || 0) || 0);
+  const normalizedVisibleAddedCount = Math.max(0, Number(visibleAddedCount || 0) || 0);
   const normalizedRemovedCount = Math.max(0, Number(removedCount || 0) || 0);
-  const normalizedResolvedCount = normalizedCapturedCount + normalizedRemovedCount;
+  const normalizedGroupCapturedCount = normalizedCapturedCount + normalizedExistingCount;
+  const normalizedResolvedCount = normalizedGroupCapturedCount + normalizedRemovedCount;
   const normalizedRemainingCount = Math.max(0, Number(remainingCount || 0) || 0);
   const normalizedVisiblePageCount = Math.max(0, Number(visiblePageCount || 0) || 0);
   const entitlementVisibleLimit = getReportEntitlementVisibleLimit(current);
@@ -3367,7 +3494,7 @@ const reconcileDeferredCaptureScanMeta = ({
     group?.id === groupId
       ? {
         ...group,
-        capturedCount: Math.max(0, Number(group.capturedCount || 0) || 0) + normalizedCapturedCount,
+        capturedCount: Math.max(0, Number(group.capturedCount || 0) || 0) + normalizedGroupCapturedCount,
         deferredCount: normalizedRemainingCount,
         totalCount: Math.max(0, Number(group.totalCount || 0) || 0),
       }
@@ -3397,7 +3524,7 @@ const reconcileDeferredCaptureScanMeta = ({
       : current?.entitlement,
     pageCountSummary: {
       capturedPageCount: Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
-        + normalizedCapturedCount,
+        + normalizedVisibleAddedCount,
       deferredPageCount: Math.max(
         0,
         Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
@@ -3444,6 +3571,7 @@ export const __testing = {
   reconcileDeferredCaptureScanMeta,
   createDefaultLayerToggleState,
   getDeferredCaptureBatchEntries,
+  getDeferredCapturePageAllowance,
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
   getPersistedScanMetaFromRoot,
@@ -13963,7 +14091,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const jobResponse = await api.createScanJob(
         {
           url: seedUrl,
-          maxPages: entries.length,
+          maxPages: getDeferredCapturePageAllowance(entries),
           options: {
             ...scanOptions,
             subdomains: Boolean(scanScope.allowSubdomains),
@@ -14078,7 +14206,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         captureResult: completedJob.result,
         placeholderNode,
       });
-      if (applied.capturedCount <= 0 && applied.terminalCount <= 0) {
+      if (
+        applied.capturedCount <= 0
+        && applied.alreadyPresentCount <= 0
+        && applied.terminalCount <= 0
+      ) {
         showToast('No additional pages could be captured. You can retry this group.', 'warning');
         return;
       }
@@ -14093,6 +14225,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         current,
         groupId,
         capturedCount: applied.capturedCount,
+        existingCount: applied.alreadyPresentCount,
+        visibleAddedCount: applied.insertedPageCount,
         removedCount: applied.terminalCount,
         remainingCount: applied.remainingCount,
         visiblePageCount,
@@ -14111,18 +14245,20 @@ export default function App({ currentRoute, navigateToRoute }) {
         ? completedJob.result.captureSummary.remainingEntries.length
         : 0;
       showToast(
-        applied.capturedCount > 0
+        applied.insertedPageCount > 0
           ? (
             applied.remainingCount > 0
               ? (
                 retryableBatchCount > 0
-                  ? `Captured ${applied.capturedCount.toLocaleString()} pages. ${retryableBatchCount.toLocaleString()} could not be captured; ${applied.remainingCount.toLocaleString()} remaining.`
-                  : `Captured ${applied.capturedCount.toLocaleString()} pages. ${applied.remainingCount.toLocaleString()} remaining.`
+                  ? `Captured ${applied.insertedPageCount.toLocaleString()} pages. ${retryableBatchCount.toLocaleString()} could not be captured; ${applied.remainingCount.toLocaleString()} remaining.`
+                  : `Captured ${applied.insertedPageCount.toLocaleString()} pages. ${applied.remainingCount.toLocaleString()} remaining.`
               )
-              : `Captured ${applied.capturedCount.toLocaleString()} pages.`
+              : `Captured ${applied.insertedPageCount.toLocaleString()} pages.`
           )
+          : applied.alreadyPresentCount > 0
+            ? `${applied.alreadyPresentCount.toLocaleString()} pages were already captured elsewhere in this map.`
           : `${applied.terminalCount.toLocaleString()} unavailable pages were removed from this group.`,
-        retryableBatchCount > 0 || applied.capturedCount === 0 ? 'warning' : 'success'
+        retryableBatchCount > 0 ? 'warning' : 'success'
       );
       refreshCurrentUser();
     } catch (error) {

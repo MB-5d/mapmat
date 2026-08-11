@@ -648,6 +648,120 @@ describe('deferred page capture', () => {
     }));
 
     expect(__testing.getDeferredCaptureBatchEntries(entries)).toEqual(entries.slice(0, 20));
+    expect(__testing.getDeferredCapturePageAllowance(entries)).toBe(420);
+  });
+
+  test('resolves a successful deferred URL that is already visible elsewhere', () => {
+    const placeholder = {
+      id: 'placeholder-archive',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'archive-group',
+      remainingCount: 1,
+      deferredEntries: [{ url: 'https://example.com/story/1' }],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [
+        { id: 'story', url: 'https://example.com/story/1', children: [] },
+        { id: 'archive', url: 'https://example.com/archive', children: [placeholder] },
+      ],
+    };
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      placeholderNode: placeholder,
+      captureResult: {
+        root: {
+          id: 'capture-root',
+          url: 'https://example.com/',
+          children: [{ id: 'captured-story', url: 'https://example.com/story/1', children: [] }],
+        },
+        captureSummary: {
+          successfulEntries: [{ url: 'https://example.com/story/1' }],
+        },
+      },
+    });
+
+    expect(applied.capturedCount).toBe(0);
+    expect(applied.alreadyPresentCount).toBe(1);
+    expect(applied.insertedPageCount).toBe(0);
+    expect(applied.remainingCount).toBe(0);
+    expect(applied.root.children[1].children).toHaveLength(0);
+  });
+
+  test('reparents a discovered collection child instead of duplicating it', () => {
+    const monthUrl = 'https://example.com/archive?date=1-31-2026';
+    const storyUrl = 'https://example.com/2026/01/31/story';
+    const placeholder = {
+      id: 'placeholder-month',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'month-group',
+      remainingCount: 1,
+      deferredEntries: [{ url: monthUrl, scanNumber: 'X.2.1' }],
+      children: [],
+    };
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot: {
+        id: 'home',
+        url: 'https://example.com/',
+        children: [
+          {
+            id: 'existing-story',
+            url: storyUrl,
+            title: 'Saved title',
+            annotations: { note: 'Keep me' },
+            children: [],
+          },
+          {
+            id: 'archive',
+            url: 'https://example.com/archive',
+            children: [
+              { id: 'virtual-month', url: monthUrl, isVirtualMissing: true, children: [placeholder] },
+            ],
+          },
+        ],
+      },
+      placeholderNode: placeholder,
+      captureResult: {
+        root: {
+          id: 'capture-root',
+          url: 'https://example.com/',
+          children: [
+            {
+              id: 'captured-month',
+              url: monthUrl,
+              children: [{ id: 'captured-story', url: storyUrl, title: 'Fresh title', children: [] }],
+            },
+          ],
+        },
+        captureSummary: {
+          successfulEntries: [{ url: monthUrl, scanNumber: 'X.2.1' }],
+          discoveredSuccessfulEntries: [{ url: storyUrl, parentUrl: monthUrl }],
+        },
+      },
+    });
+
+    const allNodes = [];
+    const walk = (node) => {
+      if (!node) return;
+      allNodes.push(node);
+      (node.children || []).forEach(walk);
+    };
+    walk(applied.root);
+    const storyNodes = allNodes.filter((node) => node.url === storyUrl);
+    const monthNode = allNodes.find((node) => node.url === monthUrl);
+    expect(storyNodes).toHaveLength(1);
+    expect(storyNodes[0]).toMatchObject({
+      id: 'existing-story',
+      title: 'Saved title',
+      annotations: { note: 'Keep me' },
+    });
+    expect(monthNode.children[0].url).toBe(storyUrl);
+    expect(applied.capturedCount).toBe(1);
+    expect(applied.alreadyPresentCount).toBe(1);
+    expect(applied.insertedPageCount).toBe(1);
+    expect(applied.remainingCount).toBe(0);
   });
 
   test('resets every layer toggle to on', () => {

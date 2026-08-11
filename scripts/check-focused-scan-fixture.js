@@ -217,10 +217,14 @@ function createFixtureServer() {
       const month = Math.max(1, Number(monthValue) || 1);
       const year = Math.max(2000, Number(yearValue) || 2026);
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><ol><li><p><a href="/${year}/${String(month).padStart(2, '0')}/28/archive-story-${year}-${month}">Archive story ${month} ${year}</a></p></li></ol></main></body></html>`);
+      const storyCount = month === 12 && year === 2026 ? 15 : 1;
+      const stories = Array.from({ length: storyCount }, (_, index) => (
+        `<li><p><a href="/${year}/${String(month).padStart(2, '0')}/28/archive-story-${year}-${month}-${index + 1}">Archive story ${month} ${year} ${index + 1}</a></p></li>`
+      )).join('');
+      res.end(`<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><ol>${stories}</ol></main></body></html>`);
       return;
     }
-    if (/^\/20\d{2}\/\d{2}\/28\/archive-story-20\d{2}-\d+$/.test(url.pathname)) {
+    if (/^\/20\d{2}\/\d{2}\/28\/archive-story-20\d{2}-\d+-\d+$/.test(url.pathname)) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Archive story</h1></article></body></html>`);
       return;
@@ -960,7 +964,7 @@ async function main() {
         const articleUrl = new URL(node.url);
         return articleUrl.origin === fixtureOrigin
           && /^\/20\d{2}\//.test(articleUrl.pathname)
-          && /\/archive-story-20\d{2}-\d+$/.test(articleUrl.pathname);
+          && /\/archive-story-20\d{2}-\d+-\d+$/.test(articleUrl.pathname);
       } catch {
         return false;
       }
@@ -1024,7 +1028,7 @@ async function main() {
     });
     const archiveCaptureResult = await createScan({
       url: `${fixtureOrigin}/section/archive-months`,
-      maxPages: archivePlaceholder.deferredEntries.length,
+      maxPages: archivePlaceholder.deferredEntries.length * 21,
       options: {
         repetitiveCapture: {
           groupId: archivePlaceholder.deferredGroupId,
@@ -1037,28 +1041,32 @@ async function main() {
       ...flattenTree(archiveCaptureResult.root),
       ...(archiveCaptureResult.orphans || []).flatMap((node) => flattenTree(node, [])),
     ].find((node) => node.url === capturedArchiveMonthUrl);
-    assert.equal(archiveCaptureResult.captureSummary?.capturedCount, 1);
+    assert.equal(archiveCaptureResult.captureSummary?.requestedEntryCapturedCount, 1);
+    assert.equal(archiveCaptureResult.captureSummary?.discoveredCapturedCount, 15);
+    assert.equal(archiveCaptureResult.captureSummary?.capturedCount, 16);
     assert.ok(capturedArchiveMonth, 'Capture now should return the deferred archive month');
     assert.notEqual(capturedArchiveMonth.isDuplicate, true);
     assert.match(capturedArchiveMonth.title, /December 2026/);
-    const capturedArchiveArticlePlaceholder = capturedArchiveMonth.children?.find(
-      (node) => node.nodeKind === 'deferred-group'
+    const capturedArchiveArticles = (capturedArchiveMonth.children || []).filter(
+      (node) => /\/archive-story-20\d{2}-\d+-\d+$/.test(String(node.url || ''))
     );
     assert.equal(
-      capturedArchiveArticlePlaceholder?.remainingCount,
-      1,
-      'capturing a deferred collection page should expose its newly discovered article group'
+      capturedArchiveArticles.length,
+      15,
+      'a collection with no more than 20 children should return real article pages'
     );
-    assert.equal(capturedArchiveArticlePlaceholder?.parentUrl, capturedArchiveMonth.url);
-    assert.match(
-      capturedArchiveArticlePlaceholder?.deferredEntries?.[0]?.url || '',
-      /\/archive-story-20\d{2}-\d+$/
-    );
-    const capturedArchiveArticleNumber = capturedArchiveArticlePlaceholder?.deferredEntries?.[0]?.scanNumber || '';
     assert.equal(
-      capturedArchiveArticleNumber.startsWith(`${capturedArchiveMonth.scanNumber}.`),
+      capturedArchiveMonth.children?.some((node) => node.nodeKind === 'deferred-group'),
+      false,
+      'a 15-page collection should be stackable without a deferred placeholder'
+    );
+    assert.equal(
+      capturedArchiveArticles.every((node) => (
+        node.parentUrl === capturedArchiveMonth.url
+        && String(node.scanNumber || '').startsWith(`${capturedArchiveMonth.scanNumber}.`)
+      )),
       true,
-      `newly discovered archive articles should stay beneath ${capturedArchiveMonth.scanNumber}; got ${capturedArchiveArticleNumber}`
+      `newly discovered archive articles should stay beneath ${capturedArchiveMonth.scanNumber}`
     );
 
     const contentGridResult = await createScan({

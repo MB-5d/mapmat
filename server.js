@@ -4820,6 +4820,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const requestedPageLimit = normalizeMaxPagesLimit(maxPages);
   const repetitiveCapture = normalizeRepetitiveCaptureRequest(options, scanScope, requestedPageLimit);
   const captureUrlSet = new Set((repetitiveCapture?.entries || []).map((entry) => entry.url));
+  const targetedCollectionChildUrlSet = new Set();
   const captureEntryByUrl = new Map((repetitiveCapture?.entries || []).map((entry) => [entry.url, entry]));
   const targetedGroupCapture = captureUrlSet.size > 0;
   const pageLimit = requestedPageLimit === null
@@ -5169,7 +5170,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       && !isIgnoredCrawlUtilityUrl(normalized)
       && !isScanFileUrl(normalized)
       && source !== 'common_path'
-      && (!targetedGroupCapture || normalized === seed || captureUrlSet.has(normalized))
+      && (
+        !targetedGroupCapture
+        || normalized === seed
+        || captureUrlSet.has(normalized)
+        || targetedCollectionChildUrlSet.has(normalized)
+      )
     ) {
       scopedDiscoveredUrls.add(normalized);
     }
@@ -5261,6 +5267,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
     const children = targetedCollectionChildrenByParent.get(normalizedSource);
     if (children.has(normalized)) return;
+    targetedCollectionChildUrlSet.add(normalized);
     children.set(normalized, {
       url: normalized,
       source: 'focused_collection_child',
@@ -5349,7 +5356,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const allowPageUrl = (candidate) => allowUrl(candidate) && !isIgnoredCrawlUtilityUrl(candidate) && !isScanFileUrl(candidate);
   const enqueue = (url, depth, source = 'crawl') => {
     if (!url) return;
-    if (targetedGroupCapture && url !== seed && !captureUrlSet.has(url)) return;
+    if (
+      targetedGroupCapture
+      && url !== seed
+      && !captureUrlSet.has(url)
+      && !targetedCollectionChildUrlSet.has(url)
+    ) return;
     if (deferredUrlToGroup.has(url)) return;
     if (isIgnoredCrawlUtilityUrl(url)) {
       scanDiagnostics.ignoredUtilityUrls += 1;
@@ -7386,32 +7398,39 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           };
         });
       if (entries.length === 0) return;
+      const capturedEntries = entries.filter((entry) => (
+        isSuccessfulCapturedPageMeta(pageMap.get(entry.url))
+      ));
+      const deferredEntries = entries.filter((entry) => (
+        !isSuccessfulCapturedPageMeta(pageMap.get(entry.url))
+      ));
+      if (deferredEntries.length === 0) return;
       const groupKey = `${parentUrl}|visible-parent`;
       const groupId = getStableRepetitiveGroupId(groupKey);
-      entries.forEach((entry) => deferredOutcomeUrls.add(entry.url));
+      deferredEntries.forEach((entry) => deferredOutcomeUrls.add(entry.url));
       repetitiveGroups.push({
         id: groupId,
         key: groupKey,
         parentUrl,
         shape: 'focused_collection_child',
         sourceGroupIds: [],
-        capturedCount: 0,
-        deferredCount: entries.length,
+        capturedCount: capturedEntries.length,
+        deferredCount: deferredEntries.length,
         totalCount: entries.length,
-        entries,
+        entries: deferredEntries,
       });
       pushUniqueChild(parentNode, {
         id: `placeholder_${groupId}`,
         url: '',
-        title: `${entries.length} more pages like this`,
+        title: `${deferredEntries.length} more pages like this`,
         nodeKind: 'deferred-group',
         deferredGroupId: groupId,
         deferredGroupKey: groupKey,
         parentUrl,
-        capturedCount: 0,
-        remainingCount: entries.length,
+        capturedCount: capturedEntries.length,
+        remainingCount: deferredEntries.length,
         totalCount: entries.length,
-        deferredEntries: entries,
+        deferredEntries,
         children: [],
       });
     });
@@ -8151,6 +8170,23 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       const successfulEntries = repetitiveCapture.entries.filter((entry) => {
         return isSuccessfulCapturedPageMeta(pageMap.get(entry.url));
       });
+      const discoveredSuccessfulEntryByUrl = new Map();
+      targetedCollectionChildrenByParent.forEach((childrenByUrl, parentUrl) => {
+        childrenByUrl.forEach((entry) => {
+          if (
+            captureUrlSet.has(entry.url)
+            || discoveredSuccessfulEntryByUrl.has(entry.url)
+            || !isSuccessfulCapturedPageMeta(pageMap.get(entry.url))
+          ) return;
+          const capturedNode = nodes.get(entry.url) || orphanMap.get(entry.url);
+          discoveredSuccessfulEntryByUrl.set(entry.url, {
+            ...entry,
+            parentUrl,
+            scanNumber: capturedNode?.scanNumber || preservedNumberMap.get(entry.url) || '',
+          });
+        });
+      });
+      const discoveredSuccessfulEntries = Array.from(discoveredSuccessfulEntryByUrl.values());
       const successfulUrlSet = new Set(successfulEntries.map((entry) => entry.url));
       const terminalEntries = repetitiveCapture.entries
         .filter((entry) => !successfulUrlSet.has(entry.url))
@@ -8184,8 +8220,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       return {
         groupId: repetitiveCapture.groupId,
         requestedCount: repetitiveCapture.entries.length,
-        capturedCount: successfulEntries.length,
+        capturedCount: successfulEntries.length + discoveredSuccessfulEntries.length,
+        requestedEntryCapturedCount: successfulEntries.length,
+        discoveredCapturedCount: discoveredSuccessfulEntries.length,
         successfulEntries,
+        discoveredSuccessfulEntries,
         terminalCount: terminalEntries.length,
         terminalEntries,
         remainingEntries: repetitiveCapture.entries.filter((entry) => (
