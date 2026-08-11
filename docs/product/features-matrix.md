@@ -1,6 +1,6 @@
 # Vellic Feature Matrix And Roadmap
 
-Generated: 2026-06-02
+Generated: 2026-06-02; updated: 2026-08-11
 
 This is a repo-backed first version. Statuses are based on current local code, docs, tests, and project notes. Default-on shipped behavior is marked `Complete`; feature-flagged, backend-only, or partially validated behavior is marked `Partial`; documented future work is marked `Planned` or `Future`; product decisions without repo evidence are marked `Unknown`.
 
@@ -13,7 +13,7 @@ Note: the local checkout already had unrelated uncommitted work before this matr
 | Complete | 40 |
 | Partial | 20 |
 | Planned | 8 |
-| Future | 7 |
+| Future | 8 |
 | Unknown | 1 |
 
 ## Roadmap Priorities
@@ -50,6 +50,7 @@ Note: the local checkout already had unrelated uncommitted work before this matr
 | P2 | Collaborator selection presence | Partial | Phase 10D | Medium | docs/coediting-frontend-live-mode.md |
 | P2 | Live update notifications | Planned | Collaboration Phase 5 | Medium | docs/collaboration-roadmap.md |
 | P3 | Navigation prototyping and tree testing | Future | Future vision | High | frontend/src/marketing/marketingConfig.js |
+| P3 | Configurable scan hierarchy modes | Future | Future scan flexibility | High | Product direction noted 2026-08-11 |
 | P3 | Diagramming tools | Future | Future vision | High | frontend/src/marketing/marketingConfig.js |
 | P3 | Third-party integrations | Future | Future vision | High | frontend/src/marketing/marketingConfig.js |
 | P3 | Remove/rescan screenshot assets | Future | Future asset lifecycle | High | docs/screenshot-pipeline-hardening.md |
@@ -69,6 +70,9 @@ Note: the local checkout already had unrelated uncommitted work before this matr
 | Scan result classification | Complete | P1 | Done | Medium | Current product | frontend/src/components/reports/ReportDrawer.js; scripts/check-scan-labeling-fixture.js; scripts/check-scan-page-classification.js |
 | Collapsed/root-only scan safeguards | Complete | P1 | Done | Medium | Current product | frontend/src/components/reports/ReportDrawer.js; scripts/check-scan-collapse-fixture.js; frontend/src/utils/scanCompletion.js |
 | Authenticated/private page scanning | Future | P2 | L | High | Future scan hardening | docs/authenticated-scan-paused.md; scripts/check-scan-auth-session.js |
+| Configurable scan hierarchy modes | Future | P3 | L | High | Future scan flexibility | Product direction noted 2026-08-11 |
+
+Future scope: explore a strict URL-hierarchy scan alongside the current content/navigation relationship scan. The product design should define how query-based archive views and same-domain links outside the focused URL path appear in each mode.
 
 ### Map creation and editing
 
