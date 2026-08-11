@@ -690,9 +690,10 @@ describe('deferred page capture', () => {
     expect(applied.root.children[1].children).toHaveLength(0);
   });
 
-  test('reparents a discovered collection child instead of duplicating it', () => {
+  test('keeps an existing collection child in place while adding new collection children', () => {
     const monthUrl = 'https://example.com/archive?date=1-31-2026';
     const storyUrl = 'https://example.com/2026/01/31/story';
+    const newStoryUrl = 'https://example.com/2026/01/31/new-story';
     const placeholder = {
       id: 'placeholder-month',
       nodeKind: 'deferred-group',
@@ -731,13 +732,19 @@ describe('deferred page capture', () => {
             {
               id: 'captured-month',
               url: monthUrl,
-              children: [{ id: 'captured-story', url: storyUrl, title: 'Fresh title', children: [] }],
+              children: [
+                { id: 'captured-story', url: storyUrl, title: 'Fresh title', children: [] },
+                { id: 'new-story', url: newStoryUrl, title: 'New story', children: [] },
+              ],
             },
           ],
         },
         captureSummary: {
           successfulEntries: [{ url: monthUrl, scanNumber: 'X.2.1' }],
-          discoveredSuccessfulEntries: [{ url: storyUrl, parentUrl: monthUrl }],
+          discoveredSuccessfulEntries: [
+            { url: storyUrl, parentUrl: monthUrl },
+            { url: newStoryUrl, parentUrl: monthUrl },
+          ],
         },
       },
     });
@@ -757,10 +764,12 @@ describe('deferred page capture', () => {
       title: 'Saved title',
       annotations: { note: 'Keep me' },
     });
-    expect(monthNode.children[0].url).toBe(storyUrl);
+    expect(applied.root.children.map((node) => node.id)).toEqual(['existing-story', 'archive']);
+    expect(monthNode.children.some((node) => node.url === storyUrl)).toBe(false);
+    expect(monthNode.children.some((node) => node.url === newStoryUrl)).toBe(true);
     expect(applied.capturedCount).toBe(1);
     expect(applied.alreadyPresentCount).toBe(1);
-    expect(applied.insertedPageCount).toBe(1);
+    expect(applied.insertedPageCount).toBe(2);
     expect(applied.remainingCount).toBe(0);
   });
 

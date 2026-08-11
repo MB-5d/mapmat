@@ -3272,63 +3272,21 @@ const applyDeferredCaptureResult = ({
   const existingPageKeys = new Set(
     collectNodesDeep(nextRoot, nextOrphans).map(visiblePageKey).filter(Boolean)
   );
-  const relocatedNodesByUrl = new Map();
-  const detachDiscoveredPages = (parent) => {
-    if (!Array.isArray(parent?.children)) return;
-    parent.children = parent.children.filter((child) => {
-      const normalized = normalizeUrlForCompare(child?.url);
-      if (
-        normalized
-        && discoveredSuccessfulUrls.has(normalized)
-        && !(child?.isVirtualMissing || child?.isMissing)
-      ) {
-        if (!relocatedNodesByUrl.has(normalized)) relocatedNodesByUrl.set(normalized, child);
-        return false;
-      }
-      detachDiscoveredPages(child);
-      return true;
-    });
-  };
-  detachDiscoveredPages(nextRoot);
-  nextOrphans.forEach(detachDiscoveredPages);
-  for (let index = nextOrphans.length - 1; index >= 0; index -= 1) {
-    const normalized = normalizeUrlForCompare(nextOrphans[index]?.url);
-    if (!normalized || !discoveredSuccessfulUrls.has(normalized)) continue;
-    if (!relocatedNodesByUrl.has(normalized)) relocatedNodesByUrl.set(normalized, nextOrphans[index]);
-    nextOrphans.splice(index, 1);
-  }
-  const hydrateRelocatedPage = (node) => {
+  const insertedCapturedPageKeys = new Set();
+  const prepareCapturedChild = (node) => {
     if (!node) return node;
-    const normalized = normalizeUrlForCompare(node.url);
-    const existing = relocatedNodesByUrl.get(normalized);
-    const next = {
+    const key = visiblePageKey(node);
+    if (key && (existingPageKeys.has(key) || insertedCapturedPageKeys.has(key))) return null;
+    if (key) insertedCapturedPageKeys.add(key);
+    return {
       ...node,
-      children: (node.children || []).map(hydrateRelocatedPage),
+      children: (node.children || []).map(prepareCapturedChild).filter(Boolean),
     };
-    if (!existing) return next;
-    [
-      'id',
-      'title',
-      'pageType',
-      'annotations',
-      'comments',
-      'thumbnailUrl',
-      'thumbnailFullUrl',
-      'fullScreenshotUrl',
-      'thumbnailCaptureFailed',
-      'thumbnailCaptureError',
-      'thumbnailCaptureFailedAt',
-      'description',
-      'metaTags',
-      'seoMetadata',
-    ].forEach((field) => {
-      const value = existing[field];
-      if (value !== undefined && value !== null && value !== '') next[field] = value;
-    });
-    return next;
   };
   let capturedCount = 0;
-  let alreadyPresentCount = relocatedNodesByUrl.size;
+  let alreadyPresentCount = Array.from(discoveredSuccessfulUrls)
+    .filter((url) => existingPageKeys.has(url))
+    .length;
   const replacedUrls = new Set();
   const replaceCapturedVirtualNodes = (node) => {
     if (!node) return node;
@@ -3342,7 +3300,8 @@ const applyDeferredCaptureResult = ({
       capturedCount += 1;
       replacedUrls.add(normalized);
       const capturedChildren = (capturedNode.children || [])
-        .map(hydrateRelocatedPage)
+        .map(prepareCapturedChild)
+        .filter(Boolean)
         .map(replaceCapturedVirtualNodes);
       const capturedChildKeys = new Set(capturedChildren.map((child) => (
         normalizeUrlForCompare(child?.url)
