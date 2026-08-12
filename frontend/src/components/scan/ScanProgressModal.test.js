@@ -96,6 +96,8 @@ describe('ScanProgressModal', () => {
             failed: 2,
             queued: 23,
             discovered: 407,
+            batchNumber: 3,
+            batchSize: 5000,
           }}
         />
       );
@@ -116,6 +118,8 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Grouped 30');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Crawl restricted 2');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Failed 2');
+    expect(pagesSection.textContent).toContain('Batch 3');
+    expect(pagesSection.textContent).toContain('5,000 pages per batch');
   });
 
   test('uses the discovered total when it is larger than the active queue', () => {

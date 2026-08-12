@@ -241,7 +241,7 @@ const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your acco
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
 const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
 const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
-const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
+const DEFAULT_SCAN_REQUESTED_PAGES = 50000;
 const GUEST_SCAN_PAGE_LIMIT = 25;
 const SCAN_JOB_CREATE_RETRY_DELAYS_MS = [0, 600, 1400];
 const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
@@ -1889,8 +1889,24 @@ const normalizePersistedScanMeta = (scanMeta = null) => {
     : null;
   const pageCountSummary = scanMeta?.pageCountSummary && typeof scanMeta.pageCountSummary === 'object'
     ? {
+      fetchedPageCount: Math.max(0, Math.floor(Number(
+        scanMeta.pageCountSummary.fetchedPageCount
+        ?? scanMeta.pageCountSummary.capturedPageCount
+        ?? 0
+      ) || 0)),
       capturedPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.capturedPageCount || 0) || 0)),
+      visiblePageCount: Math.max(0, Math.floor(Number(
+        scanMeta.pageCountSummary.visiblePageCount
+        ?? scanMeta.pageCountSummary.capturedPageCount
+        ?? 0
+      ) || 0)),
+      groupedPageCount: Math.max(0, Math.floor(Number(
+        scanMeta.pageCountSummary.groupedPageCount
+        ?? scanMeta.pageCountSummary.deferredPageCount
+        ?? 0
+      ) || 0)),
       deferredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.deferredPageCount || 0) || 0)),
+      remainingPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.remainingPageCount || 0) || 0)),
       estimatedRemainingPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.estimatedRemainingPageCount || 0) || 0)),
       totalDiscoveredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.totalDiscoveredPageCount || 0) || 0)),
     }
@@ -3487,8 +3503,22 @@ const reconcileDeferredCaptureScanMeta = ({
       }
       : current?.entitlement,
     pageCountSummary: {
+      ...currentSummary,
+      fetchedPageCount: Math.max(0, Number(currentSummary.fetchedPageCount || 0) || 0)
+        + normalizedCapturedCount,
       capturedPageCount: Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
         + normalizedVisibleAddedCount,
+      visiblePageCount: reconciledVisiblePageCount,
+      groupedPageCount: Math.max(
+        0,
+        Math.max(0, Number(
+          currentSummary.groupedPageCount
+          ?? currentSummary.deferredPageCount
+          ?? 0
+        ) || 0)
+          - normalizedResolvedCount
+          + newlyDiscoveredDeferredCount
+      ),
       deferredPageCount: Math.max(
         0,
         Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)

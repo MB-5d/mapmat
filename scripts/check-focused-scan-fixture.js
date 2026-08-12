@@ -1276,6 +1276,12 @@ async function main() {
     assert.equal(mixedPlaceholders[0].parentUrl, `${fixtureOrigin}/section/mixed`);
     assert.equal(mixedPlaceholders[0].capturedCount, 20);
     assert.equal(mixedPlaceholders[0].remainingCount, 1);
+    assert.equal(mixedPlaceholders[0].deferredEntries.length, 1);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(mixedResult.repetitiveGroups[0] || {}, 'entries'),
+      false,
+      'group summaries should not duplicate deferred entries already stored on the placeholder'
+    );
 
     const redirectedResult = await createScan({
       url: `${fixtureOrigin}/jobs-old`,

@@ -71,6 +71,8 @@ const ScanProgressModal = ({
     Number(scanProgress.fetched ?? Math.max(0, processedCount - deferredCount)) || 0
   );
   const visibleCount = Math.max(0, Number(scanProgress.visible || 0) || 0);
+  const batchNumber = Math.max(0, Number(scanProgress.batchNumber || 0) || 0);
+  const batchSize = Math.max(0, Number(scanProgress.batchSize || 0) || 0);
   const blockedCount = Math.max(0, Number(scanProgress.blocked || 0) || 0);
   const failedCount = Math.max(0, Number(scanProgress.failed || 0) || 0);
   const queuedCount = Math.max(0, Number(scanProgress.queued || 0) || 0);
@@ -195,6 +197,12 @@ const ScanProgressModal = ({
               {blockedCount > 0 ? <span>Crawl restricted {formatCount(blockedCount)}</span> : null}
               {failedCount > 0 ? <span>Failed {formatCount(failedCount)}</span> : null}
             </div>
+            {batchNumber > 0 && batchSize > 0 ? (
+              <div className="scan-queue-note">
+                <span>Batch {formatCount(batchNumber)}</span>
+                <span>{formatCount(batchSize)} pages per batch</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="scan-chart-section scan-chart-section--findings">

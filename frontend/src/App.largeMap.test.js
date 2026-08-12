@@ -797,8 +797,12 @@ describe('deferred page capture', () => {
           totalCount: 419,
         }],
         pageCountSummary: {
+          fetchedPageCount: 13,
           capturedPageCount: 13,
+          visiblePageCount: 13,
+          groupedPageCount: 409,
           deferredPageCount: 409,
+          remainingPageCount: 0,
           estimatedRemainingPageCount: 409,
           totalDiscoveredPageCount: 422,
         },
@@ -832,8 +836,12 @@ describe('deferred page capture', () => {
       totalCount: 3,
     });
     expect(reconciled.pageCountSummary).toEqual({
+      fetchedPageCount: 36,
       capturedPageCount: 36,
+      visiblePageCount: 25,
+      groupedPageCount: 389,
       deferredPageCount: 389,
+      remainingPageCount: 0,
       estimatedRemainingPageCount: 389,
       totalDiscoveredPageCount: 425,
     });

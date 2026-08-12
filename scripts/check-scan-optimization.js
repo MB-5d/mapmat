@@ -142,6 +142,20 @@ assert.equal(groups[3].shape, 'query');
 assert.equal(groups[3].routeTemplate, 'news?page=:number');
 assert.notEqual(groups[1].groupId, groups[3].groupId);
 
+const largeFixtureStartedAt = Date.now();
+const largeUrls = Array.from(
+  { length: 25000 },
+  (_, index) => `https://example.com/articles/story-${index + 1}`
+);
+const largeGroups = buildRepetitiveGroups(largeUrls);
+assert.equal(largeGroups.length, 1);
+assert.equal(largeGroups[0].capturedEntries.length, 20);
+assert.equal(largeGroups[0].deferredEntries.length, 24980);
+assert(
+  Date.now() - largeFixtureStartedAt < 10000,
+  '25,000 URL grouping fixture should complete within 10 seconds'
+);
+
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:article', 'schema:article']), true);
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:jobposting', 'element:product']), false);
 
