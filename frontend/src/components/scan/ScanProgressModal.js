@@ -42,6 +42,7 @@ const ScanProgressModal = ({
   showStopConfirm,
   isStoppingScan,
   scanErrorMessage,
+  canRetryScanResult,
   scanMessage,
   scanProgress,
   scanLimitNote,
@@ -53,6 +54,7 @@ const ScanProgressModal = ({
   onCancelScan,
   onContinueScan,
   onDismissScanError,
+  onRetryScanResult,
 }) => {
   if (!loading && !scanErrorMessage) return null;
   const processedCount = Math.max(
@@ -64,6 +66,11 @@ const ScanProgressModal = ({
     Number(scanProgress.captured ?? scanProgress.mapped ?? 0) || 0
   );
   const deferredCount = Math.max(0, Number(scanProgress.deferred || 0) || 0);
+  const fetchedCount = Math.max(
+    0,
+    Number(scanProgress.fetched ?? Math.max(0, processedCount - deferredCount)) || 0
+  );
+  const visibleCount = Math.max(0, Number(scanProgress.visible || 0) || 0);
   const blockedCount = Math.max(0, Number(scanProgress.blocked || 0) || 0);
   const failedCount = Math.max(0, Number(scanProgress.failed || 0) || 0);
   const queuedCount = Math.max(0, Number(scanProgress.queued || 0) || 0);
@@ -77,11 +84,13 @@ const ScanProgressModal = ({
   const hasRemaining = remainingCount > 0;
   const pagePercent = pageTotal > 0 ? Math.min(100, Math.round((processedCount / pageTotal) * 100)) : 0;
   const elapsedSeconds = Math.max(0, Math.floor(Number(scanElapsed || 0) || 0));
-  const estimatedTotalSeconds = getTimeEstimateSeconds({
-    elapsedSeconds,
-    completedCount: processedCount,
-    remainingCount,
-  });
+  const estimatedTotalSeconds = (scanProgress.phase === 'finalizing' || isStoppingScan)
+    ? null
+    : getTimeEstimateSeconds({
+      elapsedSeconds,
+      completedCount: processedCount,
+      remainingCount,
+    });
   const timePercent = estimatedTotalSeconds !== null && estimatedTotalSeconds > 0
     ? Math.min(100, Math.max(0, (elapsedSeconds / estimatedTotalSeconds) * 100))
     : 0;
@@ -118,14 +127,21 @@ const ScanProgressModal = ({
     body = (
       <div className="cancel-confirm scan-error-state">
         <AlertTriangle size={48} className="cancel-warning-icon scan-error-icon" />
-        <h3>Scan failed</h3>
+        <h3>{canRetryScanResult ? 'Scan complete' : 'Scan failed'}</h3>
         <p>{scanErrorMessage}</p>
       </div>
     );
     footer = (
-      <Button variant="primary" onClick={onDismissScanError}>
-        Close
-      </Button>
+      <>
+        <Button variant="secondary" onClick={onDismissScanError}>
+          Close
+        </Button>
+        {canRetryScanResult ? (
+          <Button variant="primary" onClick={onRetryScanResult}>
+            Retry loading map
+          </Button>
+        ) : null}
+      </>
     );
   } else if (!showCancelConfirm && !showStopConfirm) {
     body = (
@@ -151,7 +167,7 @@ const ScanProgressModal = ({
 
           <div className="scan-chart-section scan-chart-section--pages">
             <div className="scan-chart-heading">
-              <span>Pages processed</span>
+              <span>Pages accounted for</span>
               <span>
                 <strong>{formatCount(processedCount)} of {formatCount(pageTotal)}</strong>
                 {pageTotal > 0 ? (
@@ -159,7 +175,7 @@ const ScanProgressModal = ({
                 ) : null}
               </span>
             </div>
-            <div className="scan-progress-track" role="img" aria-label={`${formatCount(processedCount)} of ${formatCount(pageTotal)} pages processed`}>
+            <div className="scan-progress-track" role="img" aria-label={`${formatCount(processedCount)} of ${formatCount(pageTotal)} pages accounted for`}>
               <span
                 className="scan-progress-fill"
                 style={{ width: `${pagePercent}%` }}
@@ -172,8 +188,10 @@ const ScanProgressModal = ({
               </div>
             ) : null}
             <div className="scan-outcome-note">
-              <span>Captured {formatCount(capturedCount)}</span>
-              {deferredCount > 0 ? <span>Deferred {formatCount(deferredCount)}</span> : null}
+              <span>Fetched {formatCount(fetchedCount)}</span>
+              <span>Captured successfully {formatCount(capturedCount)}</span>
+              {visibleCount > 0 ? <span>Visible {formatCount(visibleCount)}</span> : null}
+              {deferredCount > 0 ? <span>Grouped {formatCount(deferredCount)}</span> : null}
               {blockedCount > 0 ? <span>Crawl restricted {formatCount(blockedCount)}</span> : null}
               {failedCount > 0 ? <span>Failed {formatCount(failedCount)}</span> : null}
             </div>

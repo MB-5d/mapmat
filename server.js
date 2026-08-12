@@ -1250,6 +1250,7 @@ const serializeJobRow = (row, includeResult = true) => {
 };
 
 const getJobRow = (id) => jobStore.getJobByIdAsync(id);
+const getJobSummaryRow = (id) => jobStore.getJobSummaryByIdAsync(id);
 
 const findActiveDiscoveryJob = async (mapId) => {
   const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
@@ -1524,10 +1525,19 @@ const updateJobProgress = async (id, progress) => {
 };
 
 const markJobComplete = async (id, result) => {
+  const serializationStartedAt = Date.now();
+  const serializedResult = JSON.stringify(result || {});
+  if (result?.root) {
+    console.info('[scan] Result serialized:', {
+      jobId: id,
+      serializationMs: Date.now() - serializationStartedAt,
+      resultBytes: Buffer.byteLength(serializedResult),
+    });
+  }
   await jobStore.markJobCompleteAsync(
     id,
     JOB_STATUS.complete,
-    JSON.stringify(result || {}),
+    serializedResult,
     JOB_STATUS.queued,
     JOB_STATUS.running,
     JOB_STATUS.paused,
@@ -4813,6 +4823,10 @@ function normalizeScanOptions(options = {}) {
 }
 
 async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress = null, readJobStatus = null) {
+  const scanTimingStartedAt = Date.now();
+  let finalizationStartedAt = null;
+  let treeBuildStartedAt = null;
+  let groupingStartedAt = null;
   const scanOptions = normalizeScanOptions(options);
   const entitlementCappedScan = Boolean(options.entitlementCappedScan || options._entitlementCappedScan);
   const scanScope = createScanScope(startUrl, scanOptions.subdomains);
@@ -5326,13 +5340,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     onProgress({
       scanned: processedCount,
       processed: processedCount,
+      fetched: visited.size,
       mapped: 0,
       captured: 0,
+      visible: 0,
       deferred: deferredOutcomeUrls.size,
       blocked: blockedOutcomeUrls.size,
       failed: failedOutcomeUrls.size,
       queued: queuedCount,
       discovered: Math.max(scopedDiscoveredUrls.size, processedCount + queuedCount),
+      allowedPages: pageLimit,
       sessionStartedAt: scanSessionStartedAt,
       phase: 'discovering',
     });
@@ -5872,8 +5889,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const getScanProgressSnapshot = ({ final = false, phase = null } = {}) => ({
     scanned: new Set([...visited, ...deferredOutcomeUrls]).size,
     processed: new Set([...visited, ...deferredOutcomeUrls]).size,
+    fetched: visited.size,
     mapped: countPageMapValues(isSuccessfulCapturedPageMeta),
     captured: countPageMapValues(isSuccessfulCapturedPageMeta),
+    visible: final && root ? countScanTreeNodes(root) : 0,
     deferred: deferredOutcomeUrls.size,
     blocked: blockedOutcomeUrls.size,
     failed: failedOutcomeUrls.size,
@@ -5884,6 +5903,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       pageMap.size
     ),
     sessionStartedAt: scanSessionStartedAt,
+    allowedPages: pageLimit,
     phase: phase || (final ? 'finalizing' : 'scanning'),
     ...(final && finalProgressSummary ? finalProgressSummary : getProgressSummary()),
     ...(final ? { final: true } : {}),
@@ -6623,6 +6643,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     await runCrawlWorkers();
   }
 
+  if (
+    !targetedGroupCapture
+    && !stopRequested
+    && pageLimit !== null
+    && visited.size >= pageLimit
+    && getPendingQueueCount() > 0
+  ) {
+    partialReason = entitlementCappedScan ? 'entitlement_cap' : 'scan_safety_cap';
+  }
+
   const inspectFocusedAncestor = async (url) => {
     let html = '';
     let status = 0;
@@ -6736,6 +6766,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     };
   };
 
+  finalizationStartedAt = Date.now();
+  scanDiagnostics.phaseTimingsMs = {
+    crawl: finalizationStartedAt - scanTimingStartedAt,
+  };
   reportScanProgress({ phase: 'finalizing' });
 
   if (scanScope.focused && !targetedGroupCapture && !stopRequested) {
@@ -6834,6 +6868,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   });
 
   // Build nodes
+  treeBuildStartedAt = Date.now();
   const nodes = new Map();
   for (const [url, meta] of pageMap.entries()) {
     nodes.set(url, {
@@ -7377,6 +7412,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   }
 
+  scanDiagnostics.phaseTimingsMs.treeBuild = Date.now() - treeBuildStartedAt;
+  groupingStartedAt = Date.now();
   const repetitiveGroups = [];
   if (targetedGroupCapture) {
     targetedCollectionChildrenByParent.forEach((childrenByUrl, parentUrl) => {
@@ -7945,6 +7982,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     (sum, group) => sum + group.deferredCount,
     0
   );
+  scanDiagnostics.phaseTimingsMs.grouping = Date.now() - groupingStartedAt;
 
   const buildDiscoveryManifest = () => {
     const hiddenEntries = [];
@@ -8008,7 +8046,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   }
 
   const canOverrideRootOnlyPartialReason = (reason) => (
-    !reason || reason === 'stopped_by_user' || reason === 'entitlement_cap'
+    !reason
+    || reason === 'stopped_by_user'
+    || reason === 'entitlement_cap'
+    || reason === 'scan_safety_cap'
   );
   const hasRootOnlyCollapseSignal = scanDiagnostics.rootAllowedLinks > 0
     || scanDiagnostics.sitemapUrlsQueued > 0
@@ -8118,6 +8159,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     subdomainNodes.forEach(markDuplicateTree);
   }
 
+  const iaPersistenceStartedAt = Date.now();
   try {
     const iaSummary = await persistPagesForIa(nodes, scanScope, discoverySourceByUrl, linksInCounts);
     console.log(
@@ -8126,6 +8168,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   } catch (err) {
     console.error('IA persistence failed:', err?.message || err);
   }
+  scanDiagnostics.phaseTimingsMs.iaPersistence = Date.now() - iaPersistenceStartedAt;
 
   let crosslinks = [];
   if (scanOptions.crosslinks) {
@@ -8160,8 +8203,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     Number(discoveryManifest?.totalDiscoveredPageCount || 0) || 0
   );
   const pageCountSummary = {
+    fetchedPageCount: visited.size,
     capturedPageCount,
+    visiblePageCount: capturedTreeNodeCount,
+    groupedPageCount: deferredOutcomeUrls.size,
     deferredPageCount: deferredOutcomeUrls.size,
+    remainingPageCount: getPendingQueueCount(),
     estimatedRemainingPageCount: Math.max(0, totalDiscoveredPageCount - capturedPageCount),
     totalDiscoveredPageCount,
   };
@@ -8292,6 +8339,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     result.partial = true;
     result.partialReason = 'deferred_capture_incomplete';
   }
+
+  scanDiagnostics.phaseTimingsMs.finalization = finalizationStartedAt
+    ? Date.now() - finalizationStartedAt
+    : 0;
+  scanDiagnostics.phaseTimingsMs.total = Date.now() - scanTimingStartedAt;
+  console.info('[scan] Phase timings:', {
+    seed,
+    ...scanDiagnostics.phaseTimingsMs,
+  });
 
   if (authContext) {
     await authContext.close().catch(() => {});
@@ -9762,19 +9818,28 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
 app.get('/scan-jobs/:id', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const includeResult = req.query.include_result !== 'false';
-  const row = await getJobRow(id);
+  const resultLoadStartedAt = Date.now();
+  const row = includeResult ? await getJobRow(id) : await getJobSummaryRow(id);
   if (!row || row.type !== JOB_TYPES.scan) {
     return res.status(404).json({ error: 'Job not found' });
   }
   if (!isJobVisibleToRequest(row, req)) {
     return res.status(403).json({ error: 'This scan is no longer available in this browser session' });
   }
-  res.json({ job: serializeJobRow(row, includeResult) });
+  const job = serializeJobRow(row, includeResult);
+  if (includeResult && job?.status === JOB_STATUS.complete && job?.result) {
+    console.info('[scan] Result delivered:', {
+      jobId: id,
+      loadMs: Date.now() - resultLoadStartedAt,
+      resultBytes: Buffer.byteLength(JSON.stringify(job.result)),
+    });
+  }
+  res.json({ job });
 });
 
 app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
-  const row = await getJobRow(id);
+  const row = await getJobSummaryRow(id);
   if (!row || row.type !== JOB_TYPES.scan) {
     return res.status(404).json({ error: 'Job not found' });
   }
@@ -9787,7 +9852,7 @@ app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res
 
 app.post('/scan-jobs/:id/stop', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
-  const row = await getJobRow(id);
+  const row = await getJobSummaryRow(id);
   if (!row || row.type !== JOB_TYPES.scan) {
     return res.status(404).json({ error: 'Job not found' });
   }
@@ -9799,6 +9864,7 @@ app.post('/scan-jobs/:id/stop', authMiddleware, requireApiKey, async (req, res) 
     return res.json({
       success: true,
       canceled: true,
+      status: JOB_STATUS.canceled,
       reason: 'no_results_ready',
     });
   }
@@ -9809,7 +9875,7 @@ app.post('/scan-jobs/:id/stop', authMiddleware, requireApiKey, async (req, res) 
     });
   }
   await markJobStopping(id);
-  res.json({ success: true });
+  res.json({ success: true, status: JOB_STATUS.stopping });
 });
 
 app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
@@ -9837,7 +9903,7 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
       clearInterval(interval);
       return;
     }
-    const row = await getJobRow(id);
+    const row = await getJobSummaryRow(id);
     if (!row || row.type !== JOB_TYPES.scan) {
       sendEvent('job-error', { error: 'Job not found' });
       clearInterval(interval);

@@ -174,6 +174,11 @@ import {
 } from './utils/scanCompletion';
 import { createEmptyScanProgress, reconcileScanProgress } from './utils/scanProgress';
 import {
+  createScanStatusPoller,
+  isTerminalScanStatus,
+  loadCompletedScanJob,
+} from './utils/scanJobRecovery';
+import {
   clearAnalyticsUser,
   identifyAnalyticsUser,
   trackEvent,
@@ -3713,6 +3718,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [isStoppingScan, setIsStoppingScan] = useState(false);
   const [scanErrorMessage, setScanErrorMessage] = useState('');
+  const [canRetryScanResult, setCanRetryScanResult] = useState(false);
   const [scanHistory, setScanHistory] = useState([]);
   const [lastHistoryId, setLastHistoryId] = useState(null);
   const [lastScanUrl, setLastScanUrl] = useState('');
@@ -4014,6 +4020,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scanJobAccessTokenRef = useRef(null);
   const ignoredScanJobIdsRef = useRef(new Set());
   const eventSourceRef = useRef(null);
+  const scanStatusPollerRef = useRef(null);
+  const scanTerminalHandlerRef = useRef(null);
+  const scanResultRetryRef = useRef(null);
   const pendingAuthScanRef = useRef(null);
   const pendingPlanScanRef = useRef(null);
   const handledScanIntentKeyRef = useRef('');
@@ -4916,6 +4925,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       if (scanTimerRef.current) clearInterval(scanTimerRef.current);
       if (eventSourceRef.current) eventSourceRef.current.close();
+      scanStatusPollerRef.current?.stop();
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
       if (thumbnailAutosaveTimerRef.current) clearTimeout(thumbnailAutosaveTimerRef.current);
       if (nodeAssetSaveRetryTimerRef.current) clearTimeout(nodeAssetSaveRetryTimerRef.current);
@@ -13303,6 +13313,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+    scanStatusPollerRef.current?.stop();
+    scanStatusPollerRef.current = null;
   };
 
   const resetScanUi = ({ clearError = true, clearProgress = true } = {}) => {
@@ -13314,6 +13326,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowCancelConfirm(false);
     setShowStopConfirm(false);
     setIsStoppingScan(false);
+    setCanRetryScanResult(false);
+    scanTerminalHandlerRef.current = null;
+    scanResultRetryRef.current = null;
     if (clearProgress) {
       setScanProgress(createEmptyScanProgress());
     }
@@ -13332,14 +13347,25 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowCancelConfirm(false);
     setShowStopConfirm(false);
     setIsStoppingScan(false);
+    setCanRetryScanResult(false);
+    scanTerminalHandlerRef.current = null;
+    scanResultRetryRef.current = null;
     setScanProgress(createEmptyScanProgress());
     setScanLimitProgressNote('');
     setScanErrorMessage(message || 'Scan failed');
   };
 
   const dismissScanError = () => {
+    resetScanUi();
+  };
+
+  const retryCompletedScanResult = async () => {
+    const retry = scanResultRetryRef.current;
+    if (!retry) return;
+    setCanRetryScanResult(false);
     setScanErrorMessage('');
-    setScanProgress(createEmptyScanProgress());
+    setLoading(true);
+    await retry();
   };
 
   const requestCancelScan = () => {
@@ -13433,6 +13459,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast('Scan stopped before results were ready', 'warning');
         return;
       }
+      if (isTerminalScanStatus(response?.status)) {
+        await scanTerminalHandlerRef.current?.({ status: response.status });
+        return;
+      }
+      setIsStoppingScan(response?.status === 'stopping');
       showToast('Stopping scan and preparing current results...', 'info');
     } catch (err) {
       if (scanJobIdRef.current !== jobId) return;
@@ -13653,9 +13684,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     );
     eventSourceRef.current = eventSource;
     let streamHandled = false;
-    let streamErrorCount = 0;
-    let streamRecoveryInFlight = false;
-    const maxStreamErrorCount = 20;
+    let terminalPromise = null;
 
     const handleCompletedJob = (job) => {
       if (streamHandled) return;
@@ -13870,6 +13899,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast(`Scan stopped. Showing current results${hostname ? ` for ${hostname}` : ''}`, 'warning');
       } else if (normalizedPartialReason === 'entitlement_cap') {
         showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
+      } else if (normalizedPartialReason === 'scan_safety_cap') {
+        showToast('Scan reached the safety limit. Showing the pages captured so far.', 'warning');
       } else if (normalizedPartialReason === 'scan_collapsed') {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
       } else if (data.blockedSections?.length) {
@@ -13895,31 +13926,66 @@ export default function App({ currentRoute, navigateToRoute }) {
       resetScanUi();
     };
 
-    const loadCompletedJobWithResult = async (job) => {
-      if (job?.status !== 'complete' || job?.result) return job;
-      const retryDelays = [0, 500, 1500, 3000];
-      let lastError = null;
-      for (const delay of retryDelays) {
-        if (delay > 0) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-        try {
-          const response = await api.getScanJob(jobId, {
-            includeResult: true,
-            accessToken: jobAccessToken,
-          });
-          if (response?.job?.result) return response.job;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-      throw lastError || new Error('Scan completed but results could not be loaded');
+    const showCompletedResultLoadError = (error) => {
+      console.error('Scan result fetch failed:', error);
+      closeScanStream();
+      stopScanTimers();
+      setLoading(false);
+      setShowCancelConfirm(false);
+      setShowStopConfirm(false);
+      setIsStoppingScan(false);
+      setCanRetryScanResult(true);
+      setScanErrorMessage('The scan finished, but its map could not be loaded.');
+      trackEvent('scan_failed', {
+        phase: 'result_load',
+        message: error?.message || 'Scan completed but results could not be loaded',
+      });
     };
+
+    const handleTerminalJob = async (job) => {
+      if (streamHandled || !isTerminalScanStatus(job?.status)) return;
+      if (terminalPromise) return terminalPromise;
+      terminalPromise = (async () => {
+        try {
+          const completeJob = await loadCompletedScanJob({
+            initialJob: job,
+            fetchJob: ({ includeResult, timeoutMs }) => api.getScanJob(jobId, {
+              includeResult,
+              timeoutMs,
+              accessToken: jobAccessToken,
+            }),
+          });
+          handleCompletedJob(completeJob);
+        } catch (error) {
+          scanResultRetryRef.current = () => handleTerminalJob({ status: 'complete' });
+          showCompletedResultLoadError(error);
+        }
+      })().finally(() => {
+        terminalPromise = null;
+      });
+      return terminalPromise;
+    };
+    scanTerminalHandlerRef.current = handleTerminalJob;
+    scanResultRetryRef.current = () => handleTerminalJob({ status: 'complete' });
+
+    scanStatusPollerRef.current = createScanStatusPoller({
+      fetchStatus: () => api.getScanJob(jobId, {
+        includeResult: false,
+        timeoutMs: 10000,
+        accessToken: jobAccessToken,
+      }),
+      onJob: async (job) => {
+        if (job?.progress) {
+          setScanProgress((current) => reconcileScanProgress(current, job.progress));
+        }
+        if (job?.status === 'stopping') setIsStoppingScan(true);
+        if (isTerminalScanStatus(job?.status)) await handleTerminalJob(job);
+      },
+    });
 
     eventSource.addEventListener('update', (e) => {
       try {
         const job = JSON.parse(e.data);
-        streamErrorCount = 0;
         if (job?.progress) {
           setScanProgress((current) => reconcileScanProgress(current, job.progress));
         }
@@ -13948,15 +14014,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
 
       try {
-        handleCompletedJob(await loadCompletedJobWithResult(job));
+        await handleTerminalJob(job);
       } catch (err) {
-        console.error('Scan result fetch failed:', err);
-        streamHandled = true;
-        trackEvent('scan_failed', {
-          phase: 'complete',
-          message: err?.message || 'Scan completed but results could not be loaded',
-        });
-        showScanError('Scan completed, but the results could not be loaded. Please try the scan again.');
+        showCompletedResultLoadError(err);
       }
     });
 
@@ -13976,49 +14036,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
 
     eventSource.onerror = async () => {
-      if (streamHandled || streamRecoveryInFlight) return;
-      streamRecoveryInFlight = true;
-
-      try {
-        const { job } = await api.getScanJob(jobId, {
-          includeResult: true,
-          accessToken: jobAccessToken,
-        });
-        if (job?.status === 'complete' || job?.status === 'failed' || job?.status === 'canceled') {
-          handleCompletedJob(job);
-          return;
-        }
-        if (job) {
-          streamErrorCount = 0;
-          if (job.progress) {
-            setScanProgress((current) => reconcileScanProgress(current, job.progress));
-          }
-          if (job.status === 'stopping') {
-            setIsStoppingScan(true);
-          }
-          return;
-        }
-      } catch (err) {
-        streamErrorCount += 1;
-        if (streamErrorCount < maxStreamErrorCount) return;
-        const message = 'Lost connection while checking scan progress';
-        streamHandled = true;
-        trackEvent('scan_failed', {
-          phase: 'stream',
-          message,
-        });
-        showScanError('Lost connection while checking scan progress. The scan may still be running.');
-        return;
-      } finally {
-        streamRecoveryInFlight = false;
-      }
-
-      streamHandled = true;
-      trackEvent('scan_failed', {
-        phase: 'stream',
-        message: 'Lost connection while receiving scan progress',
-      });
-      showScanError('Lost connection while receiving scan progress');
+      if (streamHandled) return;
+      await scanStatusPollerRef.current?.pollNow();
     };
   };
   scanRef.current = scan;
@@ -21642,6 +21661,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         showStopConfirm={showStopConfirm}
         isStoppingScan={isStoppingScan}
         scanErrorMessage={scanErrorMessage}
+        canRetryScanResult={canRetryScanResult}
         scanMessage={scanMessage}
         scanProgress={scanProgress}
         scanLimitNote={scanLimitProgressNote}
@@ -21653,6 +21673,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onCancelScan={cancelScan}
         onContinueScan={dismissScanConfirm}
         onDismissScanError={dismissScanError}
+        onRetryScanResult={retryCompletedScanResult}
       />
 
       {guestScanPrompt && (

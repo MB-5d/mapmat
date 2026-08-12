@@ -50,38 +50,63 @@ function clearStoredAuthToken() {
 
 // Fetch wrapper with credentials and error handling
 async function fetchJson(endpoint, options = {}, { includeUserToken = true } = {}) {
+  const { timeoutMs = 0, ...fetchOptions } = options;
   const authToken = includeUserToken ? getStoredAuthToken() : null;
   const headers = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...fetchOptions.headers,
   };
 
   if (authToken && !headers.Authorization && !headers.authorization) {
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    credentials: 'include', // Include cookies
-    headers,
-  });
+  const timeoutController = timeoutMs > 0 ? new AbortController() : null;
+  const upstreamSignal = fetchOptions.signal;
+  const abortFromUpstream = () => timeoutController?.abort(upstreamSignal?.reason);
+  if (timeoutController && upstreamSignal) {
+    if (upstreamSignal.aborted) abortFromUpstream();
+    else upstreamSignal.addEventListener('abort', abortFromUpstream, { once: true });
+  }
+  const timeoutId = timeoutController
+    ? setTimeout(() => timeoutController.abort(new Error('Request timed out')), timeoutMs)
+    : null;
 
-  let data;
   try {
-    data = await response.json();
-  } catch {
-    throw new Error('Unexpected server response');
-  }
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      ...fetchOptions,
+      credentials: 'include', // Include cookies
+      headers,
+      ...(timeoutController ? { signal: timeoutController.signal } : {}),
+    });
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      if (timeoutController?.signal.aborted) throw error;
+      throw new Error('Unexpected server response');
+    }
 
-  if (!response.ok) {
-    const error = new Error(data.error || 'Request failed');
-    error.status = response.status;
-    error.code = data.code || null;
-    error.payload = data;
+    if (!response.ok) {
+      const error = new Error(data.error || 'Request failed');
+      error.status = response.status;
+      error.code = data.code || null;
+      error.payload = data;
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    if (timeoutController?.signal.aborted && !upstreamSignal?.aborted) {
+      const timeoutError = new Error('Request timed out');
+      timeoutError.code = 'REQUEST_TIMEOUT';
+      throw timeoutError;
+    }
     throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    upstreamSignal?.removeEventListener?.('abort', abortFromUpstream);
   }
-
-  return data;
 }
 
 async function fetchApi(endpoint, options = {}) {
@@ -913,8 +938,8 @@ export async function deleteScanAuthSession(sessionId) {
   });
 }
 
-export async function getScanJob(id, { includeResult = true, accessToken = null } = {}) {
-  return fetchApi(buildScanJobPath(id, { includeResult, accessToken }));
+export async function getScanJob(id, { includeResult = true, accessToken = null, timeoutMs = 0 } = {}) {
+  return fetchApi(buildScanJobPath(id, { includeResult, accessToken }), { timeoutMs });
 }
 
 export function getScanJobStreamUrl(id, { accessToken = null } = {}) {

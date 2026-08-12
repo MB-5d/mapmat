@@ -10,13 +10,18 @@ const normalizeFindings = (findings = {}) => Object.fromEntries(
 export const createEmptyScanProgress = () => ({
   scanned: 0,
   processed: 0,
+  fetched: 0,
   mapped: 0,
   captured: 0,
+  visible: 0,
   deferred: 0,
   blocked: 0,
   failed: 0,
   queued: 0,
   discovered: 0,
+  allowedPages: 0,
+  batchNumber: 0,
+  batchSize: 0,
   sequence: 0,
 });
 
@@ -42,6 +47,12 @@ export const reconcileScanProgress = (current = {}, incoming = {}) => {
     toCount(incoming.captured ?? incoming.mapped)
   );
   const mapped = captured;
+  const fetched = Math.max(
+    toCount(current.fetched),
+    toCount(incoming.fetched),
+    Math.max(0, processed - Math.max(toCount(current.deferred), toCount(incoming.deferred)))
+  );
+  const visible = Math.max(toCount(current.visible), toCount(incoming.visible));
   const incomingQueued = toCount(incoming.queued);
   const queued = incomingSequence >= currentSequence
     ? incomingQueued
@@ -74,8 +85,10 @@ export const reconcileScanProgress = (current = {}, incoming = {}) => {
     ...incoming,
     scanned,
     processed,
+    fetched,
     mapped,
     captured,
+    visible,
     deferred,
     blocked,
     failed,

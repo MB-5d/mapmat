@@ -107,13 +107,18 @@ test('starts with a complete empty progress shape', () => {
   expect(createEmptyScanProgress()).toEqual({
     scanned: 0,
     processed: 0,
+    fetched: 0,
     mapped: 0,
     captured: 0,
+    visible: 0,
     deferred: 0,
     blocked: 0,
     failed: 0,
     queued: 0,
     discovered: 0,
+    allowedPages: 0,
+    batchNumber: 0,
+    batchSize: 0,
     sequence: 0,
   });
 });

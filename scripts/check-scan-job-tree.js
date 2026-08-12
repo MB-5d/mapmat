@@ -112,6 +112,20 @@ async function runCheck() {
     );
   }
 
+  const summary = await fetchJson(
+    `${API_BASE}/scan-jobs/${created.jobId}?include_result=false&access_token=${created.jobAccessToken}`
+  );
+  if (summary?.job?.result !== null) {
+    throw new Error('Status-only scan reads must not include the result payload');
+  }
+  const stoppedAfterCompletion = await fetchJson(
+    `${API_BASE}/scan-jobs/${created.jobId}/stop?access_token=${created.jobAccessToken}`,
+    { method: 'POST' }
+  );
+  if (stoppedAfterCompletion?.status !== 'complete') {
+    throw new Error('Stopping an already-completed scan must report complete');
+  }
+
   console.log(`[scan-job-tree] Passed. rootChildren=${rootChildren}, totalNodes=${totalNodes}, url=${SCAN_URL}`);
 }
 
