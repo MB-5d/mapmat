@@ -320,7 +320,7 @@ const ReportDrawer = ({
         { key: 'accounted', label: 'Accounted', value: accounted },
         { key: 'fetched', label: 'Fetched', value: fetched },
         { key: 'captured', label: 'Captured', value: captured },
-        { key: 'visible', label: 'Visible on map', value: pageCountSummary.visiblePageCount ?? stats.total },
+        { key: 'visible', label: 'Visible on map', value: stats.total },
         { key: 'grouped', label: 'Grouped', value: grouped },
         { key: 'remaining', label: 'Remaining', value: remaining },
       ];

@@ -13,6 +13,29 @@ const STOP_FETCHED_TARGET = Number(process.env.LARGE_SCAN_STOP_FETCHED_TARGET ||
 const TIMEOUT_MS = Number(process.env.LARGE_SCAN_COVERAGE_TIMEOUT_MS || 180000);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function countVisibleResultPages(result) {
+  const stack = [result?.root, ...(result?.orphans || []), ...(result?.subdomains || [])].filter(Boolean);
+  const seen = new Set();
+  let count = 0;
+  while (stack.length > 0) {
+    const node = stack.pop();
+    const key = String(node?.id || node?.url || '');
+    if (!node || (key && seen.has(key))) continue;
+    if (key) seen.add(key);
+    const isPage = /^https?:\/\//i.test(String(node.url || ''));
+    if (
+      isPage
+      && !node.isVirtualMissing
+      && !node.isStructuralContext
+      && !node.isEntitlementLocked
+      && !node.entitlementLocked
+      && !['focus-ghost', 'deferred-group'].includes(node.nodeKind)
+    ) count += 1;
+    if (Array.isArray(node.children)) stack.push(...node.children);
+  }
+  return count;
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
@@ -217,6 +240,10 @@ async function main() {
         >= Math.floor(FIXTURE_PAGE_COUNT / 5000)
     );
     assert.equal(Number(repetitiveJob.progress?.accountedMilestoneSize || 0), 5000);
+    assert.equal(
+      Number(repetitiveSummary.visiblePageCount || 0),
+      countVisibleResultPages(repetitiveJob.result)
+    );
 
     const nonRepetitive = await createScan(`${fixtureOrigin}/?fixture=nonrepetitive`, authToken);
     const reachedTarget = await waitForFetchedTarget(
@@ -254,6 +281,10 @@ async function main() {
         >= Math.floor(STOP_FETCHED_TARGET / 5000)
     );
     assert.ok(stoppedJob.result?.root, 'stopped scan should return a valid map');
+    assert.equal(
+      Number(stoppedSummary.visiblePageCount || 0),
+      countVisibleResultPages(stoppedJob.result)
+    );
     assert.ok(stopElapsedMs < 60000, `Stop should finalize within 60 seconds, took ${stopElapsedMs}ms`);
 
     console.log('[large-scan-coverage] Passed.', {

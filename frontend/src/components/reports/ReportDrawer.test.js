@@ -705,7 +705,7 @@ describe('ReportDrawer', () => {
     expect(coverage.textContent).toContain('Accounted15,243');
     expect(coverage.textContent).toContain('Fetched5,000');
     expect(coverage.textContent).toContain('Captured4,979');
-    expect(coverage.textContent).toContain('Visible on map29');
+    expect(coverage.textContent).toContain('Visible on map3');
     expect(coverage.textContent).toContain('Grouped10,243');
     expect(coverage.textContent).toContain('Remaining12,476');
     expect(container.querySelector('.report-total-card').textContent).toContain('Pages on map3');

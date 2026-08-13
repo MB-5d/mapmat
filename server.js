@@ -8394,6 +8394,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   reportScanProgress({ final: true });
 
   const includePartialOrphans = Boolean(partialReason);
+  const resultOrphanNodes = (
+    scanOptions.orphanPages || scanOptions.duplicates || includePartialOrphans
+  ) ? prunedOrphanNodes : [];
+  const resultSubdomainNodes = scanOptions.subdomains ? subdomainNodes : [];
   const capturedPageCount = capturedOutcomeUrls.size;
   const finalCoverage = getCoverageProgress();
   const totalDiscoveredPageCount = Math.max(
@@ -8405,7 +8409,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     accountedPageCount: finalCoverage.accounted,
     fetchedPageCount: getFetchedOutcomeUrls().size,
     capturedPageCount,
-    visiblePageCount: capturedTreeNodeCount,
+    visiblePageCount: countScanResultPages({
+      root,
+      orphans: [...resultOrphanNodes, ...resultSubdomainNodes],
+    }),
     groupedPageCount: getGroupedOutcomeUrls().size,
     deferredPageCount: getGroupedOutcomeUrls().size,
     remainingPageCount,
@@ -8506,8 +8513,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const result = {
     root,
-    orphans: (scanOptions.orphanPages || scanOptions.duplicates || includePartialOrphans) ? prunedOrphanNodes : [],
-    subdomains: scanOptions.subdomains ? subdomainNodes : [],
+    orphans: resultOrphanNodes,
+    subdomains: resultSubdomainNodes,
     errors: scanOptions.errorPages ? errors : [],
     inactivePages: scanOptions.inactivePages ? inactivePages : [],
     brokenLinks: scanOptions.brokenLinks ? brokenLinks : [],

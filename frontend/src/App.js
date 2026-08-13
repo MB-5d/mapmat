@@ -13891,6 +13891,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
       }
       const realPageCount = countPageNodes(merged.root);
+      const visiblePageCount = realPageCount
+        + merged.orphans.reduce((total, orphan) => total + countPageNodes(orphan), 0);
+      const pageCountSummary = data.pageCountSummary
+        ? { ...data.pageCountSummary, visiblePageCount }
+        : null;
       const displayMerged = addScanLimitGhosts(merged.root, merged.orphans, data.entitlement || null);
       const displayScanLayerAvailability = getDisplayScanLayerAvailability(displayMerged.root, displayMerged.orphans);
       const nextConnections = shouldMergeScanResult
@@ -13910,7 +13915,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         entitlement: data.entitlement || null,
         discoveryManifest: data.discoveryManifest || null,
         scanScope: data.scanScope || null,
-        pageCountSummary: data.pageCountSummary || null,
+        pageCountSummary,
         repetitiveGroups: data.repetitiveGroups || [],
         blockedSections: data.blockedSections || [],
       });
