@@ -45,6 +45,7 @@ test('allows the newest update to reduce the queue without reducing captured cou
   expect(next).toMatchObject({
     scanned: 48,
     processed: 48,
+    accounted: 48,
     mapped: 30,
     captured: 30,
     deferred: 0,
@@ -107,6 +108,9 @@ test('starts with a complete empty progress shape', () => {
   expect(createEmptyScanProgress()).toEqual({
     scanned: 0,
     processed: 0,
+    accounted: 0,
+    accountedMilestonesCompleted: 0,
+    accountedMilestoneSize: 0,
     fetched: 0,
     mapped: 0,
     captured: 0,
@@ -117,8 +121,38 @@ test('starts with a complete empty progress shape', () => {
     queued: 0,
     discovered: 0,
     allowedPages: 0,
+    allowedFetchedPages: 0,
+    discoveredLimit: 0,
     batchNumber: 0,
     batchSize: 0,
     sequence: 0,
+  });
+});
+
+test('uses explicit accounted coverage while preserving legacy aliases', () => {
+  const next = reconcileScanProgress(createEmptyScanProgress(), {
+    accounted: 15020,
+    processed: 15020,
+    scanned: 15020,
+    fetched: 5020,
+    deferred: 10000,
+    discovered: 17000,
+    accountedMilestonesCompleted: 3,
+    accountedMilestoneSize: 5000,
+    allowedFetchedPages: 50000,
+    discoveredLimit: 200000,
+    sequence: 2,
+  });
+
+  expect(next).toMatchObject({
+    accounted: 15020,
+    processed: 15020,
+    scanned: 15020,
+    fetched: 5020,
+    deferred: 10000,
+    accountedMilestonesCompleted: 3,
+    accountedMilestoneSize: 5000,
+    allowedFetchedPages: 50000,
+    discoveredLimit: 200000,
   });
 });

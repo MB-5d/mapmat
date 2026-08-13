@@ -89,8 +89,11 @@ describe('ScanProgressModal', () => {
         <ScanProgressModal
           {...baseProps}
           scanProgress={{
+            accounted: 384,
             processed: 384,
+            fetched: 354,
             captured: 350,
+            visible: 321,
             deferred: 30,
             blocked: 2,
             failed: 2,
@@ -98,6 +101,8 @@ describe('ScanProgressModal', () => {
             discovered: 407,
             batchNumber: 3,
             batchSize: 5000,
+            accountedMilestonesCompleted: 3,
+            accountedMilestoneSize: 5000,
           }}
         />
       );
@@ -114,12 +119,15 @@ describe('ScanProgressModal', () => {
     expect(findingsSection.querySelector('.scan-findings-empty').textContent).toBe('No findings yet');
     expect(pagesSection.querySelector('.scan-inline-note').textContent).toBe('(94%)');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Fetched 354');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Discovered 407');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Accounted 384');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Captured successfully 350');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Visible on map 321');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Grouped 30');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Crawl restricted 2');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Failed 2');
-    expect(pagesSection.textContent).toContain('Batch 3');
-    expect(pagesSection.textContent).toContain('5,000 pages per batch');
+    expect(pagesSection.textContent).toContain('3 milestones completed');
+    expect(pagesSection.textContent).toContain('5,000 accounted pages per milestone');
   });
 
   test('uses the discovered total when it is larger than the active queue', () => {

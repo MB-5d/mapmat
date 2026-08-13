@@ -359,6 +359,14 @@ describe('large map viewport behavior', () => {
         partial: true,
         partialReason: 'entitlement_cap',
         entitlement,
+        pageCountSummary: {
+          fetchedPageCount: 5000,
+          capturedPageCount: 4979,
+          visiblePageCount: 29,
+          groupedPageCount: 10243,
+          remainingPageCount: 12476,
+          totalDiscoveredPageCount: 27719,
+        },
         discoveryManifest: {
           version: 1,
           seedUrl: 'https://example.com/',
@@ -396,6 +404,7 @@ describe('large map viewport behavior', () => {
     const hydrated = __testing.hydratePersistedScanLimitMap(payload.root, payload.orphans);
     expect(hydrated.scanMeta.partialReason).toBe('entitlement_cap');
     expect(hydrated.scanMeta.discoveryManifest.hiddenPageCount).toBe(2);
+    expect(hydrated.scanMeta.pageCountSummary.accountedPageCount).toBe(15243);
     expect(hydrated.root.children.some((node) => node.isEntitlementLocked)).toBe(true);
   });
 
@@ -836,13 +845,14 @@ describe('deferred page capture', () => {
       totalCount: 3,
     });
     expect(reconciled.pageCountSummary).toEqual({
+      accountedPageCount: 425,
       fetchedPageCount: 36,
       capturedPageCount: 36,
       visiblePageCount: 25,
       groupedPageCount: 389,
       deferredPageCount: 389,
       remainingPageCount: 0,
-      estimatedRemainingPageCount: 389,
+      estimatedRemainingPageCount: 0,
       totalDiscoveredPageCount: 425,
     });
   });

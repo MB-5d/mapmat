@@ -81,6 +81,12 @@ const {
   sampleSignalsAreCompatible,
 } = require('./utils/scanOptimization');
 const {
+  DEFAULT_ACCOUNTED_MILESTONE_SIZE,
+  getScanCapacityPartialReason,
+  getScanCoverageMetrics,
+  getScanDiscoveryLimit,
+} = require('./utils/scanCoverage');
+const {
   IMAGE_CAPTURE_SCALE_TIERS,
   collectImageCaptureRecords,
   buildImageCapturePhases,
@@ -1783,7 +1789,9 @@ function getScanOutcomeLabel(result, failureReason = null) {
 function logScanOutcome({ jobId = null, result = null, payload = null, failureReason = null }) {
   const diagnostics = result?.scanDiagnostics || {};
   const manifest = result?.discoveryManifest || diagnostics.discoveryManifest || {};
+  const pageCountSummary = result?.pageCountSummary || {};
   const capturedCount = Math.max(
+    Number(pageCountSummary.capturedPageCount || 0) || 0,
     Number(diagnostics.pageMapCount || 0) || 0,
     Number(manifest.capturedPageCount || 0) || 0,
     result ? countScanResultPages(result) : 0
@@ -1794,6 +1802,7 @@ function logScanOutcome({ jobId = null, result = null, payload = null, failureRe
     Number(result?.entitlement?.lockedPageEstimate || 0) || 0
   );
   const discoveredCount = Math.max(
+    Number(pageCountSummary.totalDiscoveredPageCount || 0) || 0,
     Number(manifest.totalDiscoveredPageCount || 0) || 0,
     Number(diagnostics.queuedCount || 0) || 0,
     capturedCount + hiddenCount
@@ -1805,6 +1814,10 @@ function logScanOutcome({ jobId = null, result = null, payload = null, failureRe
     partialReason: result?.partialReason || null,
     failureReason,
     discoveredCount,
+    accountedCount: Number(pageCountSummary.accountedPageCount || 0) || 0,
+    fetchedCount: Number(pageCountSummary.fetchedPageCount || 0) || 0,
+    groupedCount: Number(pageCountSummary.groupedPageCount || 0) || 0,
+    remainingCount: Number(pageCountSummary.remainingPageCount || 0) || 0,
     capturedCount,
     hiddenCount,
     stopped: result?.partialReason === 'stopped_by_user' || diagnostics.previousPartialReason === 'stopped_by_user',
@@ -4899,6 +4912,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const pageLimit = requestedPageLimit === null
     ? null
     : requestedPageLimit + (targetedGroupCapture ? 1 : 0);
+  const discoveryLimit = getScanDiscoveryLimit(pageLimit ?? SCAN_PAGE_SAFETY_CAP);
   const depthLimit = normalizeScanDepthLimit(maxDepth);
   const authStorageState = normalizePlaywrightStorageState(options.authSessionStorageState);
   const authContext = authStorageState
@@ -5042,6 +5056,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     focusedParentProbeCount: 0,
     focusedParentProbeSuccessCount: 0,
     focusedNumberingEntryCount: 0,
+    discoveryLimit,
+    discoveryCapReached: false,
+    discoveryRejectedAttempts: 0,
   };
   const allowUrl = (candidate) => {
     const normalized = normalizeUrl(candidate);
@@ -5082,9 +5099,21 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const sitemapCompleteParentUrls = new Set();
   let sitemapDocumentCounter = 0;
   const scopedDiscoveredUrls = new Set([seed]);
+  let discoveryCapReached = false;
   const deferredOutcomeUrls = new Set();
+  let deferredOutcomeVersion = 0;
+  const addDeferredOutcomeUrl = (url) => {
+    if (!url || deferredOutcomeUrls.has(url)) return;
+    deferredOutcomeUrls.add(url);
+    deferredOutcomeVersion += 1;
+  };
+  const deleteDeferredOutcomeUrl = (url) => {
+    if (!deferredOutcomeUrls.delete(url)) return;
+    deferredOutcomeVersion += 1;
+  };
   const blockedOutcomeUrls = new Set();
   const failedOutcomeUrls = new Set();
+  const capturedOutcomeUrls = new Set();
   const scanSessionStartedAt = new Date().toISOString();
   const repetitiveGroupsByKey = new Map();
   const repetitiveGroupsById = new Map();
@@ -5157,7 +5186,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     group.deferredEntries = [];
     group.members.forEach((entry, index) => {
       deferredUrlToGroup.delete(entry.url);
-      deferredOutcomeUrls.delete(entry.url);
+      deleteDeferredOutcomeUrl(entry.url);
       if (queued.has(entry.url) && !visited.has(entry.url)) pendingQueueUrls.add(entry.url);
       entry.order = index;
       if (index < REPETITIVE_GROUP_CAPTURE_LIMIT) {
@@ -5165,7 +5194,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       } else {
         group.deferredEntries.push(entry);
         deferredUrlToGroup.set(entry.url, group.groupId);
-        deferredOutcomeUrls.add(entry.url);
+        addDeferredOutcomeUrl(entry.url);
         pendingQueueUrls.delete(entry.url);
       }
     });
@@ -5186,7 +5215,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       } else {
         group.deferredEntries.push(entry);
         deferredUrlToGroup.set(entry.url, group.groupId);
-        deferredOutcomeUrls.add(entry.url);
+        addDeferredOutcomeUrl(entry.url);
         pendingQueueUrls.delete(entry.url);
       }
     });
@@ -5230,7 +5259,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       } else {
         group.deferredEntries.push(entry);
         deferredUrlToGroup.set(normalized, group.groupId);
-        deferredOutcomeUrls.add(normalized);
+        addDeferredOutcomeUrl(normalized);
         pendingQueueUrls.delete(normalized);
       }
       return;
@@ -5240,8 +5269,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const recordDiscovery = (url, source) => {
     const normalized = normalizeUrl(url);
-    if (!normalized) return;
-    if (
+    if (!normalized) return false;
+    const isScopedDiscovery = (
       allowUrl(normalized)
       && isWithinScanDepth(normalized)
       && !isIgnoredCrawlUtilityUrl(normalized)
@@ -5253,7 +5282,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         || captureUrlSet.has(normalized)
         || targetedCollectionChildUrlSet.has(normalized)
       )
+    );
+    if (
+      isScopedDiscovery
+      && !scopedDiscoveredUrls.has(normalized)
+      && scopedDiscoveredUrls.size >= discoveryLimit
     ) {
+      discoveryCapReached = true;
+      scanDiagnostics.discoveryCapReached = true;
+      scanDiagnostics.discoveryRejectedAttempts += 1;
+      return false;
+    }
+    if (isScopedDiscovery) {
       scopedDiscoveredUrls.add(normalized);
     }
     if (!(scanScope.focused && normalized === seed && numberingDiscoveryOrder.size === 0)) {
@@ -5267,6 +5307,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (source === 'crawl' || !existing) {
       discoverySourceByUrl.set(normalized, source);
     }
+    return true;
   };
 
   const registerFocusedContentLink = (candidate, sourceUrl, sourceOrder = 0) => {
@@ -5372,6 +5413,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 
   const visited = new Set();
+  const fetchedOutcomeUrls = new Set();
   const referrerMap = new Map();
   const queue = [];
   const queued = new Set();
@@ -5390,6 +5432,35 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     : Math.max(1, pageLimit - focusedParentReserve);
   const getPendingQueueCount = () => pendingQueueUrls.size;
   let lastReportedBatchNumber = 0;
+  let lastReportedAccountedMilestone = 0;
+  let groupedOutcomeCacheVersion = -1;
+  let groupedOutcomeCache = new Set();
+  const getGroupedOutcomeUrls = () => {
+    if (groupedOutcomeCacheVersion === deferredOutcomeVersion) return groupedOutcomeCache;
+    const groupedUrls = new Set();
+    deferredOutcomeUrls.forEach((url) => {
+      const groupId = deferredUrlToGroup.get(url);
+      if (!groupId || repetitiveGroupsById.get(groupId)?.validated) {
+        groupedUrls.add(url);
+      }
+    });
+    groupedOutcomeCache = groupedUrls;
+    groupedOutcomeCacheVersion = deferredOutcomeVersion;
+    return groupedOutcomeCache;
+  };
+  const getFetchedOutcomeUrls = () => fetchedOutcomeUrls;
+  const getCoverageProgress = () => {
+    const fetchedUrls = getFetchedOutcomeUrls();
+    return getScanCoverageMetrics({
+      fetchedUrls,
+      groupedUrls: getGroupedOutcomeUrls(),
+      discoveredCount: Math.max(
+        scopedDiscoveredUrls.size,
+        fetchedUrls.size + getPendingQueueCount()
+      ),
+      milestoneSize: DEFAULT_ACCOUNTED_MILESTONE_SIZE,
+    });
+  };
   const getBatchProgress = () => {
     const fetchedCount = visited.size;
     const completedBatches = Math.floor(fetchedCount / SCAN_PAGE_BATCH_SIZE);
@@ -5405,14 +5476,27 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
   const logBatchMilestone = () => {
     const completedBatches = Math.floor(visited.size / SCAN_PAGE_BATCH_SIZE);
-    if (completedBatches <= lastReportedBatchNumber) return;
-    lastReportedBatchNumber = completedBatches;
-    console.info('[scan] Batch milestone:', {
+    if (completedBatches > lastReportedBatchNumber) {
+      lastReportedBatchNumber = completedBatches;
+      console.info('[scan] Batch milestone:', {
+        seed,
+        batchNumber: completedBatches,
+        batchSize: SCAN_PAGE_BATCH_SIZE,
+        fetched: visited.size,
+        allowedPages: pageLimit,
+      });
+    }
+    const coverage = getCoverageProgress();
+    const fetchedOutcomeCount = getFetchedOutcomeUrls().size;
+    if (coverage.accountedMilestonesCompleted <= lastReportedAccountedMilestone) return;
+    lastReportedAccountedMilestone = coverage.accountedMilestonesCompleted;
+    console.info('[scan] Accounted milestone:', {
       seed,
-      batchNumber: completedBatches,
-      batchSize: SCAN_PAGE_BATCH_SIZE,
-      fetched: visited.size,
-      allowedPages: pageLimit,
+      accountedMilestonesCompleted: coverage.accountedMilestonesCompleted,
+      accountedMilestoneSize: coverage.accountedMilestoneSize,
+      accounted: coverage.accounted,
+      fetched: fetchedOutcomeCount,
+      grouped: getGroupedOutcomeUrls().size,
     });
   };
   let lastDiscoveryProgressAt = 0;
@@ -5422,20 +5506,26 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!force && now - lastDiscoveryProgressAt < 250) return;
     lastDiscoveryProgressAt = now;
     const queuedCount = getPendingQueueCount();
-    const processedCount = new Set([...visited, ...deferredOutcomeUrls]).size;
+    const coverage = getCoverageProgress();
+    const fetchedOutcomeCount = getFetchedOutcomeUrls().size;
     onProgress({
-      scanned: processedCount,
-      processed: processedCount,
-      fetched: visited.size,
+      scanned: coverage.accounted,
+      processed: coverage.accounted,
+      accounted: coverage.accounted,
+      accountedMilestonesCompleted: coverage.accountedMilestonesCompleted,
+      accountedMilestoneSize: coverage.accountedMilestoneSize,
+      fetched: fetchedOutcomeCount,
       mapped: 0,
       captured: 0,
       visible: 0,
-      deferred: deferredOutcomeUrls.size,
+      deferred: getGroupedOutcomeUrls().size,
       blocked: blockedOutcomeUrls.size,
       failed: failedOutcomeUrls.size,
       queued: queuedCount,
-      discovered: Math.max(scopedDiscoveredUrls.size, processedCount + queuedCount),
+      discovered: coverage.discovered,
       allowedPages: pageLimit,
+      allowedFetchedPages: pageLimit,
+      discoveredLimit: discoveryLimit,
       ...getBatchProgress(),
       sessionStartedAt: scanSessionStartedAt,
       phase: 'discovering',
@@ -5467,6 +5557,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       && !targetedCollectionChildUrlSet.has(url)
     ) return;
     if (deferredUrlToGroup.has(url)) return;
+    if (
+      discoveryCapReached
+      && url !== seed
+      && !scopedDiscoveredUrls.has(normalizeUrl(url))
+    ) return;
     if (isIgnoredCrawlUtilityUrl(url)) {
       scanDiagnostics.ignoredUtilityUrls += 1;
       return;
@@ -5974,30 +6069,40 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       totalFindings: Object.values(findings).reduce((sum, value) => sum + (Number(value) || 0), 0),
     };
   };
-  const getScanProgressSnapshot = ({ final = false, phase = null } = {}) => ({
-    scanned: new Set([...visited, ...deferredOutcomeUrls]).size,
-    processed: new Set([...visited, ...deferredOutcomeUrls]).size,
-    fetched: visited.size,
-    mapped: countPageMapValues(isSuccessfulCapturedPageMeta),
-    captured: countPageMapValues(isSuccessfulCapturedPageMeta),
-    visible: final && root ? countScanTreeNodes(root) : 0,
-    deferred: deferredOutcomeUrls.size,
-    blocked: blockedOutcomeUrls.size,
-    failed: failedOutcomeUrls.size,
-    queued: getPendingQueueCount(),
-    discovered: Math.max(
-      scopedDiscoveredUrls.size,
-      new Set([...visited, ...deferredOutcomeUrls]).size + getPendingQueueCount(),
-      pageMap.size
-    ),
-    sessionStartedAt: scanSessionStartedAt,
-    allowedPages: pageLimit,
-    ...getBatchProgress(),
-    phase: phase || (final ? 'finalizing' : 'scanning'),
-    ...(final && finalProgressSummary ? finalProgressSummary : getProgressSummary()),
-    ...(final ? { final: true } : {}),
-  });
+  const getScanProgressSnapshot = ({ final = false, phase = null } = {}) => {
+    const coverage = getCoverageProgress();
+    const fetchedOutcomeCount = getFetchedOutcomeUrls().size;
+    const capturedPageCount = capturedOutcomeUrls.size;
+    return {
+      scanned: coverage.accounted,
+      processed: coverage.accounted,
+      accounted: coverage.accounted,
+      accountedMilestonesCompleted: coverage.accountedMilestonesCompleted,
+      accountedMilestoneSize: coverage.accountedMilestoneSize,
+      fetched: fetchedOutcomeCount,
+      mapped: capturedPageCount,
+      captured: capturedPageCount,
+      visible: final && root ? countScanTreeNodes(root) : 0,
+      deferred: getGroupedOutcomeUrls().size,
+      blocked: blockedOutcomeUrls.size,
+      failed: failedOutcomeUrls.size,
+      queued: getPendingQueueCount(),
+      discovered: Math.max(coverage.discovered, pageMap.size),
+      sessionStartedAt: scanSessionStartedAt,
+      allowedPages: pageLimit,
+      allowedFetchedPages: pageLimit,
+      discoveredLimit: discoveryLimit,
+      ...getBatchProgress(),
+      phase: phase || (final ? 'finalizing' : 'scanning'),
+      ...(final && finalProgressSummary ? finalProgressSummary : getProgressSummary()),
+      ...(final ? { final: true } : {}),
+    };
+  };
+  let lastScanProgressAt = 0;
   const reportScanProgress = (options = {}) => {
+    const now = Date.now();
+    if (options.final !== true && now - lastScanProgressAt < 250) return;
+    lastScanProgressAt = now;
     logBatchMilestone();
     if (onProgress) onProgress(getScanProgressSnapshot(options));
   };
@@ -6074,6 +6179,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (!item?.url || visited.has(item.url)) continue;
       if (deferredUrlToGroup.has(item.url)) continue;
       visited.add(item.url);
+      if (!focusedDiscoveryHelperUrls.has(item.url)) fetchedOutcomeUrls.add(item.url);
       return item;
     }
     return null;
@@ -6082,6 +6188,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const processCrawlItem = async ({ url, depth, source = 'crawl' }) => {
     pendingQueueUrls.delete(url);
     visited.add(url);
+    if (!focusedDiscoveryHelperUrls.has(url)) fetchedOutcomeUrls.add(url);
     const deferredGroupId = deferredUrlToGroup.get(url);
     if (deferredGroupId) {
       const group = repetitiveGroupsById.get(deferredGroupId);
@@ -6091,7 +6198,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       }
       deferredUrlToGroup.delete(url);
     }
-    deferredOutcomeUrls.delete(url);
+    deleteDeferredOutcomeUrl(url);
     const discoveryIndex = discoveryCounter++;
 
     // Send progress update
@@ -6303,6 +6410,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       metadataAvailable: classification.metadataAvailable,
       repetitivePageSignal,
     });
+    if (fetchedOutcomeUrls.has(url) && isSuccessfulCapturedPageMeta(pageMap.get(url))) {
+      capturedOutcomeUrls.add(url);
+    } else {
+      capturedOutcomeUrls.delete(url);
+    }
     if (classification.isBlockedStatus || classification.isChallengePage) {
       blockedOutcomeUrls.add(url);
       failedOutcomeUrls.delete(url);
@@ -6482,7 +6594,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           }
           remainingAllowance -= 1;
           deferredUrlToGroup.delete(entry.url);
-          deferredOutcomeUrls.delete(entry.url);
+          deleteDeferredOutcomeUrl(entry.url);
           group.captureUrls.add(entry.url);
           promotedEntries.push(entry);
         });
@@ -6547,6 +6659,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (!group.active || group.disabled || group.validated) return;
       if (group.shape !== 'slug') {
         group.validated = true;
+        deferredOutcomeVersion += 1;
         return;
       }
       const signals = Array.from(group.captureUrls)
@@ -6554,13 +6667,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         .filter(Boolean);
       if (sampleSignalsAreCompatible(signals)) {
         group.validated = true;
+        deferredOutcomeVersion += 1;
         return;
       }
       group.active = false;
       group.disabled = true;
       group.deferredEntries.forEach((entry) => {
         deferredUrlToGroup.delete(entry.url);
-        deferredOutcomeUrls.delete(entry.url);
+        deleteDeferredOutcomeUrl(entry.url);
         queued.delete(entry.url);
         pendingQueueUrls.delete(entry.url);
         enqueue(
@@ -6726,15 +6840,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     await runCrawlWorkers();
   }
 
-  if (
-    !targetedGroupCapture
-    && !stopRequested
-    && pageLimit !== null
-    && visited.size >= pageLimit
-    && getPendingQueueCount() > 0
-  ) {
-    partialReason = entitlementCappedScan ? 'entitlement_cap' : 'scan_safety_cap';
-  }
+  partialReason = getScanCapacityPartialReason({
+    targetedGroupCapture,
+    stopRequested,
+    entitlementCappedScan,
+    fetchedCount: visited.size,
+    allowedFetchedPages: pageLimit,
+    pendingCount: getPendingQueueCount(),
+    discoveryCapReached,
+  }) || partialReason;
 
   const inspectFocusedAncestor = async (url) => {
     let html = '';
@@ -6938,9 +7052,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       sitemapNumberingOrder.delete(helperUrl);
       scopedDiscoveredUrls.delete(helperUrl);
       pageMap.delete(helperUrl);
+      fetchedOutcomeUrls.delete(helperUrl);
+      capturedOutcomeUrls.delete(helperUrl);
       failedOutcomeUrls.delete(helperUrl);
       blockedOutcomeUrls.delete(helperUrl);
-      deferredOutcomeUrls.delete(helperUrl);
+      deleteDeferredOutcomeUrl(helperUrl);
     });
   }
 
@@ -7193,7 +7309,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     sitemapOrder.delete(rootRedirectAliasUrl);
     failedOutcomeUrls.delete(rootRedirectAliasUrl);
     blockedOutcomeUrls.delete(rootRedirectAliasUrl);
-    deferredOutcomeUrls.delete(rootRedirectAliasUrl);
+    deleteDeferredOutcomeUrl(rootRedirectAliasUrl);
     scanDiagnostics.rootRedirectAliasCollapsedCount += 1;
   }
 
@@ -7530,7 +7646,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (deferredEntries.length === 0) return;
       const groupKey = `${parentUrl}|visible-parent`;
       const groupId = getStableRepetitiveGroupId(groupKey);
-      deferredEntries.forEach((entry) => deferredOutcomeUrls.add(entry.url));
+      deferredEntries.forEach((entry) => addDeferredOutcomeUrl(entry.url));
       repetitiveGroups.push({
         id: groupId,
         key: groupKey,
@@ -7673,14 +7789,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           nodes.delete(entry.url);
           pageMap.delete(entry.url);
           visiblePrimaryUrls.delete(entry.url);
-          deferredOutcomeUrls.add(entry.url);
+          addDeferredOutcomeUrl(entry.url);
         });
       }
       const deferredEntries = dedupeEntriesByUrl(
         [...combined.entries, ...overflowEntries].sort(compareCombinedEntries)
       );
       if (deferredEntries.length === 0) return;
-      deferredEntries.forEach((entry) => deferredOutcomeUrls.add(entry.url));
+      deferredEntries.forEach((entry) => addDeferredOutcomeUrl(entry.url));
       const capturedCount = capturedEntries.length - overflowEntries.length;
       const summary = {
         id: combined.id,
@@ -7832,7 +7948,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         nodes.delete(entry.url);
         pageMap.delete(entry.url);
         visiblePrimaryUrls.delete(entry.url);
-        deferredOutcomeUrls.add(entry.url);
+        addDeferredOutcomeUrl(entry.url);
       });
 
       const existingSummary = repetitiveGroups.find((group) => group.id === groupId);
@@ -8132,6 +8248,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     || reason === 'stopped_by_user'
     || reason === 'entitlement_cap'
     || reason === 'scan_safety_cap'
+    || reason === 'scan_discovery_cap'
   );
   const hasRootOnlyCollapseSignal = scanDiagnostics.rootAllowedLinks > 0
     || scanDiagnostics.sitemapUrlsQueued > 0
@@ -8273,30 +8390,28 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   }
 
-  scopedDiscoveredUrls.forEach((url) => {
-    if (!visited.has(url)) {
-      deferredOutcomeUrls.add(url);
-      pendingQueueUrls.delete(url);
-    }
-  });
   finalProgressSummary = getProgressSummary([root, ...prunedOrphanNodes, ...subdomainNodes]);
   reportScanProgress({ final: true });
 
   const includePartialOrphans = Boolean(partialReason);
-  const capturedPageCount = countPageMapValues(isSuccessfulCapturedPageMeta);
+  const capturedPageCount = capturedOutcomeUrls.size;
+  const finalCoverage = getCoverageProgress();
   const totalDiscoveredPageCount = Math.max(
-    capturedPageCount + deferredOutcomeUrls.size,
+    finalCoverage.discovered,
     Number(discoveryManifest?.totalDiscoveredPageCount || 0) || 0
   );
+  const remainingPageCount = Math.max(0, totalDiscoveredPageCount - finalCoverage.accounted);
   const pageCountSummary = {
-    fetchedPageCount: visited.size,
+    accountedPageCount: finalCoverage.accounted,
+    fetchedPageCount: getFetchedOutcomeUrls().size,
     capturedPageCount,
     visiblePageCount: capturedTreeNodeCount,
-    groupedPageCount: deferredOutcomeUrls.size,
-    deferredPageCount: deferredOutcomeUrls.size,
-    remainingPageCount: getPendingQueueCount(),
-    estimatedRemainingPageCount: Math.max(0, totalDiscoveredPageCount - capturedPageCount),
+    groupedPageCount: getGroupedOutcomeUrls().size,
+    deferredPageCount: getGroupedOutcomeUrls().size,
+    remainingPageCount,
+    estimatedRemainingPageCount: remainingPageCount,
     totalDiscoveredPageCount,
+    discoveredLimit: discoveryLimit,
   };
   const captureSummary = targetedGroupCapture
     ? (() => {
@@ -8383,6 +8498,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     && !targetedGroupCapture
     && partialReason !== 'stopped_by_user'
     && partialReason !== 'entitlement_cap'
+    && partialReason !== 'scan_discovery_cap'
     && partialReason !== 'root_discovery_failed'
   ) {
     partialReason = 'blocked_sections';

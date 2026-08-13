@@ -540,29 +540,34 @@ async function waitForJob(jobId, accessToken, authToken) {
       headers: authToken ? { authorization: `Bearer ${authToken}` } : {},
     });
     if (response.job?.status === 'complete') {
+      const progress = response.job.progress || {};
+      const summary = response.job.result?.pageCountSummary || {};
       assert.ok(Number(response.job.progress?.sequence || 0) > 0, 'completed jobs should persist sequenced progress');
       assert.equal(response.job.progress?.final, true, 'completed jobs should persist their final progress snapshot');
       assert.equal(
-        Number(response.job.progress?.processed || 0),
-        Number(response.job.progress?.discovered || 0),
-        `normal completed scans should finish with every discovered URL processed (${JSON.stringify(response.job.progress)})`
+        Number(progress.accounted || 0),
+        Number(progress.processed || 0),
+        'processed should remain a compatibility alias for accounted coverage'
       );
       assert.ok(
-        Number(response.job.progress?.discovered || 0) >= Number(response.job.progress?.mapped || 0),
-        'discovered progress should not trail mapped progress'
+        Number(progress.discovered || 0) >= Number(progress.accounted || 0),
+        'discovered progress should not trail accounted coverage'
       );
       assert.ok(
-        Number(response.job.progress?.processed || 0)
-          >= Number(response.job.progress?.captured || response.job.progress?.mapped || 0)
-            + Number(response.job.progress?.deferred || 0),
-        'captured and deferred outcomes should be disjoint'
+        Number(progress.accounted || 0) >= Number(progress.captured || progress.mapped || 0),
+        'accounted coverage should include captured pages'
       );
       assert.ok(
-        Number(response.job.progress?.processed || 0)
-          >= Number(response.job.result?.pageCountSummary?.capturedPageCount || 0)
-            + Number(response.job.result?.pageCountSummary?.deferredPageCount || 0),
-        'result page counts should not overlap'
+        Number(summary.accountedPageCount || 0) >= Number(summary.fetchedPageCount || 0),
+        'accounted result coverage should include every fetched URL'
       );
+      if (Number(summary.remainingPageCount || 0) === 0) {
+        assert.equal(
+          Number(summary.accountedPageCount || 0),
+          Number(summary.totalDiscoveredPageCount || 0),
+          'fully completed scans should account for every discovered URL'
+        );
+      }
       return response.job.result;
     }
     if (response.job?.status === 'failed') throw new Error(response.job.error || 'Scan failed');
@@ -728,7 +733,9 @@ async function main() {
       options: {},
     }, authToken);
     assert.equal(limitedResult.pageCountSummary.capturedPageCount, 5);
-    assert.equal(limitedResult.pageCountSummary.deferredPageCount, 8);
+    assert.equal(limitedResult.pageCountSummary.accountedPageCount, 5);
+    assert.equal(limitedResult.pageCountSummary.deferredPageCount, 0);
+    assert.equal(limitedResult.pageCountSummary.remainingPageCount, 8);
     assert.equal(limitedResult.pageCountSummary.totalDiscoveredPageCount, 13);
 
     const wholeSiteResult = await createScan({

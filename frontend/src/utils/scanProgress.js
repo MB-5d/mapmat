@@ -10,6 +10,9 @@ const normalizeFindings = (findings = {}) => Object.fromEntries(
 export const createEmptyScanProgress = () => ({
   scanned: 0,
   processed: 0,
+  accounted: 0,
+  accountedMilestonesCompleted: 0,
+  accountedMilestoneSize: 0,
   fetched: 0,
   mapped: 0,
   captured: 0,
@@ -20,6 +23,8 @@ export const createEmptyScanProgress = () => ({
   queued: 0,
   discovered: 0,
   allowedPages: 0,
+  allowedFetchedPages: 0,
+  discoveredLimit: 0,
   batchNumber: 0,
   batchSize: 0,
   sequence: 0,
@@ -37,11 +42,12 @@ export const reconcileScanProgress = (current = {}, incoming = {}) => {
     return current;
   }
 
-  const processed = Math.max(
-    toCount(current.processed ?? current.scanned),
-    toCount(incoming.processed ?? incoming.scanned)
+  const accounted = Math.max(
+    toCount(current.accounted ?? current.processed ?? current.scanned),
+    toCount(incoming.accounted ?? incoming.processed ?? incoming.scanned)
   );
-  const scanned = processed;
+  const processed = accounted;
+  const scanned = accounted;
   const captured = Math.max(
     toCount(current.captured ?? current.mapped),
     toCount(incoming.captured ?? incoming.mapped)
@@ -50,7 +56,7 @@ export const reconcileScanProgress = (current = {}, incoming = {}) => {
   const fetched = Math.max(
     toCount(current.fetched),
     toCount(incoming.fetched),
-    Math.max(0, processed - Math.max(toCount(current.deferred), toCount(incoming.deferred)))
+    Math.max(0, accounted - Math.max(toCount(current.deferred), toCount(incoming.deferred)))
   );
   const visible = Math.max(toCount(current.visible), toCount(incoming.visible));
   const incomingQueued = toCount(incoming.queued);
@@ -69,9 +75,9 @@ export const reconcileScanProgress = (current = {}, incoming = {}) => {
   const discovered = Math.max(
     toCount(current.discovered),
     toCount(incoming.discovered),
-    toCount(current.processed ?? current.scanned) + toCount(current.queued),
-    toCount(incoming.processed ?? incoming.scanned) + incomingQueued,
-    processed,
+    toCount(current.accounted ?? current.processed ?? current.scanned) + toCount(current.queued),
+    toCount(incoming.accounted ?? incoming.processed ?? incoming.scanned) + incomingQueued,
+    accounted,
     captured
   );
   const findings = incoming.findings
@@ -85,6 +91,7 @@ export const reconcileScanProgress = (current = {}, incoming = {}) => {
     ...incoming,
     scanned,
     processed,
+    accounted,
     fetched,
     mapped,
     captured,

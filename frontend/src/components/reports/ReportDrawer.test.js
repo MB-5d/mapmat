@@ -685,4 +685,64 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('20 more pages are locked.');
   });
 
+  test('shows distinct scan coverage without changing pages on map', () => {
+    renderDrawer({
+      scanMeta: {
+        pageCountSummary: {
+          accountedPageCount: 15243,
+          fetchedPageCount: 5000,
+          capturedPageCount: 4979,
+          visiblePageCount: 29,
+          groupedPageCount: 10243,
+          remainingPageCount: 12476,
+          totalDiscoveredPageCount: 27719,
+        },
+      },
+    });
+
+    const coverage = container.querySelector('.report-coverage');
+    expect(coverage.textContent).toContain('Discovered27,719');
+    expect(coverage.textContent).toContain('Accounted15,243');
+    expect(coverage.textContent).toContain('Fetched5,000');
+    expect(coverage.textContent).toContain('Captured4,979');
+    expect(coverage.textContent).toContain('Visible on map29');
+    expect(coverage.textContent).toContain('Grouped10,243');
+    expect(coverage.textContent).toContain('Remaining12,476');
+    expect(container.querySelector('.report-total-card').textContent).toContain('Pages on map3');
+  });
+
+  test('derives accounted coverage for older saved maps without double-counting grouped fetched pages', () => {
+    renderDrawer({
+      scanMeta: {
+        pageCountSummary: {
+          fetchedPageCount: 15020,
+          capturedPageCount: 20,
+          visiblePageCount: 21,
+          groupedPageCount: 15000,
+          remainingPageCount: 0,
+          totalDiscoveredPageCount: 15020,
+        },
+      },
+    });
+
+    expect(container.querySelector('.report-coverage').textContent).toContain('Accounted15,020');
+  });
+
+  test('explains a discovery safety-cap partial result', () => {
+    renderDrawer({
+      scanMeta: {
+        partialReason: 'scan_discovery_cap',
+        pageCountSummary: {
+          accountedPageCount: 50000,
+          fetchedPageCount: 50000,
+          totalDiscoveredPageCount: 200000,
+          remainingPageCount: 150000,
+        },
+      },
+    });
+
+    expect(container.textContent).toContain('Scan reached the discovery safety limit.');
+    expect(container.textContent).toContain('valid results captured and grouped');
+  });
+
 });

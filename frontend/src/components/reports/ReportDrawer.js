@@ -286,6 +286,57 @@ const ReportDrawer = ({
       || Number(entitlementNotice?.sourcePageCount || entitlementNotice?.requestedPages || 0) - entitlementVisiblePageCount
       || 0
   );
+  const pageCountSummary = scanMeta?.pageCountSummary && typeof scanMeta.pageCountSummary === 'object'
+    ? scanMeta.pageCountSummary
+    : null;
+  const coverageItems = pageCountSummary
+    ? (() => {
+      const fetched = Math.max(0, Number(pageCountSummary.fetchedPageCount || 0) || 0);
+      const grouped = Math.max(0, Number(
+        pageCountSummary.groupedPageCount
+        ?? pageCountSummary.deferredPageCount
+        ?? 0
+      ) || 0);
+      const captured = Math.max(0, Number(pageCountSummary.capturedPageCount || 0) || 0);
+      const remaining = Math.max(0, Number(
+        pageCountSummary.remainingPageCount
+        ?? pageCountSummary.estimatedRemainingPageCount
+        ?? 0
+      ) || 0);
+      const persistedDiscovered = Math.max(
+        0,
+        Number(pageCountSummary.totalDiscoveredPageCount || 0) || 0
+      );
+      const accounted = Math.max(0, Number(
+        pageCountSummary.accountedPageCount
+        ?? Math.max(fetched, captured + grouped, persistedDiscovered - remaining)
+      ) || 0);
+      const discovered = Math.max(
+        accounted + remaining,
+        persistedDiscovered
+      );
+      return [
+        { key: 'discovered', label: 'Discovered', value: discovered },
+        { key: 'accounted', label: 'Accounted', value: accounted },
+        { key: 'fetched', label: 'Fetched', value: fetched },
+        { key: 'captured', label: 'Captured', value: captured },
+        { key: 'visible', label: 'Visible on map', value: pageCountSummary.visiblePageCount ?? stats.total },
+        { key: 'grouped', label: 'Grouped', value: grouped },
+        { key: 'remaining', label: 'Remaining', value: remaining },
+      ];
+    })()
+    : [];
+  const safetyCapNotice = scanMeta?.partialReason === 'scan_discovery_cap'
+    ? {
+      title: 'Scan reached the discovery safety limit.',
+      message: 'This map contains the valid results captured and grouped before the limit was reached.',
+    }
+    : scanMeta?.partialReason === 'scan_safety_cap'
+      ? {
+        title: 'Scan reached the fetch safety limit.',
+        message: 'This map contains the valid results captured and grouped before the limit was reached.',
+      }
+      : null;
 
   const activeFilterKeys = useMemo(
     () => visibleFilterOptions.filter(option => filters[option.key]).map(option => option.key),
@@ -531,6 +582,15 @@ const ReportDrawer = ({
             </div>
           </div>
         )}
+        {safetyCapNotice && (
+          <div className="ui-status-alert ui-status-alert--warning report-scan-alert">
+            <AlertTriangle size={16} className="ui-status-alert__icon" />
+            <div className="ui-status-alert__content">
+              <strong>{safetyCapNotice.title}</strong>
+              <span>{safetyCapNotice.message}</span>
+            </div>
+          </div>
+        )}
         {entitlementNotice && (
           <div className="ui-status-alert ui-status-alert--warning report-upgrade-alert">
             <AlertTriangle size={16} className="ui-status-alert__icon" />
@@ -563,6 +623,19 @@ const ReportDrawer = ({
               </Button>
             ) : null}
           </div>
+        )}
+        {coverageItems.length > 0 && (
+          <section className="report-coverage" aria-label="Scan coverage">
+            <h3>Scan coverage</h3>
+            <div className="report-coverage-grid">
+              {coverageItems.map((item) => (
+                <div className="report-coverage-item" key={item.key}>
+                  <span>{item.label}</span>
+                  <strong>{formatReportCount(item.value)}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
         <section className={`report-summary ${statCards.length > 0 && statCards.length <= 4 ? 'report-summary--single-row' : ''}`}>
           <Chip

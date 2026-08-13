@@ -6383,6 +6383,47 @@ body {
   scroll-padding-bottom: var(--unit-88);
 }
 
+.report-coverage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-8);
+  padding: var(--unit-12);
+  border: var(--border-width-subtle) solid var(--ui-color-border);
+  border-radius: var(--radius-md);
+  background: var(--ui-color-surface-muted);
+}
+
+.report-coverage h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: var(--unit-8);
+}
+
+.report-coverage-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-coverage-item span {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.report-coverage-item strong {
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
 .report-summary {
   display: grid;
   grid-template-columns: 180px 1fr;

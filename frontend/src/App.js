@@ -1888,28 +1888,48 @@ const normalizePersistedScanMeta = (scanMeta = null) => {
     ? scanMeta.scanScope
     : null;
   const pageCountSummary = scanMeta?.pageCountSummary && typeof scanMeta.pageCountSummary === 'object'
-    ? {
-      fetchedPageCount: Math.max(0, Math.floor(Number(
-        scanMeta.pageCountSummary.fetchedPageCount
-        ?? scanMeta.pageCountSummary.capturedPageCount
+    ? (() => {
+      const summary = scanMeta.pageCountSummary;
+      const fetchedPageCount = Math.max(0, Math.floor(Number(
+        summary.fetchedPageCount
+        ?? summary.capturedPageCount
         ?? 0
-      ) || 0)),
-      capturedPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.capturedPageCount || 0) || 0)),
-      visiblePageCount: Math.max(0, Math.floor(Number(
-        scanMeta.pageCountSummary.visiblePageCount
-        ?? scanMeta.pageCountSummary.capturedPageCount
+      ) || 0));
+      const groupedPageCount = Math.max(0, Math.floor(Number(
+        summary.groupedPageCount
+        ?? summary.deferredPageCount
         ?? 0
-      ) || 0)),
-      groupedPageCount: Math.max(0, Math.floor(Number(
-        scanMeta.pageCountSummary.groupedPageCount
-        ?? scanMeta.pageCountSummary.deferredPageCount
-        ?? 0
-      ) || 0)),
-      deferredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.deferredPageCount || 0) || 0)),
-      remainingPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.remainingPageCount || 0) || 0)),
-      estimatedRemainingPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.estimatedRemainingPageCount || 0) || 0)),
-      totalDiscoveredPageCount: Math.max(0, Math.floor(Number(scanMeta.pageCountSummary.totalDiscoveredPageCount || 0) || 0)),
-    }
+      ) || 0));
+      const capturedPageCount = Math.max(0, Math.floor(Number(summary.capturedPageCount || 0) || 0));
+      const remainingPageCount = Math.max(0, Math.floor(Number(summary.remainingPageCount || 0) || 0));
+      const totalDiscoveredPageCount = Math.max(
+        0,
+        Math.floor(Number(summary.totalDiscoveredPageCount || 0) || 0)
+      );
+      return {
+        accountedPageCount: Math.max(0, Math.floor(Number(
+          summary.accountedPageCount
+          ?? Math.max(
+            fetchedPageCount,
+            capturedPageCount + groupedPageCount,
+            totalDiscoveredPageCount - remainingPageCount
+          )
+        ) || 0)),
+        fetchedPageCount,
+        capturedPageCount,
+        visiblePageCount: Math.max(0, Math.floor(Number(
+          summary.visiblePageCount
+          ?? summary.capturedPageCount
+          ?? 0
+        ) || 0)),
+        groupedPageCount,
+        deferredPageCount: Math.max(0, Math.floor(Number(summary.deferredPageCount ?? groupedPageCount) || 0)),
+        remainingPageCount,
+        estimatedRemainingPageCount: Math.max(0, Math.floor(Number(summary.estimatedRemainingPageCount || 0) || 0)),
+        totalDiscoveredPageCount,
+        discoveredLimit: Math.max(0, Math.floor(Number(summary.discoveredLimit || 0) || 0)),
+      };
+    })()
     : null;
   const repetitiveGroups = (Array.isArray(scanMeta?.repetitiveGroups) ? scanMeta.repetitiveGroups : [])
     .map((group) => ({
@@ -3456,6 +3476,7 @@ const reconcileDeferredCaptureScanMeta = ({
   remainingCount,
   visiblePageCount,
   discoveredGroups = [],
+  discoveredCapturedCount = 0,
 }) => {
   const currentSummary = current?.pageCountSummary || {};
   const normalizedCapturedCount = Math.max(0, Number(capturedCount || 0) || 0);
@@ -3466,6 +3487,7 @@ const reconcileDeferredCaptureScanMeta = ({
   const normalizedResolvedCount = normalizedGroupCapturedCount + normalizedRemovedCount;
   const normalizedRemainingCount = Math.max(0, Number(remainingCount || 0) || 0);
   const normalizedVisiblePageCount = Math.max(0, Number(visiblePageCount || 0) || 0);
+  const normalizedDiscoveredCapturedCount = Math.max(0, Number(discoveredCapturedCount || 0) || 0);
   const entitlementVisibleLimit = getReportEntitlementVisibleLimit(current);
   const reconciledVisiblePageCount = entitlementVisibleLimit
     ? Math.min(normalizedVisiblePageCount, entitlementVisibleLimit)
@@ -3492,6 +3514,40 @@ const reconcileDeferredCaptureScanMeta = ({
     0
   );
   const repetitiveGroups = [...currentRepetitiveGroups, ...newRepetitiveGroups];
+  const currentFetchedPageCount = Math.max(0, Number(currentSummary.fetchedPageCount || 0) || 0);
+  const currentGroupedPageCount = Math.max(0, Number(
+    currentSummary.groupedPageCount
+    ?? currentSummary.deferredPageCount
+    ?? 0
+  ) || 0);
+  const currentRemainingPageCount = Math.max(0, Number(currentSummary.remainingPageCount || 0) || 0);
+  const currentTotalDiscoveredPageCount = Math.max(
+    0,
+    Number(currentSummary.totalDiscoveredPageCount || 0) || 0
+  );
+  const currentAccountedPageCount = Math.max(0, Number(
+    currentSummary.accountedPageCount
+    ?? Math.max(
+      currentFetchedPageCount,
+      Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0) + currentGroupedPageCount,
+      currentTotalDiscoveredPageCount - currentRemainingPageCount
+    )
+  ) || 0);
+  const nextFetchedPageCount = currentFetchedPageCount + normalizedCapturedCount;
+  const nextGroupedPageCount = Math.max(
+    0,
+    currentGroupedPageCount - normalizedResolvedCount + newlyDiscoveredDeferredCount
+  );
+  const nextAccountedPageCount = currentAccountedPageCount
+    + normalizedDiscoveredCapturedCount
+    + newlyDiscoveredDeferredCount;
+  const nextTotalDiscoveredPageCount = Math.max(
+    currentTotalDiscoveredPageCount
+      + normalizedDiscoveredCapturedCount
+      + newlyDiscoveredDeferredCount,
+    nextAccountedPageCount
+  );
+  const nextRemainingPageCount = Math.max(0, nextTotalDiscoveredPageCount - nextAccountedPageCount);
 
   return {
     ...current,
@@ -3504,40 +3560,16 @@ const reconcileDeferredCaptureScanMeta = ({
       : current?.entitlement,
     pageCountSummary: {
       ...currentSummary,
-      fetchedPageCount: Math.max(0, Number(currentSummary.fetchedPageCount || 0) || 0)
-        + normalizedCapturedCount,
+      accountedPageCount: nextAccountedPageCount,
+      fetchedPageCount: nextFetchedPageCount,
       capturedPageCount: Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
         + normalizedVisibleAddedCount,
       visiblePageCount: reconciledVisiblePageCount,
-      groupedPageCount: Math.max(
-        0,
-        Math.max(0, Number(
-          currentSummary.groupedPageCount
-          ?? currentSummary.deferredPageCount
-          ?? 0
-        ) || 0)
-          - normalizedResolvedCount
-          + newlyDiscoveredDeferredCount
-      ),
-      deferredPageCount: Math.max(
-        0,
-        Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
-          - normalizedResolvedCount
-          + newlyDiscoveredDeferredCount
-      ),
-      estimatedRemainingPageCount: Math.max(
-        0,
-        Math.max(0, Number(currentSummary.estimatedRemainingPageCount || 0) || 0)
-          - normalizedResolvedCount
-          + newlyDiscoveredDeferredCount
-      ),
-      totalDiscoveredPageCount: Math.max(
-        Math.max(0, Number(currentSummary.totalDiscoveredPageCount || 0) || 0)
-          + newlyDiscoveredDeferredCount,
-        Math.max(0, Number(currentSummary.capturedPageCount || 0) || 0)
-          + Math.max(0, Number(currentSummary.deferredPageCount || 0) || 0)
-          + newlyDiscoveredDeferredCount
-      ),
+      groupedPageCount: nextGroupedPageCount,
+      deferredPageCount: nextGroupedPageCount,
+      remainingPageCount: nextRemainingPageCount,
+      estimatedRemainingPageCount: nextRemainingPageCount,
+      totalDiscoveredPageCount: nextTotalDiscoveredPageCount,
     },
   };
 };
@@ -13931,6 +13963,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
       } else if (normalizedPartialReason === 'scan_safety_cap') {
         showToast('Scan reached the safety limit. Showing the pages captured so far.', 'warning');
+      } else if (normalizedPartialReason === 'scan_discovery_cap') {
+        showToast('Scan reached the discovery safety limit. Showing the valid results so far.', 'warning');
       } else if (normalizedPartialReason === 'scan_collapsed') {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
       } else if (data.blockedSections?.length) {
@@ -14239,6 +14273,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         remainingCount: applied.remainingCount,
         visiblePageCount,
         discoveredGroups: completedJob.result.repetitiveGroups,
+        discoveredCapturedCount: completedJob.result.captureSummary?.discoveredSuccessfulEntries?.length || 0,
       }));
       setDraftVersionFromSnapshot({
         root: applied.root,
