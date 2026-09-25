@@ -359,6 +359,14 @@ describe('large map viewport behavior', () => {
         partial: true,
         partialReason: 'entitlement_cap',
         entitlement,
+        pageCountSummary: {
+          fetchedPageCount: 5000,
+          capturedPageCount: 4979,
+          visiblePageCount: 29,
+          groupedPageCount: 10243,
+          remainingPageCount: 12476,
+          totalDiscoveredPageCount: 27719,
+        },
         discoveryManifest: {
           version: 1,
           seedUrl: 'https://example.com/',
@@ -396,6 +404,7 @@ describe('large map viewport behavior', () => {
     const hydrated = __testing.hydratePersistedScanLimitMap(payload.root, payload.orphans);
     expect(hydrated.scanMeta.partialReason).toBe('entitlement_cap');
     expect(hydrated.scanMeta.discoveryManifest.hiddenPageCount).toBe(2);
+    expect(hydrated.scanMeta.pageCountSummary.accountedPageCount).toBe(15243);
     expect(hydrated.root.children.some((node) => node.isEntitlementLocked)).toBe(true);
   });
 
@@ -642,6 +651,145 @@ describe('large map viewport behavior', () => {
 });
 
 describe('deferred page capture', () => {
+  test('captures large deferred groups in stable batches', () => {
+    const entries = Array.from({ length: 45 }, (_, index) => ({
+      url: `https://example.com/jobs/${index + 1}`,
+    }));
+
+    expect(__testing.getDeferredCaptureBatchEntries(entries)).toEqual(entries.slice(0, 20));
+    expect(__testing.getDeferredCapturePageAllowance(entries)).toBe(420);
+  });
+
+  test('resolves a successful deferred URL that is already visible elsewhere', () => {
+    const placeholder = {
+      id: 'placeholder-archive',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'archive-group',
+      remainingCount: 1,
+      deferredEntries: [{ url: 'https://example.com/story/1' }],
+      children: [],
+    };
+    const existingRoot = {
+      id: 'home',
+      url: 'https://example.com/',
+      children: [
+        { id: 'story', url: 'https://example.com/story/1', children: [] },
+        { id: 'archive', url: 'https://example.com/archive', children: [placeholder] },
+      ],
+    };
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot,
+      placeholderNode: placeholder,
+      captureResult: {
+        root: {
+          id: 'capture-root',
+          url: 'https://example.com/',
+          children: [{ id: 'captured-story', url: 'https://example.com/story/1', children: [] }],
+        },
+        captureSummary: {
+          successfulEntries: [{ url: 'https://example.com/story/1' }],
+        },
+      },
+    });
+
+    expect(applied.capturedCount).toBe(0);
+    expect(applied.alreadyPresentCount).toBe(1);
+    expect(applied.insertedPageCount).toBe(0);
+    expect(applied.remainingCount).toBe(0);
+    expect(applied.root.children[1].children).toHaveLength(0);
+  });
+
+  test('keeps an existing collection child in place while adding new collection children', () => {
+    const monthUrl = 'https://example.com/archive?date=1-31-2026';
+    const storyUrl = 'https://example.com/2026/01/31/story';
+    const newStoryUrl = 'https://example.com/2026/01/31/new-story';
+    const placeholder = {
+      id: 'placeholder-month',
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'month-group',
+      remainingCount: 1,
+      deferredEntries: [{ url: monthUrl, scanNumber: 'X.2.1' }],
+      children: [],
+    };
+    const applied = __testing.applyDeferredCaptureResult({
+      existingRoot: {
+        id: 'home',
+        url: 'https://example.com/',
+        children: [
+          {
+            id: 'existing-story',
+            url: storyUrl,
+            title: 'Saved title',
+            annotations: { note: 'Keep me' },
+            children: [],
+          },
+          {
+            id: 'archive',
+            url: 'https://example.com/archive',
+            children: [
+              { id: 'virtual-month', url: monthUrl, isVirtualMissing: true, children: [placeholder] },
+            ],
+          },
+        ],
+      },
+      placeholderNode: placeholder,
+      captureResult: {
+        root: {
+          id: 'capture-root',
+          url: 'https://example.com/',
+          children: [
+            {
+              id: 'captured-month',
+              url: monthUrl,
+              children: [
+                { id: 'captured-story', url: storyUrl, title: 'Fresh title', children: [] },
+                { id: 'new-story', url: newStoryUrl, title: 'New story', children: [] },
+              ],
+            },
+          ],
+        },
+        captureSummary: {
+          successfulEntries: [{ url: monthUrl, scanNumber: 'X.2.1' }],
+          discoveredSuccessfulEntries: [
+            { url: storyUrl, parentUrl: monthUrl },
+            { url: newStoryUrl, parentUrl: monthUrl },
+          ],
+        },
+      },
+    });
+
+    const allNodes = [];
+    const walk = (node) => {
+      if (!node) return;
+      allNodes.push(node);
+      (node.children || []).forEach(walk);
+    };
+    walk(applied.root);
+    const storyNodes = allNodes.filter((node) => node.url === storyUrl);
+    const monthNode = allNodes.find((node) => node.url === monthUrl);
+    expect(storyNodes).toHaveLength(1);
+    expect(storyNodes[0]).toMatchObject({
+      id: 'existing-story',
+      title: 'Saved title',
+      annotations: { note: 'Keep me' },
+    });
+    expect(applied.root.children.map((node) => node.id)).toEqual(['existing-story', 'archive']);
+    expect(monthNode.children.some((node) => node.url === storyUrl)).toBe(false);
+    expect(monthNode.children.some((node) => node.url === newStoryUrl)).toBe(true);
+    expect(applied.capturedCount).toBe(1);
+    expect(applied.alreadyPresentCount).toBe(1);
+    expect(applied.insertedPageCount).toBe(2);
+    expect(applied.remainingCount).toBe(0);
+  });
+
+  test('resets every layer toggle to on', () => {
+    const defaults = __testing.createDefaultLayerToggleState();
+
+    expect(Object.values(defaults.layers).every(Boolean)).toBe(true);
+    expect(Object.values(defaults.scanLayerVisibility).every(Boolean)).toBe(true);
+    expect(Object.values(defaults.changeFilters.statuses).every(Boolean)).toBe(true);
+  });
+
   test('reconciles report entitlement counts after a partial group capture', () => {
     const reconciled = __testing.reconcileDeferredCaptureScanMeta({
       current: {
@@ -658,8 +806,12 @@ describe('deferred page capture', () => {
           totalCount: 419,
         }],
         pageCountSummary: {
+          fetchedPageCount: 13,
           capturedPageCount: 13,
+          visiblePageCount: 13,
+          groupedPageCount: 409,
           deferredPageCount: 409,
+          remainingPageCount: 0,
           estimatedRemainingPageCount: 409,
           totalDiscoveredPageCount: 422,
         },
@@ -668,6 +820,12 @@ describe('deferred page capture', () => {
       capturedCount: 23,
       remainingCount: 386,
       visiblePageCount: 26,
+      discoveredGroups: [{
+        id: 'archive-article-group',
+        capturedCount: 0,
+        deferredCount: 3,
+        totalCount: 3,
+      }],
     });
 
     expect(reconciled.entitlement).toMatchObject({
@@ -680,11 +838,22 @@ describe('deferred page capture', () => {
       deferredCount: 386,
       totalCount: 419,
     });
+    expect(reconciled.repetitiveGroups[1]).toMatchObject({
+      id: 'archive-article-group',
+      capturedCount: 0,
+      deferredCount: 3,
+      totalCount: 3,
+    });
     expect(reconciled.pageCountSummary).toEqual({
+      accountedPageCount: 425,
+      fetchedPageCount: 36,
       capturedPageCount: 36,
-      deferredPageCount: 386,
-      estimatedRemainingPageCount: 386,
-      totalDiscoveredPageCount: 422,
+      visiblePageCount: 25,
+      groupedPageCount: 389,
+      deferredPageCount: 389,
+      remainingPageCount: 0,
+      estimatedRemainingPageCount: 0,
+      totalDiscoveredPageCount: 425,
     });
   });
 
@@ -718,7 +887,18 @@ describe('deferred page capture', () => {
           id: 'post-11',
           url: 'https://example.com/blog/post-11',
           title: 'Post 11',
-          children: [],
+          children: [{
+            id: 'placeholder-post-11-articles',
+            nodeKind: 'deferred-group',
+            deferredGroupId: 'post-11-articles',
+            remainingCount: 3,
+            deferredEntries: [
+              { url: 'https://example.com/articles/1' },
+              { url: 'https://example.com/articles/2' },
+              { url: 'https://example.com/articles/3' },
+            ],
+            children: [],
+          }],
         }],
       },
       captureSummary: {
@@ -736,6 +916,11 @@ describe('deferred page capture', () => {
     expect(applied.remainingCount).toBe(1);
     expect(blogChildren[0].url).toBe('https://example.com/blog/post-11');
     expect(blogChildren[0].scanNumber).toBe('2.11');
+    expect(blogChildren[0].children[0]).toMatchObject({
+      nodeKind: 'deferred-group',
+      deferredGroupId: 'post-11-articles',
+      remainingCount: 3,
+    });
     expect(blogChildren[1].remainingCount).toBe(1);
     expect(blogChildren[1].deferredEntries[0].url).toBe('https://example.com/blog/post-12');
   });
@@ -901,5 +1086,28 @@ describe('deferred page capture', () => {
     expect(applied.terminalCount).toBe(2);
     expect(applied.remainingCount).toBe(0);
     expect(applied.root.children[0].children).toHaveLength(0);
+  });
+});
+
+
+describe('hash route scan identity', () => {
+  test('rescanning preserves each route ID and notes without merging with home', () => {
+    const home = 'https://example.com/';
+    const existingRoot = {
+      id: 'home', url: home, title: 'Home', children: [
+        { id: 'alpha', url: `${home}#/alpha`, annotations: { note: 'Alpha note' }, children: [] },
+        { id: 'beta', url: `${home}#!/beta`, annotations: { note: 'Beta note' }, children: [] },
+      ],
+    };
+    const nextRoot = {
+      id: 'new-home', url: home, children: [
+        { id: 'new-alpha', url: `${home}#/alpha/`, children: [] },
+        { id: 'new-beta', url: `${home}#!/beta`, children: [] },
+      ],
+    };
+    const result = __testing.mergeRescanResults({ existingRoot, existingOrphans: [], nextRoot, nextOrphans: [] });
+    expect(result.root.id).toBe('home');
+    expect(result.root.children.map((node) => node.id)).toEqual(['alpha', 'beta']);
+    expect(result.root.children.map((node) => node.annotations.note)).toEqual(['Alpha note', 'Beta note']);
   });
 });

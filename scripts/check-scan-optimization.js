@@ -9,6 +9,11 @@ const {
   isUrlWithinFocusedPath,
   sampleSignalsAreCompatible,
 } = require('../utils/scanOptimization');
+const {
+  getScanCapacityPartialReason,
+  getScanCoverageMetrics,
+  getScanDiscoveryLimit,
+} = require('../utils/scanCoverage');
 
 const focus = createFocusedScanDescriptor('https://example.com/blog');
 assert.equal(focus.focused, true);
@@ -142,7 +147,98 @@ assert.equal(groups[3].shape, 'query');
 assert.equal(groups[3].routeTemplate, 'news?page=:number');
 assert.notEqual(groups[1].groupId, groups[3].groupId);
 
+const largeFixtureStartedAt = Date.now();
+const largeUrls = Array.from(
+  { length: 25000 },
+  (_, index) => `https://example.com/articles/story-${index + 1}`
+);
+const largeGroups = buildRepetitiveGroups(largeUrls);
+assert.equal(largeGroups.length, 1);
+assert.equal(largeGroups[0].capturedEntries.length, 20);
+assert.equal(largeGroups[0].deferredEntries.length, 24980);
+assert(
+  Date.now() - largeFixtureStartedAt < 10000,
+  '25,000 URL grouping fixture should complete within 10 seconds'
+);
+
+const repetitiveCoverage = getScanCoverageMetrics({
+  fetchedUrls: new Set(largeGroups[0].capturedEntries.map((entry) => entry.url)),
+  groupedUrls: new Set(largeGroups[0].deferredEntries.map((entry) => entry.url)),
+  discoveredCount: largeUrls.length,
+});
+assert.deepEqual(repetitiveCoverage, {
+  accounted: 25000,
+  accountedMilestonesCompleted: 5,
+  accountedMilestoneSize: 5000,
+  discovered: 25000,
+  remaining: 0,
+});
+
+const nonRepetitiveUrls = Array.from(
+  { length: 25000 },
+  (_, index) => `https://example.com/root-page-${index + 1}`
+);
+const nonRepetitiveCoverage = getScanCoverageMetrics({
+  fetchedUrls: new Set(nonRepetitiveUrls),
+  groupedUrls: new Set(),
+  discoveredCount: nonRepetitiveUrls.length,
+});
+assert.equal(buildRepetitiveGroups(nonRepetitiveUrls).length, 0);
+assert.equal(nonRepetitiveCoverage.accounted, 25000);
+assert.equal(nonRepetitiveCoverage.accountedMilestonesCompleted, 5);
+
+const mixedCoverage = getScanCoverageMetrics({
+  fetchedUrls: new Set(['https://example.com/a', 'https://example.com/b']),
+  groupedUrls: new Set(['https://example.com/b', 'https://example.com/c']),
+  discoveredCount: 5,
+});
+assert.deepEqual(mixedCoverage, {
+  accounted: 3,
+  accountedMilestonesCompleted: 0,
+  accountedMilestoneSize: 5000,
+  discovered: 5,
+  remaining: 2,
+});
+
+assert.equal(getScanDiscoveryLimit(25), 5000);
+assert.equal(getScanDiscoveryLimit(3635), 14540);
+assert.equal(getScanDiscoveryLimit(50000), 200000);
+assert.equal(getScanDiscoveryLimit(100000), 200000);
+assert.equal(getScanCapacityPartialReason({
+  fetchedCount: 50000,
+  allowedFetchedPages: 50000,
+  pendingCount: 1,
+  discoveryCapReached: true,
+}), 'scan_safety_cap');
+assert.equal(getScanCapacityPartialReason({
+  entitlementCappedScan: true,
+  fetchedCount: 25,
+  allowedFetchedPages: 25,
+  pendingCount: 1,
+}), 'entitlement_cap');
+assert.equal(getScanCapacityPartialReason({
+  fetchedCount: 20,
+  allowedFetchedPages: 50000,
+  pendingCount: 0,
+  discoveryCapReached: true,
+}), 'scan_discovery_cap');
+assert.equal(getScanCapacityPartialReason({
+  targetedGroupCapture: true,
+  discoveryCapReached: true,
+}), null);
+
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:article', 'schema:article']), true);
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:jobposting', 'element:product']), false);
+
+
+
+// Router fragments identify distinct pages; document anchors do not.
+const { getScanRouteHash } = require('../utils/scanRoute');
+const { normalizeScanUrl: normalizeRouteUrl } = require('../utils/scanOptimization');
+assert.strictEqual(getScanRouteHash('https://example.com/#/'), '#/');
+assert.strictEqual(getScanRouteHash('https://example.com/#!/'), '#!/');
+assert.strictEqual(normalizeRouteUrl('https://example.com/#/alpha/'), 'https://example.com/#/alpha');
+assert.strictEqual(normalizeRouteUrl('https://example.com/#!/beta/'), 'https://example.com/#!/beta');
+assert.strictEqual(normalizeRouteUrl('https://example.com/#section'), 'https://example.com/');
 
 console.log('Scan optimization checks passed');

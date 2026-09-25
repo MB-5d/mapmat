@@ -27,6 +27,7 @@ describe('ScanProgressModal', () => {
     onCancelScan: vi.fn(),
     onContinueScan: vi.fn(),
     onDismissScanError: vi.fn(),
+    onRetryScanResult: vi.fn(),
   };
 
   beforeEach(() => {
@@ -88,20 +89,27 @@ describe('ScanProgressModal', () => {
         <ScanProgressModal
           {...baseProps}
           scanProgress={{
+            accounted: 384,
             processed: 384,
+            fetched: 354,
             captured: 350,
+            visible: 321,
             deferred: 30,
             blocked: 2,
             failed: 2,
             queued: 23,
             discovered: 407,
+            batchNumber: 3,
+            batchSize: 5000,
+            accountedMilestonesCompleted: 3,
+            accountedMilestoneSize: 5000,
           }}
         />
       );
     });
 
     expect(container.textContent).toContain('384');
-    expect(container.textContent).toContain('Pages processed');
+    expect(container.textContent).toContain('Pages accounted for');
     expect(container.textContent).toContain('384 of 407');
     const pagesSection = container.querySelector('.scan-chart-section--pages');
     const findingsSection = container.querySelector('.scan-chart-section--findings');
@@ -110,10 +118,16 @@ describe('ScanProgressModal', () => {
     expect(findingsSection.querySelector('.scan-findings-bar')).not.toBeNull();
     expect(findingsSection.querySelector('.scan-findings-empty').textContent).toBe('No findings yet');
     expect(pagesSection.querySelector('.scan-inline-note').textContent).toBe('(94%)');
-    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Captured 350');
-    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Deferred 30');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Fetched 354');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Discovered 407');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Accounted 384');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Captured successfully 350');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Visible on map 321');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Grouped 30');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Crawl restricted 2');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Failed 2');
+    expect(pagesSection.textContent).toContain('3 milestones completed');
+    expect(pagesSection.textContent).toContain('5,000 accounted pages per milestone');
   });
 
   test('uses the discovered total when it is larger than the active queue', () => {
@@ -134,6 +148,26 @@ describe('ScanProgressModal', () => {
 
     expect(container.textContent).toContain('30 of 48');
     expect(container.querySelector('.scan-queue-note').textContent).toContain('18remaining');
+  });
+
+  test('offers to retry loading a completed map without rerunning the scan', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          loading={false}
+          scanErrorMessage="The scan finished, but its map could not be loaded."
+          canRetryScanResult
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Scan complete');
+    const retryButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Retry loading map'));
+    expect(retryButton).not.toBeUndefined();
+    act(() => retryButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(baseProps.onRetryScanResult).toHaveBeenCalledTimes(1);
   });
 
   test('uses stable backend phase messages instead of rotating status copy', () => {

@@ -62,6 +62,9 @@ function createFixtureServer() {
         `${origin}/blogger`,
         `${origin}/blog`,
         ...Array.from({ length: 21 }, (_, index) => `${origin}/blog/post-${index + 1}`),
+        `${origin}/canonical-parent`,
+        `${origin}/alias-parent`,
+        ...Array.from({ length: 21 }, (_, index) => `${origin}/alias-parent/item-${index + 1}`),
         `${origin}/section/science`,
         `${origin}/section/science/space`,
         ...Array.from({ length: 21 }, (_, index) => `${origin}/section/science/space?page=${index + 1}`),
@@ -182,23 +185,94 @@ function createFixtureServer() {
       res.end('<html><head><title>Access denied</title></head><body>Access denied</body></html>');
       return;
     }
-    if (url.pathname === '/section/archive-months' && !url.searchParams.has('date')) {
-      const monthLinks = Array.from({ length: 21 }, (_, index) => (
-        `<a href="/section/archive-months?date=${index + 1}-28-2026">Month ${index + 1}</a>`
+    if (url.pathname === '/section/archive-months') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><a href="/section/archive-months/archive?start=25">Load more stories</a><a href="/section/archive-months/direct-date?date=1-31-2026">January archive</a></main></body></html>');
+      return;
+    }
+    if (url.pathname === '/section/archive-months/direct-date' && url.searchParams.has('date')) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main>January archive</main></body></html>');
+      return;
+    }
+    if (url.pathname === '/section/archive-months/archive' && !url.searchParams.has('date')) {
+      const monthLinks = Array.from({ length: 21 }, (_, index) => {
+        const month = (index % 12) + 1;
+        const year = 2026 - Math.floor(index / 12);
+        return `<a href="/section/archive-months/archive?date=${month}-28-${year}">Month ${month} ${year}</a>`;
+      }).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><ol><li>${monthLinks}</li></ol></main></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/archive-months/archive' && url.searchParams.has('date')) {
+      res.writeHead(302, {
+        location: `/section/archive-months/archive-rendered?date=${encodeURIComponent(url.searchParams.get('date'))}`,
+      });
+      res.end();
+      return;
+    }
+    if (url.pathname === '/section/archive-months/archive-rendered' && url.searchParams.has('date')) {
+      const [monthValue, , yearValue] = String(url.searchParams.get('date')).split('-');
+      const month = Math.max(1, Number(monthValue) || 1);
+      const year = Math.max(2000, Number(yearValue) || 2026);
+      res.writeHead(200, { 'content-type': 'text/html' });
+      const storyCount = month === 12 && year === 2026 ? 15 : 1;
+      const stories = Array.from({ length: storyCount }, (_, index) => (
+        `<li><p><a href="/${year}/${String(month).padStart(2, '0')}/28/archive-story-${year}-${month}-${index + 1}">Archive story ${month} ${year} ${index + 1}</a></p></li>`
       )).join('');
-      res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<html><head><title>Archive months</title></head><body><main><ol><li>${monthLinks}</li></ol></main></body></html>`);
+      res.end(`<html><head><title>Art and design</title><link rel="canonical" href="/section/archive-months"></head><body><main><ol>${stories}</ol></main></body></html>`);
       return;
     }
-    if (url.pathname === '/section/archive-months' && url.searchParams.has('date')) {
-      const month = Math.max(1, Number(String(url.searchParams.get('date')).split('-')[0]) || 1);
-      res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(`<html><head><title>Archive month ${month}</title><link rel="canonical" href="/section/archive-months"></head><body><main><ol><li><p><a href="/2026/${String(month).padStart(2, '0')}/28/archive-story-${month}">Archive story ${month}</a></p></li></ol></main></body></html>`);
-      return;
-    }
-    if (/^\/2026\/\d{2}\/28\/archive-story-\d+$/.test(url.pathname)) {
+    if (/^\/20\d{2}\/\d{2}\/28\/archive-story-20\d{2}-\d+-\d+$/.test(url.pathname)) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Archive story</h1></article></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/client-pagination') {
+      const page = Math.max(1, Math.min(3, Number(url.searchParams.get('clientPage') || 1) || 1));
+      const start = (page - 1) * 10 + 1;
+      const end = Math.min(25, start + 9);
+      const jobs = Array.from({ length: end - start + 1 }, (_, index) => {
+        const job = start + index;
+        return `<article><h2><a href="/jobs/client-result-${job}">Client result ${job}</a></h2></article>`;
+      }).join('');
+      const nextButton = page < 3
+        ? `<button type="button" aria-label="Next page" onclick="window.location.search='?clientPage=${page + 1}'">Next</button>`
+        : '<button type="button" aria-label="Next page" disabled>Next</button>';
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Client pagination</title></head><body><main id="app">${jobs}<nav aria-label="Page selection"><button type="button" aria-label="Page 1"${page === 1 ? ' aria-current="page"' : ''}>1</button><button type="button" aria-label="Page 2"${page === 2 ? ' aria-current="page"' : ''}>2</button><button type="button" aria-label="Page 3. Last page"${page === 3 ? ' aria-current="page"' : ''}>3</button>${nextButton}</nav></main></body></html>`);
+      return;
+    }
+    if (/^\/jobs\/client-result-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Client result</h1></article></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/content-grid') {
+      const links = Array.from({ length: 5 }, (_, index) => (
+        `<div class="up-content-grid__list-item"><a class="up-content-grid__list-item-title-link" href="/insights/grid-story-${index + 1}">Grid story ${index + 1}</a></div>`
+      )).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Content grid</title></head><body><main><div class="up-content-grid">${links}</div></main></body></html>`);
+      return;
+    }
+    if (/^\/insights\/grid-story-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Grid story</h1></article></body></html>`);
+      return;
+    }
+    if (url.pathname === '/section/offpath-capture') {
+      const links = Array.from({ length: 21 }, (_, index) => (
+        `<article><h2><a href="/2026/08/05/capture-story-${index + 1}">Capture story ${index + 1}</a></h2></article>`
+      )).join('');
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Off-path capture</title></head><body><main>${links}</main></body></html>`);
+      return;
+    }
+    if (/^\/2026\/08\/05\/capture-story-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title><meta property="og:type" content="article"></head><body><article><h1>Capture story</h1></article></body></html>`);
       return;
     }
     if (url.pathname === '/section/science/space') {
@@ -416,6 +490,25 @@ function createFixtureServer() {
       res.end(`<html><head><title>${url.pathname.split('/').at(-1)}</title></head><body><h1>Page</h1></body></html>`);
       return;
     }
+    if (url.pathname === '/canonical-parent') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Canonical parent</title><link rel="canonical" href="/canonical-parent"></head><body><h1>Canonical parent</h1></body></html>');
+      return;
+    }
+    if (url.pathname === '/alias-parent') {
+      const links = Array.from({ length: 21 }, (_, index) => (
+        `<a href="/alias-parent/item-${index + 1}">Alias item ${index + 1}</a>`
+      )).join('');
+      return setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end(`<html><head><title>Alias parent</title><link rel="canonical" href="/canonical-parent"></head><body>${links}</body></html>`);
+      }, 100);
+    }
+    if (/^\/alias-parent\/item-\d+$/.test(url.pathname)) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Alias item</title><link rel="canonical" href="/shared-alias-item"><meta property="og:type" content="article"></head><body><article>Alias item</article></body></html>');
+      return;
+    }
     if (url.pathname === '/' || url.pathname === '/about' || url.pathname === '/blogger' || url.pathname === '/pricing') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(`<html><head><title>${url.pathname === '/' ? 'Home' : url.pathname.slice(1)}</title></head><body><h1>Page</h1></body></html>`);
@@ -447,29 +540,34 @@ async function waitForJob(jobId, accessToken, authToken) {
       headers: authToken ? { authorization: `Bearer ${authToken}` } : {},
     });
     if (response.job?.status === 'complete') {
+      const progress = response.job.progress || {};
+      const summary = response.job.result?.pageCountSummary || {};
       assert.ok(Number(response.job.progress?.sequence || 0) > 0, 'completed jobs should persist sequenced progress');
       assert.equal(response.job.progress?.final, true, 'completed jobs should persist their final progress snapshot');
       assert.equal(
-        Number(response.job.progress?.processed || 0),
-        Number(response.job.progress?.discovered || 0),
-        `normal completed scans should finish with every discovered URL processed (${JSON.stringify(response.job.progress)})`
+        Number(progress.accounted || 0),
+        Number(progress.processed || 0),
+        'processed should remain a compatibility alias for accounted coverage'
       );
       assert.ok(
-        Number(response.job.progress?.discovered || 0) >= Number(response.job.progress?.mapped || 0),
-        'discovered progress should not trail mapped progress'
+        Number(progress.discovered || 0) >= Number(progress.accounted || 0),
+        'discovered progress should not trail accounted coverage'
       );
       assert.ok(
-        Number(response.job.progress?.processed || 0)
-          >= Number(response.job.progress?.captured || response.job.progress?.mapped || 0)
-            + Number(response.job.progress?.deferred || 0),
-        'captured and deferred outcomes should be disjoint'
+        Number(progress.accounted || 0) >= Number(progress.captured || progress.mapped || 0),
+        'accounted coverage should include captured pages'
       );
       assert.ok(
-        Number(response.job.progress?.processed || 0)
-          >= Number(response.job.result?.pageCountSummary?.capturedPageCount || 0)
-            + Number(response.job.result?.pageCountSummary?.deferredPageCount || 0),
-        'result page counts should not overlap'
+        Number(summary.accountedPageCount || 0) >= Number(summary.fetchedPageCount || 0),
+        'accounted result coverage should include every fetched URL'
       );
+      if (Number(summary.remainingPageCount || 0) === 0) {
+        assert.equal(
+          Number(summary.accountedPageCount || 0),
+          Number(summary.totalDiscoveredPageCount || 0),
+          'fully completed scans should account for every discovered URL'
+        );
+      }
       return response.job.result;
     }
     if (response.job?.status === 'failed') throw new Error(response.job.error || 'Scan failed');
@@ -635,7 +733,9 @@ async function main() {
       options: {},
     }, authToken);
     assert.equal(limitedResult.pageCountSummary.capturedPageCount, 5);
-    assert.equal(limitedResult.pageCountSummary.deferredPageCount, 8);
+    assert.equal(limitedResult.pageCountSummary.accountedPageCount, 5);
+    assert.equal(limitedResult.pageCountSummary.deferredPageCount, 0);
+    assert.equal(limitedResult.pageCountSummary.remainingPageCount, 8);
     assert.equal(limitedResult.pageCountSummary.totalDiscoveredPageCount, 13);
 
     const wholeSiteResult = await createScan({
@@ -644,13 +744,22 @@ async function main() {
       options: {},
     }, authToken);
     const wholeSiteNodes = flattenTree(wholeSiteResult.root);
-    const wholeSitePlaceholder = wholeSiteNodes.find((node) => node.nodeKind === 'deferred-group');
+    const wholeSitePlaceholder = wholeSiteNodes.find((node) => (
+      node.nodeKind === 'deferred-group' && node.parentUrl === `${fixtureOrigin}/blog`
+    ));
     assert.equal(wholeSiteResult.scanScope.focused, false);
     assert.ok(wholeSitePlaceholder, 'homepage scans should use the same repetitive-page optimization');
     assert.equal(wholeSitePlaceholder.capturedCount, 20);
     assert.equal(wholeSitePlaceholder.remainingCount, 1);
     const wholeSiteParent = wholeSiteNodes.find((node) => node.url === `${fixtureOrigin}/blog`);
     assert.equal(wholeSiteParent.children.at(-1).nodeKind, 'deferred-group');
+    const orphanNodes = (wholeSiteResult.orphans || []).flatMap((node) => flattenTree(node));
+    const aliasOrphan = orphanNodes.find((node) => node.url === `${fixtureOrigin}/alias-parent`);
+    assert.ok(aliasOrphan, 'duplicate parent should remain in the orphan forest');
+    assert.ok(
+      aliasOrphan.children.some((node) => node.nodeKind === 'deferred-group'),
+      'repetitive placeholders should attach to their orphan parent instead of the main root'
+    );
 
     const unstructuredResult = await createScan({
       url: `${fixtureOrigin}/section/unstructured`,
@@ -807,6 +916,31 @@ async function main() {
       'nested pagination listings should keep the primary article under the focused page'
     );
 
+    const clientPaginationResult = await createScan({
+      url: `${fixtureOrigin}/section/client-pagination`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const clientPaginationNodes = flattenTree(clientPaginationResult.root);
+    const clientPaginationTarget = clientPaginationNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/client-pagination`
+    );
+    const clientPaginationJobs = clientPaginationNodes.filter((node) => (
+      String(node.url || '').startsWith(`${fixtureOrigin}/jobs/client-result-`)
+    ));
+    const clientPaginationPlaceholder = clientPaginationNodes.find(
+      (node) => node.nodeKind === 'deferred-group'
+    );
+    assert.equal(
+      clientPaginationJobs.length,
+      20,
+      'client-rendered result pagination should expose the representative sample'
+    );
+    assert.equal(clientPaginationPlaceholder?.remainingCount, 5);
+    assert.equal(clientPaginationPlaceholder?.capturedCount, 20);
+    assert.equal(clientPaginationPlaceholder?.parentUrl, clientPaginationTarget.url);
+    assert.equal(clientPaginationResult.pageCountSummary.totalDiscoveredPageCount, 26);
+
     // NYT-style dated article hierarchy discovered from month listing pages.
     const archiveResult = await createScan({
       url: `${fixtureOrigin}/section/archive-months`,
@@ -820,25 +954,63 @@ async function main() {
     const archiveSectionContext = archiveNodes.find(
       (node) => node.url === `${fixtureOrigin}/section`
     );
+    const archivePage = archiveNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/archive-months/archive`
+    );
+    const directlyDiscoveredArchiveDate = archiveNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/archive-months/direct-date?date=1-31-2026`
+    );
     const archiveMonthNodes = archiveNodes.filter((node) => (
-      String(node.url || '').startsWith(`${fixtureOrigin}/section/archive-months?date=`)
+      String(node.url || '').startsWith(`${fixtureOrigin}/section/archive-months/archive?date=`)
     ));
-    const archivePlaceholder = archiveTarget.children.find(
+    const archivePlaceholder = archivePage?.children?.find(
       (node) => node.nodeKind === 'deferred-group'
     );
-    const archiveArticleNodes = archiveNodes.filter((node) => (
-      String(node.url || '').startsWith(`${fixtureOrigin}/2026/`)
-      && /\/archive-story-\d+$/.test(node.url)
-    ));
-    assert.equal(archiveMonthNodes.length, 0, 'archive query helpers should not appear as pages');
+    const archiveArticleNodes = archiveNodes.filter((node) => {
+      try {
+        const articleUrl = new URL(node.url);
+        return articleUrl.origin === fixtureOrigin
+          && /^\/20\d{2}\//.test(articleUrl.pathname)
+          && /\/archive-story-20\d{2}-\d+-\d+$/.test(articleUrl.pathname);
+      } catch {
+        return false;
+      }
+    });
+    assert.equal(
+      archivePage?.parentUrl,
+      archiveTarget.url,
+      'the archive should remain a visible child of the focused section'
+    );
+    assert.equal(archiveMonthNodes.length, 20, 'dated archive views should remain visible, distinct pages');
+    assert.equal(
+      archiveMonthNodes.every((node) => node.isDuplicate !== true),
+      true,
+      'dated collection views with a shared canonical URL must not become duplicate orphans'
+    );
+    assert.equal(
+      archiveMonthNodes.every((node) => node.parentUrl === archivePage.url),
+      true,
+      'redirected dated collection views must keep the requested archive route as their structural parent'
+    );
+    assert.notEqual(
+      directlyDiscoveredArchiveDate?.isDuplicate,
+      true,
+      'directly discovered stable date routes must keep their URL identity even outside the archive pager'
+    );
+    assert.equal(
+      archiveNodes.some((node) => String(node.url || '').includes('?start=')),
+      false,
+      'transient load-more pagination should discover content without appearing as a page'
+    );
     assert.equal(archiveSectionContext?.title, 'section');
     assert.equal(archiveSectionContext?.isVirtualMissing, true);
     assert.equal(archiveSectionContext?.httpStatus, null);
     assert.equal(archiveSectionContext?.contextHttpStatus, 404);
     assert.equal(archivePlaceholder?.remainingCount, 1);
+    assert.equal(archivePlaceholder?.parentUrl, archivePage.url);
     assert.equal(archiveArticleNodes.length, 20);
     assert.equal(
-      archiveArticleNodes.every((node) => /^(?:X|XX)(?:\.\d+){2}$/.test(node.scanNumber)),
+      archiveArticleNodes.every((node) => /^(?:X|XX)(?:\.\d+){4}$/.test(node.scanNumber)),
       true,
       `article positions should remain numeric after the unknown full-site prefix: ${archiveArticleNodes
         .map((node) => `${node.scanNumber}:${node.url}`)
@@ -849,13 +1021,101 @@ async function main() {
       false,
       'off-path article URL folders must not become structural map nodes'
     );
+    assert.equal(
+      new Set(archiveMonthNodes.map((node) => node.title)).size,
+      archiveMonthNodes.length,
+      'dated collection views should use distinct month and year labels'
+    );
     archiveArticleNodes.forEach((node) => {
       assert.equal(
-        node.parentUrl,
-        archiveTarget.url,
-        'content discovered through archive helpers should remain children of the focused page'
+        archiveMonthNodes.some((monthNode) => monthNode.url === node.parentUrl),
+        true,
+        'archive stories should remain under the month page that discovered them'
       );
     });
+    const archiveCaptureResult = await createScan({
+      url: `${fixtureOrigin}/section/archive-months`,
+      maxPages: archivePlaceholder.deferredEntries.length * 21,
+      options: {
+        repetitiveCapture: {
+          groupId: archivePlaceholder.deferredGroupId,
+          entries: archivePlaceholder.deferredEntries,
+        },
+      },
+    }, authToken);
+    const capturedArchiveMonthUrl = archivePlaceholder.deferredEntries[0].url;
+    const capturedArchiveMonth = [
+      ...flattenTree(archiveCaptureResult.root),
+      ...(archiveCaptureResult.orphans || []).flatMap((node) => flattenTree(node, [])),
+    ].find((node) => node.url === capturedArchiveMonthUrl);
+    assert.equal(archiveCaptureResult.captureSummary?.requestedEntryCapturedCount, 1);
+    assert.equal(archiveCaptureResult.captureSummary?.discoveredCapturedCount, 15);
+    assert.equal(archiveCaptureResult.captureSummary?.capturedCount, 16);
+    assert.ok(capturedArchiveMonth, 'Capture now should return the deferred archive month');
+    assert.notEqual(capturedArchiveMonth.isDuplicate, true);
+    assert.match(capturedArchiveMonth.title, /December 2026/);
+    const capturedArchiveArticles = (capturedArchiveMonth.children || []).filter(
+      (node) => /\/archive-story-20\d{2}-\d+-\d+$/.test(String(node.url || ''))
+    );
+    assert.equal(
+      capturedArchiveArticles.length,
+      15,
+      'a collection with no more than 20 children should return real article pages'
+    );
+    assert.equal(
+      capturedArchiveMonth.children?.some((node) => node.nodeKind === 'deferred-group'),
+      false,
+      'a 15-page collection should be stackable without a deferred placeholder'
+    );
+    assert.equal(
+      capturedArchiveArticles.every((node) => (
+        node.parentUrl === capturedArchiveMonth.url
+        && String(node.scanNumber || '').startsWith(`${capturedArchiveMonth.scanNumber}.`)
+      )),
+      true,
+      `newly discovered archive articles should stay beneath ${capturedArchiveMonth.scanNumber}`
+    );
+
+    const contentGridResult = await createScan({
+      url: `${fixtureOrigin}/section/content-grid`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const contentGridNodes = flattenTree(contentGridResult.root);
+    const contentGridTarget = contentGridNodes.find(
+      (node) => node.url === `${fixtureOrigin}/section/content-grid`
+    );
+    const contentGridStories = contentGridNodes.filter((node) => (
+      String(node.url || '').startsWith(`${fixtureOrigin}/insights/grid-story-`)
+    ));
+    assert.equal(contentGridStories.length, 5, 'semantic content grids should expose every linked story');
+    assert.equal(
+      contentGridStories.every((node) => node.parentUrl === contentGridTarget.url),
+      true,
+      'off-path content-grid stories should stay under their focused listing page'
+    );
+
+    const offpathResult = await createScan({
+      url: `${fixtureOrigin}/section/offpath-capture`,
+      maxPages: 100,
+      options: {},
+    }, authToken);
+    const offpathPlaceholder = flattenTree(offpathResult.root).find(
+      (node) => node.nodeKind === 'deferred-group'
+    );
+    assert.equal(offpathPlaceholder?.remainingCount, 1);
+    const offpathCaptureResult = await createScan({
+      url: `${fixtureOrigin}/section/offpath-capture`,
+      maxPages: offpathPlaceholder.deferredEntries.length,
+      options: {
+        repetitiveCapture: {
+          groupId: offpathPlaceholder.deferredGroupId,
+          entries: offpathPlaceholder.deferredEntries,
+        },
+      },
+    }, authToken);
+    assert.equal(offpathCaptureResult.captureSummary?.capturedCount, 1);
+    assert.equal(offpathCaptureResult.captureSummary?.remainingEntries?.length, 0);
 
     // NPR-style editorial cards with category crosslinks beside primary story links.
     const editorialResult = await createScan({
@@ -1023,6 +1283,12 @@ async function main() {
     assert.equal(mixedPlaceholders[0].parentUrl, `${fixtureOrigin}/section/mixed`);
     assert.equal(mixedPlaceholders[0].capturedCount, 20);
     assert.equal(mixedPlaceholders[0].remainingCount, 1);
+    assert.equal(mixedPlaceholders[0].deferredEntries.length, 1);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(mixedResult.repetitiveGroups[0] || {}, 'entries'),
+      false,
+      'group summaries should not duplicate deferred entries already stored on the placeholder'
+    );
 
     const redirectedResult = await createScan({
       url: `${fixtureOrigin}/jobs-old`,

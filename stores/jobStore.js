@@ -51,6 +51,15 @@ function getJobByIdAsync(id) {
   return adapter.queryOneAsync('SELECT * FROM jobs WHERE id = ?', [id]);
 }
 
+function getJobSummaryByIdAsync(id) {
+  return adapter.queryOneAsync(`
+    SELECT id, type, status, created_at, started_at, finished_at,
+      user_id, api_key, ip_hash, payload, progress, error
+    FROM jobs
+    WHERE id = ?
+  `, [id]);
+}
+
 function listJobPayloadsByTypeAndStatusesAsync(type, statuses) {
   if (!Array.isArray(statuses) || statuses.length === 0) return Promise.resolve([]);
   const placeholders = statuses.map(() => '?').join(', ');
@@ -265,6 +274,7 @@ function listRecentJobsByTypeAsync(type, limit = 10) {
 module.exports = {
   ensureJobSchemaAsync,
   getJobByIdAsync,
+  getJobSummaryByIdAsync,
   listJobPayloadsByTypeAndStatusesAsync,
   insertJobAsync,
   findJobByIdempotencyAsync,

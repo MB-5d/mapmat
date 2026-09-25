@@ -7,7 +7,8 @@ const path = require('path');
 const PORT = Number(process.env.SCAN_JOB_TREE_PORT || 4307);
 const API_BASE = process.env.API_BASE || `http://127.0.0.1:${PORT}`;
 const SCAN_URL = process.env.SCAN_JOB_TREE_URL || 'https://flora.ai';
-const MAX_PAGES = Number(process.env.SCAN_JOB_TREE_MAX_PAGES || 1000);
+const MAX_PAGES = Number(process.env.SCAN_JOB_TREE_MAX_PAGES || 50001);
+const EXPECTED_SAFETY_CAP = 50000;
 const MAX_DEPTH = process.env.SCAN_JOB_TREE_MAX_DEPTH
   ? Number(process.env.SCAN_JOB_TREE_MAX_DEPTH)
   : null;
@@ -89,6 +90,9 @@ async function runCheck() {
   if (!created?.jobId || !created?.jobAccessToken) {
     throw new Error('Scan job creation did not return jobId and access token');
   }
+  if (Number(created.entitlement?.requestedPages || 0) !== Math.min(MAX_PAGES, EXPECTED_SAFETY_CAP)) {
+    throw new Error('Scan job creation did not enforce the 50,000-page server safety cap');
+  }
 
   const job = await waitForScanJob(created.jobId, created.jobAccessToken);
   const result = job.result || {};
@@ -112,6 +116,20 @@ async function runCheck() {
     );
   }
 
+  const summary = await fetchJson(
+    `${API_BASE}/scan-jobs/${created.jobId}?include_result=false&access_token=${created.jobAccessToken}`
+  );
+  if (summary?.job?.result !== null) {
+    throw new Error('Status-only scan reads must not include the result payload');
+  }
+  const stoppedAfterCompletion = await fetchJson(
+    `${API_BASE}/scan-jobs/${created.jobId}/stop?access_token=${created.jobAccessToken}`,
+    { method: 'POST' }
+  );
+  if (stoppedAfterCompletion?.status !== 'complete') {
+    throw new Error('Stopping an already-completed scan must report complete');
+  }
+
   console.log(`[scan-job-tree] Passed. rootChildren=${rootChildren}, totalNodes=${totalNodes}, url=${SCAN_URL}`);
 }
 
@@ -130,6 +148,9 @@ async function main() {
         RUN_MODE: 'web',
         JOB_WORKER_TYPES: 'scan,discovery,email',
         SCREENSHOT_STORAGE_PROVIDER: 'local',
+        SCAN_JOB_MAX_PAGES_DEFAULT: String(EXPECTED_SAFETY_CAP),
+        SCAN_PAGE_BATCH_SIZE: '5000',
+        SCAN_PAGE_SAFETY_CAP: String(EXPECTED_SAFETY_CAP),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
