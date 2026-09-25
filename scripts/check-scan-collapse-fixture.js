@@ -95,6 +95,25 @@ function createFixtureServer(mode) {
       res.end(body);
     };
 
+    if (mode === 'root-linked' && url.pathname === '/') {
+      return send(200, '<title>Home</title><a href="/one">One</a><a href="/two">Two</a><a href="/three">Three</a>');
+    }
+    if (mode === 'root-linked' && ['/one', '/two', '/three'].includes(url.pathname)) {
+      return send(200, `<title>${url.pathname}</title>`);
+    }
+
+    if (mode === 'hash-router' && url.pathname === '/') {
+      return send(200, `<html><head><title>Hash app</title><link rel="canonical" href="/"></head><body>
+        <script>
+          const route = location.hash;
+          document.title = route ? 'Route ' + route : 'Hash app';
+          document.body.insertAdjacentHTML('beforeend',
+            '<a href="#/alpha">Alpha</a><a href="#!/beta">Beta</a><a href="#section">Section</a>'
+            + (route === '#/alpha' ? '<a href="#/alpha/child">Child</a>' : ''));
+        </script>
+      </body></html>`);
+    }
+
     if (url.pathname === '/static') {
       return send(200, '<title>Static</title><a href="/static/about">About</a><a href="/static/pricing">Pricing</a>');
     }
@@ -208,7 +227,7 @@ async function scan(url, options = {}) {
     method: 'POST',
     body: JSON.stringify({
       url,
-      maxPages: 80,
+      maxPages: options.maxPages || 80,
       options: {},
     }),
   });
@@ -278,6 +297,26 @@ async function runCheck() {
       await closeServer(fixture);
     }
   };
+
+  await withFixture('root-linked', async (base) => {
+    const result = await scan(`${base}/`, { maxPages: 4 });
+    assert.strictEqual(countCapturedTree(result.root), 4, 'real links must take priority over guessed paths');
+    assert.strictEqual(result.scanDiagnostics.commonPathQueued, 0);
+  });
+
+  await withFixture('hash-router', async (base) => {
+    const result = await scan(`${base}/`, { maxPages: 4 });
+    assert.strictEqual(countCapturedTree(result.root), 4, 'hash routes must remain distinct within the exact page budget');
+    for (const route of ['#/alpha', '#!/beta', '#/alpha/child']) {
+      const node = findTreeNode(result.root, (candidate) => candidate.url === `${base}/${route}`);
+      assert(node, `missing hash route ${route}`);
+      assert.strictEqual(node.title, `Route ${route}`, 'route content must be rendered instead of returning the document shell');
+      assert(!node.isDuplicate, 'shared document canonical must not merge routes');
+    }
+    assert(!findTreeNode(result.root, (node) => node.url?.endsWith('#section')), 'ordinary anchors must not create pages');
+    assert.strictEqual(result.scanDiagnostics.renderedDiscoveryTried, true);
+    assert.strictEqual(result.scanDiagnostics.commonPathQueued, 0, 'guessed URLs must not take budget from rendered routes');
+  });
 
   await withFixture('static', async (base) => {
     const staticResult = await scan(`${base}/static`);

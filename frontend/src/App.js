@@ -2650,7 +2650,10 @@ const removeNodeFromTreeById = (tree, nodeId) => {
 const normalizeUrlForCompare = (raw) => {
   try {
     const u = new URL(raw);
-    u.hash = '';
+    // Preserve client-side routes while ignoring ordinary document anchors.
+    u.hash = /^#!?\//.test(u.hash)
+      ? (/^#!?\/$/.test(u.hash) ? u.hash : u.hash.replace(/\/+$/, ''))
+      : '';
     if (/\/index\.(html?|php|aspx)$/i.test(u.pathname)) {
       u.pathname = u.pathname.replace(/\/index\.(html?|php|aspx)$/i, '/');
     }
@@ -2659,7 +2662,7 @@ const normalizeUrlForCompare = (raw) => {
     }
     u.hostname = u.hostname.replace(/^www\./i, '');
     const port = u.port ? `:${u.port}` : '';
-    return `${u.hostname}${port}${u.pathname}${u.search}`;
+    return `${u.hostname}${port}${u.pathname}${u.search}${u.hash}`;
   } catch {
     return raw;
   }

@@ -9,6 +9,7 @@
  */
 
 const express = require('express');
+const { getScanRouteHash } = require('./utils/scanRoute');
 const http = require('http');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -3320,7 +3321,7 @@ const DEFAULT_MAX_DEPTH = SCAN_LIMITS.maxDepthDefault;
 function normalizeUrl(raw) {
   try {
     const u = new URL(raw);
-    u.hash = '';
+    u.hash = getScanRouteHash(u.toString());
     u.hostname = normalizeHost(u.hostname);
 
     if (/\/index\.(html?|php|aspx)$/i.test(u.pathname)) {
@@ -3567,7 +3568,7 @@ function normalizeHost(hostname) {
 function getCanonicalKey(urlStr) {
   try {
     const u = new URL(urlStr);
-    u.hash = '';
+    u.hash = getScanRouteHash(u.toString());
     u.hostname = normalizeHost(u.hostname);
     if (/\/index\.(html?|php|aspx)$/i.test(u.pathname)) {
       u.pathname = u.pathname.replace(/\/index\.(html?|php|aspx)$/i, '/');
@@ -3591,7 +3592,7 @@ function getCanonicalKey(urlStr) {
     }
 
     const port = u.port ? `:${u.port}` : '';
-    return `${u.hostname}${port}${u.pathname}${u.search}`;
+    return `${u.hostname}${port}${u.pathname}${u.search}${u.hash}`;
   } catch {
     return urlStr;
   }
@@ -3645,6 +3646,7 @@ function getPageIdentityUrl(meta = {}) {
   if (meta.preserveRouteIdentity && requestUrl) return requestUrl;
   const sourceUrl = normalizeUrl(meta.finalUrl || meta.url);
   const canonicalUrl = normalizeUrl(meta.canonicalUrl);
+  if (getScanRouteHash(sourceUrl)) return sourceUrl;
   if (!sourceUrl) return canonicalUrl;
   if (!canonicalUrl) return sourceUrl;
   try {
@@ -3715,6 +3717,10 @@ function getPageIdentityKey(meta = {}) {
 
 function getParentUrl(urlStr) {
   const u = new URL(urlStr);
+  if (getScanRouteHash(urlStr)) {
+    u.hash = '';
+    return normalizeUrl(u.toString());
+  }
   if (u.search) {
     u.search = '';
     return normalizeUrl(u.toString());
@@ -4218,7 +4224,7 @@ async function fetchPageWithBrowserContext(context, url) {
     if (Buffer.byteLength(String(html || ''), 'utf8') > SCAN_HTML_RESPONSE_MAX_BYTES) {
       throw new Error('Scan page response too large');
     }
-    const finalUrl = normalizeUrl(response?.url?.() || page.url() || url);
+    const finalUrl = normalizeUrl(page.url() || response?.url?.() || url);
     return {
       html,
       status: response?.status?.() || 0,
@@ -5628,12 +5634,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     '/sitemap', '/site-map',
   ];
 
-  // Capped scans should spend their limited crawl budget on links discovered from the site first.
-  if (entitlementCappedScan || scanScope.focused || targetedGroupCapture) {
-    scanDiagnostics.commonPathSkippedForEntitlementCap = entitlementCappedScan;
-    scanDiagnostics.commonPathSkippedForFocusedScope = scanScope.focused;
-    scanDiagnostics.commonPathSkippedForTargetedCapture = targetedGroupCapture;
-  } else {
+  // Guessed paths must not consume the budget before real or rendered links.
+  scanDiagnostics.commonPathSkippedForEntitlementCap = entitlementCappedScan;
+  scanDiagnostics.commonPathSkippedForFocusedScope = scanScope.focused;
+  scanDiagnostics.commonPathSkippedForTargetedCapture = targetedGroupCapture;
+  const enqueueCommonPaths = () => {
+    if (entitlementCappedScan || scanScope.focused || targetedGroupCapture) return;
     for (const path of commonPaths) {
       const commonUrl = normalizeUrl(`${origin}${path}`);
       if (commonUrl && isWithinScanDepth(commonUrl)) {
@@ -5641,7 +5647,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         enqueue(commonUrl, 1, 'common_path');
       }
     }
-  }
+  };
 
   const extraHeaders = {};
   let partialReason = null;
@@ -5695,6 +5701,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   );
 
   const fetchCrawlPage = async (url, source = 'crawl') => {
+    if (getScanRouteHash(url)) {
+      const context = authContext || await getCrawlBrowserContext(url);
+      return { ...(await fetchPageWithBrowserContext(context, url)), usedBrowser: true };
+    }
     if (authContext) {
       return {
         ...(await fetchPageWithBrowserContext(authContext, url)),
@@ -6791,6 +6801,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   if (shouldTryRenderedDiscovery()) {
     await runRenderedDiscoveryFallback();
+  }
+  if (!stopRequested && (pageLimit === null || visited.size < pageLimit)) {
+    enqueueCommonPaths();
+    await runCrawlWorkers();
   }
   await promoteRequiredDeferredAncestors();
   await validateRepetitiveGroups();

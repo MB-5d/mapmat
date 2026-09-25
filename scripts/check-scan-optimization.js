@@ -230,4 +230,15 @@ assert.equal(getScanCapacityPartialReason({
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:article', 'schema:article']), true);
 assert.equal(sampleSignalsAreCompatible(['schema:article', 'schema:jobposting', 'element:product']), false);
 
+
+
+// Router fragments identify distinct pages; document anchors do not.
+const { getScanRouteHash } = require('../utils/scanRoute');
+const { normalizeScanUrl: normalizeRouteUrl } = require('../utils/scanOptimization');
+assert.strictEqual(getScanRouteHash('https://example.com/#/'), '#/');
+assert.strictEqual(getScanRouteHash('https://example.com/#!/'), '#!/');
+assert.strictEqual(normalizeRouteUrl('https://example.com/#/alpha/'), 'https://example.com/#/alpha');
+assert.strictEqual(normalizeRouteUrl('https://example.com/#!/beta/'), 'https://example.com/#!/beta');
+assert.strictEqual(normalizeRouteUrl('https://example.com/#section'), 'https://example.com/');
+
 console.log('Scan optimization checks passed');
