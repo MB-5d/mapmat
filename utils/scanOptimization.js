@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { getScanRouteHash } = require('./scanRoute');
 
 const REPETITIVE_GROUP_THRESHOLD = 20;
 const REPETITIVE_GROUP_CAPTURE_LIMIT = 20;
@@ -10,7 +11,7 @@ const NATURAL_SCAN_COLLATOR = new Intl.Collator('en', {
 function normalizeScanUrl(raw) {
   try {
     const parsed = new URL(String(raw || '').trim());
-    parsed.hash = '';
+    parsed.hash = getScanRouteHash(parsed.toString());
     parsed.hostname = parsed.hostname.replace(/^www\./i, '').toLowerCase();
     if (/\/index\.(html?|php|aspx)$/i.test(parsed.pathname)) {
       parsed.pathname = parsed.pathname.replace(/\/index\.(html?|php|aspx)$/i, '/');
@@ -88,6 +89,10 @@ function getParentUrl(url) {
   const normalized = normalizeScanUrl(url);
   if (!normalized) return null;
   const parsed = new URL(normalized);
+  if (getScanRouteHash(normalized)) {
+    parsed.hash = '';
+    return normalizeScanUrl(parsed.toString());
+  }
   if (parsed.search) {
     parsed.search = '';
     return normalizeScanUrl(parsed.toString());

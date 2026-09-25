@@ -1088,3 +1088,26 @@ describe('deferred page capture', () => {
     expect(applied.root.children[0].children).toHaveLength(0);
   });
 });
+
+
+describe('hash route scan identity', () => {
+  test('rescanning preserves each route ID and notes without merging with home', () => {
+    const home = 'https://example.com/';
+    const existingRoot = {
+      id: 'home', url: home, title: 'Home', children: [
+        { id: 'alpha', url: `${home}#/alpha`, annotations: { note: 'Alpha note' }, children: [] },
+        { id: 'beta', url: `${home}#!/beta`, annotations: { note: 'Beta note' }, children: [] },
+      ],
+    };
+    const nextRoot = {
+      id: 'new-home', url: home, children: [
+        { id: 'new-alpha', url: `${home}#/alpha/`, children: [] },
+        { id: 'new-beta', url: `${home}#!/beta`, children: [] },
+      ],
+    };
+    const result = __testing.mergeRescanResults({ existingRoot, existingOrphans: [], nextRoot, nextOrphans: [] });
+    expect(result.root.id).toBe('home');
+    expect(result.root.children.map((node) => node.id)).toEqual(['alpha', 'beta']);
+    expect(result.root.children.map((node) => node.annotations.note)).toEqual(['Alpha note', 'Beta note']);
+  });
+});
