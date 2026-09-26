@@ -30,6 +30,7 @@ import {
   MenuDivider,
   MenuItem,
   MenuPanel,
+  MenuScrollArea,
   MenuSection,
   MenuSectionHeader,
   MenuTitle,
@@ -440,7 +441,8 @@ const CanvasToolbar = ({
           onTouchMove={containMenuScroll}
           onTouchMoveCapture={containMenuScroll}
         >
-          <div
+          <MenuScrollArea
+            opensUp
             className="canvas-tool-menu-images-scroll"
             onWheel={containMenuScroll}
             onWheelCapture={containMenuScroll}
@@ -458,7 +460,7 @@ const CanvasToolbar = ({
                 {section.content}
               </React.Fragment>
             ))}
-          </div>
+          </MenuScrollArea>
           {canUseImageCaptureTools ? (
             <>
               <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-credits-divider" />

@@ -18,7 +18,7 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Chip from '../ui/Chip';
 import IconButton from '../ui/IconButton';
-import { MenuItem, MenuPanel } from '../ui/Menu';
+import { MenuItem, MenuPanel, MenuScrollArea } from '../ui/Menu';
 import SearchInput from '../ui/SearchInput';
 import { getFindingTone } from '../../utils/findingTones';
 import {
@@ -730,20 +730,22 @@ const ReportDrawer = ({
                   </button>
                   {showDetailsMenu && (
                     <MenuPanel className="report-filter-menu report-details-menu" role="menu">
-                      {REPORT_DETAIL_OPTIONS.map((option) => {
-                        const selected = Boolean(visibleDetails[option.key]);
-                        return (
-                          <MenuItem
-                            key={option.key}
-                            className="report-filter-menu-item"
-                            role="menuitemcheckbox"
-                            aria-checked={selected}
-                            label={option.label}
-                            endSlot={selected ? <Check size={14} aria-hidden="true" /> : null}
-                            onClick={() => toggleDetailVisibility(option.key)}
-                          />
-                        );
-                      })}
+                      <MenuScrollArea>
+                        {REPORT_DETAIL_OPTIONS.map((option) => {
+                          const selected = Boolean(visibleDetails[option.key]);
+                          return (
+                            <MenuItem
+                              key={option.key}
+                              className="report-filter-menu-item"
+                              role="menuitemcheckbox"
+                              aria-checked={selected}
+                              label={option.label}
+                              endSlot={selected ? <Check size={14} aria-hidden="true" /> : null}
+                              onClick={() => toggleDetailVisibility(option.key)}
+                            />
+                          );
+                        })}
+                      </MenuScrollArea>
                     </MenuPanel>
                   )}
                 </div>
