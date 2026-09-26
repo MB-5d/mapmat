@@ -321,8 +321,8 @@ describe('ReportDrawer', () => {
     const mapLinkBlock = appCss.match(/\.report-map-link\.ui-icon-btn \{[^}]*\}/)?.[0] || '';
     expect(mapLinkBlock).toContain('justify-self: center');
     const detailsMenuBlock = appCss.match(/\.report-details-menu \{[^}]*\}/)?.[0] || '';
-    expect(detailsMenuBlock).toContain('max-height: 388px');
-    expect(detailsMenuBlock).toContain('overflow-y: auto');
+    expect(detailsMenuBlock).toContain('max-height: var(--menu-available-height');
+    expect(detailsMenuBlock).toContain('overflow: hidden');
     const lastRowBlock = appCss.match(/\.report-row:last-child \{[^}]*\}/)?.[0] || '';
     expect(lastRowBlock).toContain('border-bottom: 0');
     expect(appCss).toMatch(/\.report-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);

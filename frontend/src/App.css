@@ -5718,19 +5718,8 @@ body {
   width: 232px;
   min-width: 232px;
   max-width: 232px;
-  max-height: min(520px, calc(100vh - 128px));
+  max-height: var(--menu-available-height, calc(100dvh - 128px));
   overflow: hidden;
-}
-
-.canvas-tool-menu-images-scroll {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 
 .canvas-tool-menu-images .ui-menu-item {
@@ -6574,9 +6563,8 @@ body {
 }
 
 .report-details-menu {
-  max-height: 388px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  max-height: var(--menu-available-height, calc(100dvh - 128px));
+  overflow: hidden;
 }
 
 .report-filter-menu-item {
@@ -16361,4 +16349,40 @@ body.feedback-selecting-target .feedback-widget textarea:disabled {
     bottom: 22px;
     transform: none;
   }
+}
+
+/* Shared overflow treatment for tall menus: explicit, clickable navigation. */
+.ui-menu-scroll-area {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.ui-menu-scroll-viewport {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.ui-menu-scroll-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ui-menu-scroll-cue {
+  flex: 0 0 auto;
+  min-height: 32px;
+  margin-top: 4px;
+  border: 0;
+  border-top: 1px solid var(--ui-color-border);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-primary);
+  font: inherit;
+  font-size: var(--type-caption-md-size);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ui-menu-scroll-cue:focus-visible {
+  outline: 2px solid var(--ui-color-primary);
+  outline-offset: -2px;
 }
