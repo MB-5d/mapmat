@@ -3238,6 +3238,18 @@ const mergeRescanResults = ({
   };
 };
 
+const deferAuthenticatedPreviews = ({ root, orphans = [] }) => {
+  const deferNode = (node) => {
+    if (!node) return node;
+    return {
+      ...node,
+      authPreviewUnavailable: true,
+      children: (node.children || []).map(deferNode),
+    };
+  };
+  return { root: deferNode(root), orphans: orphans.map(deferNode) };
+};
+
 const applyDeferredCaptureResult = ({
   existingRoot,
   existingOrphans = [],
@@ -3642,7 +3654,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanOptions, setScanOptions] = useState({
     inactivePages: true,
     subdomains: false,
-    authenticatedPages: false,
+    authenticatedPages: AUTHENTICATED_SCAN_ENABLED,
     orphanPages: false,
     errorPages: true,
     brokenLinks: false,
@@ -3949,6 +3961,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     ? '∞'
     : formatEntitlementCount(Math.max(0, Number(screenshotCreditMeter?.remaining || 0)));
   const scanAuthBrowserImageRef = useRef(null);
+  const scanAuthBrowserTextRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [showSupportDrawer, setShowSupportDrawer] = useState(false);
@@ -10505,7 +10518,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           ...(cachedNode || visibleNode || {}),
           url: cachedNode?.url || visibleNode?.url || '',
         };
-      }).filter(isImageCaptureEligibleNode);
+      }).filter((node) => isImageCaptureEligibleNode(node) && !node.authPreviewUnavailable);
       return {
         targetIds: new Set(candidates.map((node) => node.id)),
         candidates,
@@ -10520,7 +10533,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => baseIds.has(node.id))
       : allNodes;
-    const targetNodes = scopedNodes.filter(isImageCaptureEligibleNode);
+    const targetNodes = scopedNodes.filter((node) => isImageCaptureEligibleNode(node) && !node.authPreviewUnavailable);
     const orderedTargets = orderThumbnailNodes(targetNodes);
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
@@ -11360,7 +11373,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => scopedIds.has(node.id))
       : allNodes;
-    const orderedTargets = orderThumbnailNodes(scopedNodes.filter(isImageCaptureEligibleNode));
+    const orderedTargets = orderThumbnailNodes(scopedNodes.filter((node) => isImageCaptureEligibleNode(node) && !node.authPreviewUnavailable));
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
     let candidates = [];
@@ -11466,6 +11479,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (isDirectImage) {
       setImageLoading(true);
       setFullImageUrl(urlOrImage);
+      return;
+    }
+    const selectedPage = nodeId
+      ? collectAllNodesWithOrphans(root, orphans).find((node) => node.id === nodeId)
+      : null;
+    if (selectedPage?.authPreviewUnavailable) {
+      showToast('Previews are unavailable for login-protected pages in this beta.', 'info');
       return;
     }
     const normalizedCaptureType = captureType === 'thumb' ? 'thumb' : 'full';
@@ -13729,6 +13749,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
     } catch (err) {
       console.error('Scan job creation failed:', err);
+      if (authFlow.authSessionId) {
+        api.deleteScanAuthSession(authFlow.authSessionId).catch(() => {});
+      }
       if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) {
         return;
       }
@@ -13893,6 +13916,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           manualConnections,
         });
       }
+      if (authFlow.authSessionId) merged = deferAuthenticatedPreviews(merged);
       const realPageCount = countPageNodes(merged.root);
       const visiblePageCount = realPageCount
         + merged.orphans.reduce((total, orphan) => total + countPageNodes(orphan), 0);
@@ -13975,6 +13999,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast('Scan reached the discovery safety limit. Showing the valid results so far.', 'warning');
       } else if (normalizedPartialReason === 'scan_collapsed') {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (normalizedPartialReason === 'auth_required') {
+        const locked = data.blockedSections?.filter((section) => section.reason === 'auth_required').length || 0;
+        showToast(`Partial scan: ${locked} page${locked === 1 ? '' : 's'} still require${locked === 1 ? 's' : ''} login.`, 'warning');
       } else if (data.blockedSections?.length) {
         const blockedUrl = data.blockedSections[0]?.url || hostname;
         showToast(`Scan complete. Crawling was restricted at ${blockedUrl}.`, 'warning');
@@ -14381,7 +14408,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!prompt?.url || prompt.loading) return;
     setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
     try {
-      const session = await api.createScanAuthSession({ url: prompt.url });
+      const session = await api.createScanAuthSession({ url: prompt.url, sampleUrls: prompt.sampleUrls });
       if (session?.status === 'ready' && session?.sessionId) {
         setScanAuthPrompt(null);
         scan(prompt.url, prompt.preserveName, {
@@ -14398,7 +14425,6 @@ export default function App({ currentRoute, navigateToRoute }) {
           authBrowser: {
             sessionId: session.sessionId,
             pageUrl: session.loginUrl || prompt.url,
-            text: '',
             screenshotUrl: '',
           },
         } : current);
@@ -14452,15 +14478,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const typeIntoTargetAuthBrowser = async () => {
-    const text = scanAuthPrompt?.authBrowser?.text || '';
+    const input = scanAuthBrowserTextRef.current;
+    const text = input?.value || '';
     if (!text) return;
-    setScanAuthPrompt((current) => current ? {
-      ...current,
-      authBrowser: {
-        ...current.authBrowser,
-        text: '',
-      },
-    } : current);
+    input.value = '';
     await sendTargetAuthBrowserAction({ action: 'type', text });
   };
 
@@ -22103,6 +22124,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             ) : null}
             {scanAuthPrompt.authBrowser?.sessionId ? (
               <div className="scan-auth-browser">
+                <p>Use this login lets Vellic scan this site once. The login is not saved for later scans.</p>
                 <div className="scan-auth-browser-bar">
                   <span>{scanAuthPrompt.authBrowser.pageUrl || scanAuthPrompt.url}</span>
                   <Button
@@ -22128,18 +22150,12 @@ export default function App({ currentRoute, navigateToRoute }) {
                 </button>
                 <div className="scan-auth-browser-controls">
                   <TextInput
-                    type="text"
+                    ref={scanAuthBrowserTextRef}
+                    type="password"
                     size="sm"
                     shellClassName="scan-auth-browser-input"
-                    value={scanAuthPrompt.authBrowser.text || ''}
-                    placeholder="Type selected field text here"
-                    onChange={(event) => setScanAuthPrompt((current) => current ? {
-                      ...current,
-                      authBrowser: {
-                        ...current.authBrowser,
-                        text: event.target.value,
-                      },
-                    } : current)}
+                    placeholder="Type into selected field"
+                    autoComplete="off"
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') typeIntoTargetAuthBrowser();
                     }}

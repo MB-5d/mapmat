@@ -14,6 +14,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
+    signal: options.signal || AbortSignal.timeout(30000),
     headers: {
       'content-type': 'application/json',
       ...(options.headers || {}),
@@ -33,7 +34,7 @@ async function fetchJson(url, options = {}) {
 }
 
 async function fetchRaw(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(30000) });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     throw new Error(`${url} failed ${response.status}: ${text}`);
@@ -67,6 +68,17 @@ function createFixtureServer() {
       });
       return;
     }
+    if (url.pathname === '/slow') {
+      setTimeout(() => {
+        if (res.destroyed) return;
+        const response = hasSessionCookie(req)
+          ? html({ title: 'Slow Private', body: '<h1>Slow Private</h1>' })
+          : html({ status: 401, title: 'Login Required', body: '<h1>Sign in</h1>' });
+        res.writeHead(response.status, response.headers);
+        res.end(response.body);
+      }, 10000);
+      return;
+    }
     let response;
     if (url.pathname === '/') {
       response = html({
@@ -75,8 +87,11 @@ function createFixtureServer() {
           '<h1>Fixture Home</h1>',
           '<a href="/private-a">Private A</a>',
           '<a href="/private-b">Private B</a>',
+          '<a href="/still-locked">Still locked</a>',
         ].join(''),
       });
+    } else if (url.pathname === '/still-locked') {
+      response = html({ status: 401, title: 'Login Required', body: '<h1>Sign in</h1>' });
     } else if (url.pathname === '/private-a' || url.pathname === '/private-b') {
       response = hasSessionCookie(req)
         ? html({
@@ -152,6 +167,49 @@ async function pollScanJob(jobId, accessToken) {
   throw new Error('Timed out waiting for scan job');
 }
 
+function spawnBackend(tempDir) {
+  const backend = spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      DB_PATH: path.join(tempDir, 'vellic.db'),
+      HOST: '127.0.0.1',
+      PORT: String(BACKEND_PORT),
+      RUN_MODE: 'web',
+      SCAN_AUTH_FEATURE_ENABLED: 'true',
+      ALLOW_PRIVATE_NETWORKS: 'true',
+      SCREENSHOT_STORAGE_PROVIDER: 'local',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  backend.stdout.on('data', (chunk) => process.stdout.write(chunk));
+  backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
+  return backend;
+}
+
+async function createReadyFixtureSession(fixtureBase, authHeaders, sampleUrls) {
+  const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ url: `${fixtureBase}/login`, sampleUrls }),
+  });
+  await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/action`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ action: 'type', text: 'ok' }),
+  });
+  await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/action`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ action: 'press', key: 'Enter' }),
+  });
+  await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/complete`, {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  return session;
+}
+
 async function main() {
   let backend = null;
   let fixture = null;
@@ -159,22 +217,7 @@ async function main() {
 
   if (!process.env.API_BASE) {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vellic-scan-auth-'));
-    backend = spawn(process.execPath, ['server.js'], {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        DB_PATH: path.join(tempDir, 'vellic.db'),
-        HOST: '127.0.0.1',
-        PORT: String(BACKEND_PORT),
-        RUN_MODE: 'web',
-        SCAN_AUTH_FEATURE_ENABLED: 'true',
-        ALLOW_PRIVATE_NETWORKS: 'true',
-        SCREENSHOT_STORAGE_PROVIDER: 'local',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    backend.stdout.on('data', (chunk) => process.stdout.write(chunk));
-    backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
+    backend = spawnBackend(tempDir);
   }
 
   try {
@@ -193,15 +236,37 @@ async function main() {
       body: JSON.stringify({ url: `${fixtureBase}/` }),
     });
     assert.strictEqual(precheck.authRequired, true, 'precheck should find login-gated pages');
-    assert.strictEqual(precheck.authCount, 2, 'precheck should find both protected pages');
+    assert.strictEqual(precheck.authCount, 3, 'precheck should find all protected pages');
     assert.strictEqual(precheck.interactiveLoginSupported, true, 'precheck should expose interactive login support');
+
+    const withoutLogin = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/`, maxPages: 100, options: { authenticatedPages: true } }),
+    });
+    const withoutLoginResult = await pollScanJob(withoutLogin.jobId, withoutLogin.jobAccessToken);
+    assert.strictEqual(withoutLoginResult.partialReason, 'auth_required');
+    assert.ok(flattenTree(withoutLoginResult.root).some((node) => (
+      node.url === `${fixtureBase}/private-a` && node.authRequired
+    )), 'continuing without login should label protected pages');
 
     const interactive = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ url: `${fixtureBase}/login` }),
+      body: JSON.stringify({ url: `${fixtureBase}/login`, sampleUrls: precheck.sampleUrls }),
     });
     assert.strictEqual(interactive.status, 'interactive', 'login flow should create an interactive browser session');
+
+    let rejectedBeforeLogin = false;
+    try {
+      await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/complete`, {
+        method: 'POST',
+        headers: authHeaders,
+      });
+    } catch (error) {
+      rejectedBeforeLogin = /failed 409/.test(error.message);
+    }
+    assert.strictEqual(rejectedBeforeLogin, true, 'unfinished login must not be accepted');
 
     const loginScreen = await fetchRaw(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/screenshot`, {
       headers: authHeaders,
@@ -233,46 +298,14 @@ async function main() {
       { headers: authHeaders }
     );
     assert.ok(interactiveScreenshot.thumbnailUrl, 'interactive auth session should capture protected pages');
-    await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}`, {
-      method: 'DELETE',
-      headers: authHeaders,
-    });
-
-    const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
-      method: 'POST',
-      headers: authHeaders,
-      body: JSON.stringify({
-        url: `${fixtureBase}/`,
-        storageState: {
-          cookies: [{
-            name: 'fixture_session',
-            value: 'ok',
-            domain: '127.0.0.1',
-            path: '/',
-            httpOnly: false,
-            secure: false,
-            sameSite: 'Lax',
-          }],
-          origins: [],
-        },
-      }),
-    });
-    assert.strictEqual(session.status, 'ready', 'storage state should create a ready auth session');
-
-    const screenshot = await fetchJson(
-      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${session.sessionId}`,
-      { headers: authHeaders }
-    );
-    assert.ok(screenshot.thumbnailUrl, 'same auth session should capture another protected page');
-
     const created = await fetchJson(`${API_BASE}/scan-jobs`, {
       method: 'POST',
       headers: authHeaders,
       body: JSON.stringify({
-        url: `${fixtureBase}/private-a`,
-        maxPages: 10,
+        url: `${fixtureBase}/`,
+        maxPages: 100,
         options: { authenticatedPages: true },
-        authSessionId: session.sessionId,
+        authSessionId: interactive.sessionId,
       }),
     });
     const result = await pollScanJob(created.jobId, created.jobAccessToken);
@@ -281,10 +314,15 @@ async function main() {
     assert.ok(privateA, 'authenticated scan should include private A');
     assert.strictEqual(privateA.authRequired, false, 'private A should not remain auth-gated');
     assert.strictEqual(privateA.title, 'Private A');
+    const privateB = nodes.find((node) => node.url === `${fixtureBase}/private-b`);
+    assert.ok(privateB && !privateB.authRequired, 'one login should unlock the second protected page');
+    assert.strictEqual(result.partial, true, 'a page still locked after login should make the scan partial');
+    assert.strictEqual(result.partialReason, 'auth_required');
+    assert.ok(result.blockedSections.some((section) => section.url === `${fixtureBase}/still-locked`));
 
     let deleted = false;
     try {
-      await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}`, {
+      await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}`, {
         headers: authHeaders,
       });
     } catch (error) {
@@ -292,10 +330,100 @@ async function main() {
     }
     assert.strictEqual(deleted, true, 'scan auth session should be deleted after job completion');
 
+    await assert.rejects(() => fetchJson(
+      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${interactive.sessionId}`,
+      { headers: authHeaders }
+    ), /failed 410: The temporary login expired/);
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/`, authSessionId: interactive.sessionId }),
+    }), /failed 410: The temporary login expired/);
+    await assert.rejects(() => fetchJson(
+      `${API_BASE}/scan-stream?url=${encodeURIComponent(fixtureBase)}&authSessionId=${interactive.sessionId}`,
+      { headers: authHeaders }
+    ), /failed 410: The temporary login expired/);
+
+    const rescanSession = await createReadyFixtureSession(fixtureBase, authHeaders, precheck.sampleUrls);
+    const rescanJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        url: `${fixtureBase}/`,
+        maxPages: 100,
+        options: { authenticatedPages: true },
+        authSessionId: rescanSession.sessionId,
+      }),
+    });
+    const rescanResult = await pollScanJob(rescanJob.jobId, rescanJob.jobAccessToken);
+    assert.ok(flattenTree(rescanResult.root).some((node) => (
+      node.url === `${fixtureBase}/private-b` && !node.authRequired
+    )), 'a fresh login should unlock protected pages on a rescan');
+
+    const canceledSession = await createReadyFixtureSession(fixtureBase, authHeaders, precheck.sampleUrls);
+    const canceledJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        url: `${fixtureBase}/`,
+        maxPages: 10,
+        options: { authenticatedPages: true },
+        authSessionId: canceledSession.sessionId,
+      }),
+    });
+    await fetchJson(`${API_BASE}/scan-jobs/${canceledJob.jobId}/cancel`, {
+      method: 'POST',
+      headers: authHeaders,
+    });
+    const canceledStatus = await fetchJson(`${API_BASE}/scan-jobs/${canceledJob.jobId}?access_token=${canceledJob.jobAccessToken}`);
+    assert.strictEqual(canceledStatus.job.status, 'canceled', 'canceled scan should not complete');
+    let canceledSessionRemoved = false;
+    try {
+      await fetchJson(`${API_BASE}/scan-auth/sessions/${canceledSession.sessionId}`, { headers: authHeaders });
+    } catch (error) {
+      canceledSessionRemoved = /failed 404/.test(error.message);
+    }
+    assert.strictEqual(canceledSessionRemoved, true, 'canceling a scan should discard its login');
+
+    if (backend) {
+      console.log('[scan-auth-session] Checking interrupted scan recovery.');
+      const restartSession = await createReadyFixtureSession(fixtureBase, authHeaders, precheck.sampleUrls);
+      console.log('[scan-auth-session] Restart login ready.');
+      console.log('[scan-auth-session] Creating interrupted job.');
+      const interruptedJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          url: `${fixtureBase}/slow`,
+          maxPages: 10,
+          options: { authenticatedPages: true },
+          authSessionId: restartSession.sessionId,
+        }),
+      });
+      console.log('[scan-auth-session] Interrupting job.');
+      const exited = new Promise((resolve) => backend.once('exit', resolve));
+      assert.strictEqual(backend.kill('SIGKILL'), true, 'fixture backend should accept the stop signal');
+      await exited;
+      console.log('[scan-auth-session] Initial backend stopped.');
+      backend = spawnBackend(tempDir);
+      await waitForHealth();
+      const interruptedStatus = await fetchJson(
+        `${API_BASE}/scan-jobs/${interruptedJob.jobId}?access_token=${interruptedJob.jobAccessToken}`
+      );
+      assert.strictEqual(interruptedStatus.job.status, 'failed', 'restarted scan must not resume without its login');
+      assert.ok(/interrupted/i.test(interruptedStatus.job.error || ''));
+    }
+
     console.log('[scan-auth-session] Passed.');
   } finally {
-    if (fixture) await new Promise((resolve) => fixture.close(resolve));
     if (backend) backend.kill('SIGTERM');
+    if (fixture) {
+      fixture.closeAllConnections();
+      await Promise.race([
+        new Promise((resolve) => fixture.close(resolve)),
+        sleep(3000),
+      ]);
+    }
     if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }

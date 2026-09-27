@@ -145,6 +145,14 @@ const NodeCard = ({
         variant: 'file',
       };
     }
+    if (node?.authPreviewUnavailable || node?.authRequired) {
+      return {
+        icon: Lock,
+        label: 'Login-protected page',
+        text: 'Preview unavailable in beta',
+        variant: 'blocked',
+      };
+    }
     if (node?.thumbnailCaptureFailed) {
       return {
         icon: AlertTriangle,
@@ -373,6 +381,9 @@ const NodeCard = ({
                 }}
                 style={{ opacity: thumbLoading ? 0 : 1 }}
               />
+              {node?.authPreviewUnavailable && !thumbLoading && (
+                <span className="thumb-stale-label">Not updated by this scan</span>
+              )}
               {!thumbLoading && (
                 <button
                   className="thumb-fullsize-btn"

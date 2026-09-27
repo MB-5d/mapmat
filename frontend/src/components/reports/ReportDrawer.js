@@ -254,6 +254,18 @@ const ReportDrawer = ({
   const blockedSections = Array.isArray(scanMeta?.blockedSections)
     ? scanMeta.blockedSections.filter((section) => section?.url)
     : [];
+  const blockedSectionNotices = [
+    {
+      entries: blockedSections.filter((section) => section.reason === 'auth_required'),
+      title: 'Some pages still require login.',
+      prefix: 'Login required at ',
+    },
+    {
+      entries: blockedSections.filter((section) => section.reason !== 'auth_required'),
+      title: 'Some sections could not be scanned.',
+      prefix: 'Blocked at ',
+    },
+  ].filter((notice) => notice.entries.length > 0);
   const isPartialImport = scanMeta?.partialReason === 'import_page_limit';
   const entitlementVisibleLimit = Number(
     scanMeta?.entitlement?.visiblePageLimit
@@ -570,18 +582,18 @@ const ReportDrawer = ({
             </div>
           </div>
         )}
-        {blockedSections.length > 0 && (
-          <div className="ui-status-alert ui-status-alert--warning report-scan-alert">
+        {blockedSectionNotices.map((notice) => (
+          <div key={notice.prefix} className="ui-status-alert ui-status-alert--warning report-scan-alert">
             <AlertTriangle size={16} className="ui-status-alert__icon" />
             <div className="ui-status-alert__content">
-              <strong>Some sections could not be scanned.</strong>
+              <strong>{notice.title}</strong>
               <span>
-                Blocked at {blockedSections[0].url}
-                {blockedSections.length > 1 ? ` and ${blockedSections.length - 1} more.` : '.'}
+                {notice.prefix}{notice.entries[0].url}
+                {notice.entries.length > 1 ? ` and ${notice.entries.length - 1} more.` : '.'}
               </span>
             </div>
           </div>
-        )}
+        ))}
         {safetyCapNotice && (
           <div className="ui-status-alert ui-status-alert--warning report-scan-alert">
             <AlertTriangle size={16} className="ui-status-alert__icon" />

@@ -111,7 +111,25 @@ function classifyScanResponse({ html = '', status = 0, url = '', finalUrl = '', 
   const { title, bodyText } = extractHtmlTitle(html);
   const challenge = detectChallengePage(html, title, headers);
   const looksAuthRequired = AUTH_BODY_PATTERNS.some((pattern) => pattern.test(`${title} ${bodyText}`));
-  const isAuthStatus = normalizedStatus === 401 || (normalizedStatus === 403 && looksAuthRequired);
+  let redirectedToLogin = false;
+  let requestedLoginPage = false;
+  const loginPathPattern = /(?:^|\/)(?:login|log-in|signin|sign-in|authorize)(?:\/|$)/i;
+  try {
+    const requested = new URL(url);
+    const resolved = new URL(finalUrl || url);
+    requestedLoginPage = loginPathPattern.test(requested.pathname);
+    redirectedToLogin = (requested.origin !== resolved.origin || requested.pathname !== resolved.pathname)
+      && loginPathPattern.test(resolved.pathname);
+  } catch {
+    // Non-URL fixture inputs still use status and form detection.
+  }
+  const loginForm = normalizedStatus >= 200 && normalizedStatus < 400
+    && !requestedLoginPage
+    && /<(?:input)\b[^>]*type\s*=\s*["']?password\b/i.test(html)
+    && /^(?:sign in|log in|login)(?:\s|$)/i.test(title);
+  const isAuthStatus = normalizedStatus === 401
+    || (normalizedStatus === 403 && looksAuthRequired)
+    || (normalizedStatus >= 200 && normalizedStatus < 400 && (redirectedToLogin || loginForm));
   const isBlockedStatus = challenge.isChallengePage || normalizedStatus === 403 || normalizedStatus === 429;
   const hasHttpErrorStatus = normalizedStatus >= 400;
   const isErrorStatus = hasHttpErrorStatus && !isAuthStatus && !isBlockedStatus;

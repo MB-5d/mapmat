@@ -4975,6 +4975,19 @@ body {
   background: var(--ui-color-surface);
 }
 
+.thumb-stale-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.76);
+  color: var(--color-neutral-white);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
 .thumb-fullsize-btn {
   position: absolute;
   bottom: 8px;
