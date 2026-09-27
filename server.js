@@ -10,6 +10,7 @@
 
 const express = require('express');
 const { getScanRouteHash } = require('./utils/scanRoute');
+const { getScanHttpsUpgrade, normalizeScanRedirectUrl } = require('./utils/scanRedirect');
 const http = require('http');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -74,6 +75,7 @@ const {
   getInvalidScanResultMessage,
   getInvalidScanResultReason,
   hardenCollapsedScanResult,
+  flagScanScopeDiscoveryFailure,
 } = require('./utils/scanResultQuality');
 const {
   REPETITIVE_GROUP_CAPTURE_LIMIT,
@@ -4965,10 +4967,46 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   let groupingStartedAt = null;
   const scanOptions = normalizeScanOptions(options);
   const entitlementCappedScan = Boolean(options.entitlementCappedScan || options._entitlementCappedScan);
-  const scanScope = createScanScope(startUrl, scanOptions.subdomains);
+  let transportUpgrade = null;
+  const normalizeUrl = (raw) => normalizeScanRedirectUrl(raw, transportUpgrade);
+  const requestedSeedUrl = normalizeUrl(startUrl);
+  const authStorageState = normalizePlaywrightStorageState(options.authSessionStorageState);
+  const authContext = authStorageState
+    ? await createAuthenticatedBrowserContext(authStorageState)
+    : null;
+  let prefetchedRoot = null;
+  // Resolve HTTP transport before initializing any discovery queues or scope.
+  // Reuse the response when crawling the root so it consumes one page allowance.
+  if (new URL(requestedSeedUrl).protocol === 'http:' && !new URL(requestedSeedUrl).port) {
+    try {
+      prefetchedRoot = authContext
+        ? { ...(await fetchPageWithBrowserContext(authContext, requestedSeedUrl)), usedBrowser: true }
+        : { ...(await fetchPage(requestedSeedUrl, {}, 20000)), usedBrowser: false };
+      const upgrade = getScanHttpsUpgrade(requestedSeedUrl, prefetchedRoot);
+      if (upgrade) {
+        await assertSafeUrl(prefetchedRoot.finalUrl);
+        transportUpgrade = upgrade;
+      }
+      // Route fragments need a rendered page, not the prefetched document shell.
+      if (getScanRouteHash(requestedSeedUrl) && !authContext) prefetchedRoot = null;
+    } catch {
+      // Retain the normal crawler retry/classification path on fetch failure.
+      prefetchedRoot = null;
+    }
+  }
+  const scanScope = createScanScope(normalizeUrl(requestedSeedUrl), scanOptions.subdomains);
   const seed = scanScope.seed;
   const requestedPageLimit = normalizeMaxPagesLimit(maxPages);
-  const repetitiveCapture = normalizeRepetitiveCaptureRequest(options, scanScope, requestedPageLimit);
+  const captureOptions = options.repetitiveCapture ? {
+    ...options,
+    repetitiveCapture: {
+      ...options.repetitiveCapture,
+      entries: (Array.isArray(options.repetitiveCapture.entries) ? options.repetitiveCapture.entries : []).map((entry) => (
+        typeof entry === 'string' ? normalizeUrl(entry) : { ...entry, url: normalizeUrl(entry?.url) }
+      )),
+    },
+  } : options;
+  const repetitiveCapture = normalizeRepetitiveCaptureRequest(captureOptions, scanScope, requestedPageLimit);
   const captureUrlSet = new Set((repetitiveCapture?.entries || []).map((entry) => entry.url));
   const targetedCollectionChildUrlSet = new Set();
   const captureEntryByUrl = new Map((repetitiveCapture?.entries || []).map((entry) => [entry.url, entry]));
@@ -4978,10 +5016,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     : requestedPageLimit + (targetedGroupCapture ? 1 : 0);
   const discoveryLimit = getScanDiscoveryLimit(pageLimit ?? SCAN_PAGE_SAFETY_CAP);
   const depthLimit = normalizeScanDepthLimit(maxDepth);
-  const authStorageState = normalizePlaywrightStorageState(options.authSessionStorageState);
-  const authContext = authStorageState
-    ? await createAuthenticatedBrowserContext(authStorageState)
-    : null;
 
   const origin = scanScope.origin;
   const baseHost = scanScope.baseHost;
@@ -5056,6 +5090,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
   const scanDiagnostics = {
+    requestedUrl: startUrl,
+    requestedSeedUrl,
+    transportUpgradeApplied: Boolean(transportUpgrade),
     seedUrl: seed,
     focused: scanScope.focused,
     focusPath: scanScope.focusPath,
@@ -5067,6 +5104,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     rootBlockedReason: null,
     rootExtractedLinks: 0,
     rootAllowedLinks: 0,
+    rootSameSiteLinksRejectedByScope: 0,
     queuedCount: 0,
     visitedCount: 0,
     pageMapCount: 0,
@@ -5612,7 +5650,22 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
   const isScanFileUrl = (url) => getScanFileInfo(url).isFile;
   const allowPageUrl = (candidate) => allowUrl(candidate) && !isIgnoredCrawlUtilityUrl(candidate) && !isScanFileUrl(candidate);
+  const countRootScopeRejectedLinks = (links) => links.filter((link) => {
+    const normalized = normalizeUrl(link);
+    if (!normalized || isIgnoredCrawlUtilityUrl(normalized) || isScanFileUrl(normalized)) return false;
+    const parsed = new URL(normalized);
+    const rootOrigin = new URL(origin);
+    // Intentional subdomain, port, or focused-path exclusions are not failures.
+    if (!['http:', 'https:'].includes(parsed.protocol)
+      || normalizeHost(parsed.hostname) !== baseHost || parsed.port !== rootOrigin.port) return false;
+    if (getCanonicalKey(normalized) === getCanonicalKey(seed)) return false;
+    if (scanScope.focused && ![scanScope.focusPath, ...focusedPathAliases].some((path) => (
+      parsed.pathname === path || parsed.pathname.startsWith(`${path}/`)
+    ))) return false;
+    return !allowUrl(normalized);
+  }).length;
   const enqueue = (url, depth, source = 'crawl') => {
+    url = normalizeUrl(url);
     if (!url) return;
     if (
       targetedGroupCapture
@@ -5759,6 +5812,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   );
 
   const fetchCrawlPage = async (url, source = 'crawl') => {
+    if (url === seed && prefetchedRoot) {
+      const response = prefetchedRoot;
+      prefetchedRoot = null;
+      return response;
+    }
     if (getScanRouteHash(url)) {
       const context = authContext || await getCrawlBrowserContext(url);
       return { ...(await fetchPageWithBrowserContext(context, url)), usedBrowser: true };
@@ -6503,7 +6561,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const isFocusedContentLeaf = url !== seed && focusedListingUrls.has(url);
     const suppressLinkDiscovery = isFocusedContentLeaf || source === 'parent_probe';
     const links = classification.shouldExtractLinks && !suppressLinkDiscovery
-      ? extractLinks(html, finalUrl || url)
+      ? extractLinks(html, finalUrl || url).map((link) => normalizeUrl(link)).filter(Boolean)
       : [];
     if (
       scanScope.focused
@@ -6553,6 +6611,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (url === seed) {
       scanDiagnostics.rootExtractedLinks = links.length;
       scanDiagnostics.rootAllowedLinks = allowedLinks.length;
+      scanDiagnostics.rootSameSiteLinksRejectedByScope = countRootScopeRejectedLinks(links);
     }
 
     for (const link of links) {
@@ -6826,6 +6885,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     linksByUrl.set(seed, allowedRenderedLinks);
     scanDiagnostics.rootExtractedLinks = Math.max(scanDiagnostics.rootExtractedLinks, normalizedRenderedLinks.length);
     scanDiagnostics.rootAllowedLinks = Math.max(scanDiagnostics.rootAllowedLinks, allowedRenderedLinks.length);
+    scanDiagnostics.rootSameSiteLinksRejectedByScope = Math.max(
+      scanDiagnostics.rootSameSiteLinksRejectedByScope,
+      countRootScopeRejectedLinks(normalizedRenderedLinks)
+    );
     for (const link of normalizedRenderedLinks) {
       if (await pollJobStatus()) break;
       recordNumberingDiscovery(link);
@@ -8617,6 +8680,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     result.partial = true;
     result.partialReason = partialReason;
   }
+  if (!targetedGroupCapture) flagScanScopeDiscoveryFailure(result);
   if (captureSummary?.remainingEntries?.length) {
     result.partial = true;
     result.partialReason = 'deferred_capture_incomplete';
