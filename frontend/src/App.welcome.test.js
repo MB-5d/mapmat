@@ -17,6 +17,13 @@ vi.mock('./api', () => ({
   getPendingAccessRequests: vi.fn(),
   getMapInvitePreview: vi.fn(),
   getMapAccessPreview: vi.fn(),
+  getScanEntitlementPreview: vi.fn(),
+  precheckScanAuth: vi.fn(),
+  createScanAuthSession: vi.fn(),
+  getScanAuthScreenshot: vi.fn(),
+  sendScanAuthAction: vi.fn(),
+  completeScanAuthSession: vi.fn(),
+  deleteScanAuthSession: vi.fn(),
   login: vi.fn(),
   signup: vi.fn(),
 }));
@@ -122,6 +129,9 @@ describe('App blank home and welcome modal', () => {
     api.getMapAccessPreview.mockResolvedValue({ map: null });
     api.login.mockResolvedValue({ user: defaultUser });
     api.signup.mockResolvedValue({ user: defaultUser });
+    api.getScanEntitlementPreview.mockResolvedValue({
+      entitlement: { requestedPages: 50000, allowedPages: 50000, capped: false },
+    });
 
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -260,6 +270,53 @@ describe('App blank home and welcome modal', () => {
 
     expect(getSaveMapModal()).not.toBeNull();
     expect(container.textContent).toContain('Create map');
+  });
+
+  test('simple protected pages show a direct password field instead of a screenshot', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockResolvedValue({
+      authRequired: true,
+      authCount: 9,
+      sampleUrls: ['https://example.com/private'],
+      interactiveLoginSupported: true,
+    });
+    api.createScanAuthSession.mockResolvedValue({
+      status: 'interactive',
+      sessionId: 'test-session',
+      loginUrl: 'https://example.com/private',
+      simplePasswordGate: true,
+    });
+    api.sendScanAuthAction.mockResolvedValue({ success: true });
+    api.completeScanAuthSession.mockRejectedValue(new Error('Password not accepted'));
+
+    await renderApp();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-bar__input'), 'https://example.com');
+      await flushAsync();
+    });
+    await click(getButton('Scan'));
+    expect(container.textContent).toContain('at least 9 pages');
+    await click(getButton('Log in to this site'));
+
+    expect(container.querySelector('.scan-auth-password-form input[type="password"]')).not.toBeNull();
+    expect(container.querySelector('.scan-auth-browser-frame')).toBeNull();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-auth-password-form input'), 'test-password');
+      await flushAsync();
+    });
+    await click(getButton('Unlock and scan'));
+    expect(api.sendScanAuthAction).toHaveBeenCalledWith('test-session', {
+      action: 'password',
+      text: 'test-password',
+    });
+    expect(container.textContent).toContain('Password not accepted');
+
+    api.sendScanAuthAction.mockResolvedValue({ success: true, simplePasswordGate: true });
+    await click(getButton('Use browser sign-in instead'));
+    expect(container.querySelector('.scan-auth-browser-frame')).not.toBeNull();
+    await click(getButton('Enter'));
+    expect(container.querySelector('.scan-auth-browser-frame')).not.toBeNull();
   });
 
   test('logged-in modify opens the projects panel', async () => {

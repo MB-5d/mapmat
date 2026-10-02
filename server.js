@@ -3178,7 +3178,7 @@ const SCAN_AUTH_SESSION_TTL_MS = Math.max(
 );
 const SCAN_AUTH_PRECHECK_MAX_PAGES = Math.max(
   1,
-  Math.min(25, Number(process.env.SCAN_AUTH_PRECHECK_MAX_PAGES || 8))
+  Math.min(25, Number(process.env.SCAN_AUTH_PRECHECK_MAX_PAGES || 25))
 );
 const SCAN_AUTH_PRECHECK_MAX_DEPTH = Math.max(
   1,
@@ -3333,6 +3333,17 @@ async function createAuthenticatedBrowserContext(storageState, viewport = { widt
   }
 }
 
+async function hasSimplePasswordGate(page) {
+  return page.evaluate(() => {
+    const visible = (element) => !element.disabled && element.getClientRects().length > 0;
+    const passwords = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
+    if (passwords.length !== 1 || !passwords[0].form) return false;
+    const fields = Array.from(passwords[0].form.querySelectorAll('input, textarea, select'))
+      .filter((element) => element.type !== 'hidden' && visible(element));
+    return fields.length === 1 && fields[0] === passwords[0];
+  }).catch(() => false);
+}
+
 async function startInteractiveScanAuthSession(session) {
   if (!session || session.status === 'ready') return session;
   const context = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT);
@@ -3348,11 +3359,12 @@ async function startInteractiveScanAuthSession(session) {
   session.page = page;
   session.status = 'interactive';
   try {
-    await page.goto(session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    await page.goto(session.sampleUrls[0] || session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
   } catch (error) {
     session.lastError = error.message || 'Target-site login page did not finish loading';
   }
   session.pageUrl = page.url();
+  session.simplePasswordGate = await hasSimplePasswordGate(page);
   return session;
 }
 
@@ -3368,6 +3380,7 @@ async function getInteractiveScanAuthPage(req, sessionId) {
       session.page = page;
       await page.goto(session.pageUrl || session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
       session.pageUrl = page.url();
+      session.simplePasswordGate = await hasSimplePasswordGate(page);
     } catch (error) {
       session.lastError = error.message || 'Target-site login browser closed';
       return null;
@@ -9761,6 +9774,7 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
       origin: session.origin,
       interactiveSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
       loginUrl: session.pageUrl || safeUrl,
+      simplePasswordGate: Boolean(session.simplePasswordGate),
       message: session.status === 'ready'
         ? 'Authenticated scan session ready'
         : 'Log in inside the Vellic browser, then continue the scan',
@@ -9787,6 +9801,7 @@ app.get('/scan-auth/sessions/:id', authMiddleware, requireAuth, requireApiKey, (
     expiresAt: new Date(session.expiresAt).toISOString(),
     origin: session.origin,
     pageUrl: session.pageUrl || session.seedUrl,
+    simplePasswordGate: Boolean(session.simplePasswordGate),
     interactiveSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
     ready: session.status === 'ready' && !!session.storageState,
   });
@@ -9833,7 +9848,16 @@ app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireA
   if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
   const { action, x, y, text, key } = req.body || {};
   try {
-    if (action === 'click') {
+    if (action === 'password') {
+      if (!(await hasSimplePasswordGate(target.page))) {
+        return res.status(409).json({ error: 'This page needs browser sign-in instead.' });
+      }
+      const password = String(text || '');
+      if (!password) return res.status(400).json({ error: 'Enter a site password.' });
+      const field = target.page.locator('input[type="password"]:visible').first();
+      await field.fill(password);
+      await field.press('Enter');
+    } else if (action === 'click') {
       await target.page.mouse.click(Number(x), Number(y));
     } else if (action === 'type') {
       await target.page.keyboard.type(String(text || ''), { delay: 10 });
@@ -9843,7 +9867,12 @@ app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireA
       return res.status(400).json({ error: 'Unsupported login action' });
     }
     target.session.pageUrl = target.page.url();
-    return res.json({ success: true, pageUrl: target.session.pageUrl });
+    target.session.simplePasswordGate = await hasSimplePasswordGate(target.page);
+    return res.json({
+      success: true,
+      pageUrl: target.session.pageUrl,
+      simplePasswordGate: Boolean(target.session.simplePasswordGate),
+    });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Failed to control login browser' });
   }

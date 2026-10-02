@@ -90,6 +90,27 @@ function createFixtureServer() {
           '<a href="/still-locked">Still locked</a>',
         ].join(''),
       });
+    } else if (url.pathname === '/many') {
+      response = html({
+        title: 'Many Protected Pages',
+        body: Array.from({ length: 12 }, (_, index) => (
+          `<a href="/many/private-${index + 1}">Private ${index + 1}</a>`
+        )).join(''),
+      });
+    } else if (/^\/many\/private-\d+$/.test(url.pathname)) {
+      response = html({
+        status: 401,
+        title: `Login Required ${url.pathname}`,
+        body: `<h1>Sign in for ${url.pathname}</h1>`,
+      });
+    } else if (url.pathname === '/simple-private') {
+      response = hasSessionCookie(req)
+        ? html({ title: 'Simple Private', body: '<h1>Simple Private</h1>' })
+        : html({
+          status: 401,
+          title: 'Password Required',
+          body: '<form method="post" action="/login"><input type="password" name="password"><button type="submit">Unlock</button></form>',
+        });
     } else if (url.pathname === '/still-locked') {
       response = html({ status: 401, title: 'Login Required', body: '<h1>Sign in</h1>' });
     } else if (url.pathname === '/private-a' || url.pathname === '/private-b') {
@@ -103,7 +124,7 @@ function createFixtureServer() {
         : html({
           status: 401,
           title: 'Login Required',
-          body: '<h1>Sign in</h1><p>Authentication required.</p>',
+          body: '<h1>Sign in</h1><form method="post" action="/login"><input type="password" name="password" autofocus><button type="submit">Unlock</button></form>',
         });
     } else if (url.pathname === '/login') {
       response = html({
@@ -238,6 +259,35 @@ async function main() {
     assert.strictEqual(precheck.authRequired, true, 'precheck should find login-gated pages');
     assert.strictEqual(precheck.authCount, 3, 'precheck should find all protected pages');
     assert.strictEqual(precheck.interactiveLoginSupported, true, 'precheck should expose interactive login support');
+
+    const manyPrecheck = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/many` }),
+    });
+    assert.strictEqual(manyPrecheck.authCount, 12, 'precheck should inspect more than eight linked protected pages');
+
+    const simpleGate = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/`, sampleUrls: [`${fixtureBase}/simple-private`] }),
+    });
+    assert.strictEqual(simpleGate.loginUrl, `${fixtureBase}/simple-private`, 'login should open the protected page');
+    assert.strictEqual(simpleGate.simplePasswordGate, true, 'single-field password gates should use the direct form');
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${simpleGate.sessionId}/action`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ action: 'password', text: 'ok' }),
+    });
+    const completedSimpleGate = await fetchJson(`${API_BASE}/scan-auth/sessions/${simpleGate.sessionId}/complete`, {
+      method: 'POST',
+      headers: authHeaders,
+    });
+    assert.strictEqual(completedSimpleGate.ready, true, 'direct password submission should unlock the page');
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${simpleGate.sessionId}`, {
+      method: 'DELETE',
+      headers: authHeaders,
+    });
 
     const withoutLogin = await fetchJson(`${API_BASE}/scan-jobs`, {
       method: 'POST',

@@ -3962,6 +3962,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     : formatEntitlementCount(Math.max(0, Number(screenshotCreditMeter?.remaining || 0)));
   const scanAuthBrowserImageRef = useRef(null);
   const scanAuthBrowserTextRef = useRef(null);
+  const scanAuthBrowserPasswordRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [showSupportDrawer, setShowSupportDrawer] = useState(false);
@@ -3983,7 +3984,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
-    if (!sessionId) return undefined;
+    if (!sessionId || (scanAuthPrompt?.authBrowser?.simplePasswordGate
+      && !scanAuthPrompt?.authBrowser?.browserMode)) return undefined;
     let active = true;
     let lastObjectUrl = '';
     const loadScreenshot = async () => {
@@ -4018,7 +4020,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       window.clearInterval(interval);
       if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
     };
-  }, [scanAuthPrompt?.authBrowser?.sessionId]);
+  }, [
+    scanAuthPrompt?.authBrowser?.sessionId,
+    scanAuthPrompt?.authBrowser?.simplePasswordGate,
+    scanAuthPrompt?.authBrowser?.browserMode,
+  ]);
   // Shape: { title, message, onConfirm, onCancel, placeholder, defaultValue }
 
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
@@ -14426,6 +14432,8 @@ export default function App({ currentRoute, navigateToRoute }) {
             sessionId: session.sessionId,
             pageUrl: session.loginUrl || prompt.url,
             screenshotUrl: '',
+            simplePasswordGate: Boolean(session.simplePasswordGate),
+            browserMode: false,
           },
         } : current);
         return;
@@ -14454,6 +14462,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         authBrowser: {
           ...current.authBrowser,
           pageUrl: result?.pageUrl || current.authBrowser?.pageUrl,
+          simplePasswordGate: Boolean(result?.simplePasswordGate),
         },
       } : current);
     } catch (err) {
@@ -14483,6 +14492,29 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!text) return;
     input.value = '';
     await sendTargetAuthBrowserAction({ action: 'type', text });
+  };
+
+  const submitTargetAuthPassword = async () => {
+    const prompt = scanAuthPrompt;
+    const sessionId = prompt?.authBrowser?.sessionId;
+    const input = scanAuthBrowserPasswordRef.current;
+    const password = input?.value || '';
+    if (!sessionId || !password || prompt.loading) return;
+    input.value = '';
+    setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
+    try {
+      await api.sendScanAuthAction(sessionId, { action: 'password', text: password });
+      const session = await api.completeScanAuthSession(sessionId);
+      if (!session?.ready) throw new Error('That password did not unlock the protected page.');
+      setScanAuthPrompt(null);
+      scan(prompt.url, prompt.preserveName, { skipAuthPrecheck: true, authSessionId: sessionId });
+    } catch (err) {
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        loading: false,
+        error: err?.message || 'That password did not unlock the protected page.',
+      } : current);
+    }
   };
 
   const finishTargetAuthLogin = async () => {
@@ -22078,7 +22110,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           show
           onClose={closeScanAuthPrompt}
           title="This scan may need login"
-          className="scan-auth-modal"
+          className={scanAuthPrompt.authBrowser?.simplePasswordGate && !scanAuthPrompt.authBrowser?.browserMode
+            ? 'scan-auth-modal scan-auth-modal--password'
+            : 'scan-auth-modal'}
           scrollable
           footer={(
             <>
@@ -22092,10 +22126,14 @@ export default function App({ currentRoute, navigateToRoute }) {
               {scanAuthPrompt.authBrowser?.sessionId ? (
                 <Button
                   variant="primary"
-                  onClick={finishTargetAuthLogin}
+                  onClick={scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode
+                    ? submitTargetAuthPassword
+                    : finishTargetAuthLogin}
                   loading={scanAuthPrompt.loading}
                 >
-                  Use this login
+                  {scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode
+                    ? 'Unlock and scan'
+                    : 'Use this login'}
                 </Button>
               ) : (
                 <Button
@@ -22112,8 +22150,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         >
           <div className="scan-auth-modal-body">
             <p>
-              Vellic found {scanAuthPrompt.authCount || 'some'} page{scanAuthPrompt.authCount === 1 ? '' : 's'} that may require login.
-              One login session would apply to this whole scan.
+              A quick check found at least {scanAuthPrompt.authCount || 'one'} page{scanAuthPrompt.authCount === 1 ? '' : 's'} that may require login. The full scan may find more.
+              One browser session will be used across this scan. Pages with different passwords may still need separate access.
             </p>
             {scanAuthPrompt.sampleUrls?.length ? (
               <ul className="scan-auth-samples">
@@ -22124,50 +22162,82 @@ export default function App({ currentRoute, navigateToRoute }) {
             ) : null}
             {scanAuthPrompt.authBrowser?.sessionId ? (
               <div className="scan-auth-browser">
-                <p>Use this login lets Vellic scan this site once. The login is not saved for later scans.</p>
-                <div className="scan-auth-browser-bar">
-                  <span>{scanAuthPrompt.authBrowser.pageUrl || scanAuthPrompt.url}</span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => sendTargetAuthBrowserAction({ action: 'press', key: 'Enter' })}
-                  >
-                    Enter
-                  </Button>
-                </div>
-                <button
-                  type="button"
-                  className="scan-auth-browser-frame"
-                  onClick={clickTargetAuthBrowser}
-                  aria-label="Target-site login browser"
-                >
-                  <img
-                    ref={scanAuthBrowserImageRef}
-                    src={scanAuthPrompt.authBrowser.screenshotUrl || ''}
-                    alt="Target-site login screen"
-                    draggable="false"
-                  />
-                </button>
-                <div className="scan-auth-browser-controls">
-                  <TextInput
-                    ref={scanAuthBrowserTextRef}
-                    type="password"
-                    size="sm"
-                    shellClassName="scan-auth-browser-input"
-                    placeholder="Type into selected field"
-                    autoComplete="off"
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') typeIntoTargetAuthBrowser();
-                    }}
-                  />
-                  <Button variant="secondary" size="sm" onClick={typeIntoTargetAuthBrowser}>
-                    Type
-                  </Button>
-                </div>
+                <p>This login is used for this scan only and is not saved for later scans.</p>
+                {scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode ? (
+                  <div className="scan-auth-password-form">
+                    <span className="scan-auth-browser-url">{scanAuthPrompt.authBrowser.pageUrl}</span>
+                    <TextInput
+                      ref={scanAuthBrowserPasswordRef}
+                      type="password"
+                      label="Site password"
+                      fieldClassName="scan-auth-password-field"
+                      autoComplete="off"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          submitTargetAuthPassword();
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setScanAuthPrompt((current) => current ? {
+                        ...current,
+                        error: '',
+                        authBrowser: { ...current.authBrowser, browserMode: true },
+                      } : current)}
+                    >
+                      Use browser sign-in instead
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="scan-auth-browser-bar">
+                      <span>{scanAuthPrompt.authBrowser.pageUrl || scanAuthPrompt.url}</span>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => sendTargetAuthBrowserAction({ action: 'press', key: 'Enter' })}
+                      >
+                        Enter
+                      </Button>
+                    </div>
+                    <button
+                      type="button"
+                      className="scan-auth-browser-frame"
+                      onClick={clickTargetAuthBrowser}
+                      aria-label="Target-site login browser"
+                    >
+                      <img
+                        ref={scanAuthBrowserImageRef}
+                        src={scanAuthPrompt.authBrowser.screenshotUrl || ''}
+                        alt="Target-site login screen"
+                        draggable="false"
+                      />
+                    </button>
+                    <div className="scan-auth-browser-controls">
+                      <TextInput
+                        ref={scanAuthBrowserTextRef}
+                        type="password"
+                        size="sm"
+                        shellClassName="scan-auth-browser-input"
+                        placeholder="Type into selected field"
+                        autoComplete="off"
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') typeIntoTargetAuthBrowser();
+                        }}
+                      />
+                      <Button variant="secondary" size="sm" onClick={typeIntoTargetAuthBrowser}>
+                        Type
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : null}
             {scanAuthPrompt.error ? (
-              <StatusAlert tone="warning" title="Login connection unavailable">
+              <StatusAlert tone="warning" title={scanAuthPrompt.authBrowser?.sessionId ? 'Sign-in incomplete' : 'Login connection unavailable'}>
                 {scanAuthPrompt.error}
               </StatusAlert>
             ) : !scanAuthPrompt.interactiveLoginSupported ? (
