@@ -13755,23 +13755,6 @@ body {
   padding: 16px 20px;
 }
 
-.scan-auth-modal {
-  max-width: min(1100px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-}
-
-.scan-auth-modal--password {
-  max-width: min(680px, calc(100vw - 32px));
-}
-
-.scan-auth-modal .modal-body {
-  padding: 22px 28px;
-}
-
-.scan-auth-modal .modal-footer {
-  padding: 16px 28px;
-}
-
 .scan-auth-modal-body {
   display: flex;
   flex-direction: column;
@@ -13782,18 +13765,6 @@ body {
   margin: 0;
   color: var(--color-text-secondary);
   line-height: 1.5;
-}
-
-.scan-auth-samples {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding-left: 18px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
 }
 
 .scan-auth-browser {
@@ -13807,7 +13778,7 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: 16px;
-  width: min(100%, 480px);
+  width: 100%;
 }
 
 .scan-auth-password-field,

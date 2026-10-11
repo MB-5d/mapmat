@@ -129,6 +129,7 @@ describe('App blank home and welcome modal', () => {
     api.getMapAccessPreview.mockResolvedValue({ map: null });
     api.login.mockResolvedValue({ user: defaultUser });
     api.signup.mockResolvedValue({ user: defaultUser });
+    api.deleteScanAuthSession.mockResolvedValue({ success: true });
     api.getScanEntitlementPreview.mockResolvedValue({
       entitlement: { requestedPages: 50000, allowedPages: 50000, capped: false },
     });
@@ -296,27 +297,81 @@ describe('App blank home and welcome modal', () => {
       await flushAsync();
     });
     await click(getButton('Scan'));
-    expect(container.textContent).toContain('at least 9 pages');
-    await click(getButton('Log in to this site'));
+    expect(container.textContent).toContain('At least 9 pages');
+    expect(container.querySelector('.modal-sm')).not.toBeNull();
+    expect(container.textContent).not.toContain('https://example.com/private');
+    await click(getButton('Enter password'));
 
     expect(container.querySelector('.scan-auth-password-form input[type="password"]')).not.toBeNull();
     expect(container.querySelector('.scan-auth-browser-frame')).toBeNull();
+    expect(getButton('Use browser sign-in instead')).toBeUndefined();
+    expect(api.getScanAuthScreenshot).not.toHaveBeenCalled();
     await act(async () => {
       changeValue(container.querySelector('.scan-auth-password-form input'), 'test-password');
       await flushAsync();
     });
+    await click(container.querySelector('button[aria-label="Show password"]'));
+    expect(container.querySelector('#scan-site-password').type).toBe('text');
+    expect(container.querySelector('#scan-site-password').value).toBe('test-password');
+    await click(container.querySelector('button[aria-label="Hide password"]'));
     await click(getButton('Unlock and scan'));
     expect(api.sendScanAuthAction).toHaveBeenCalledWith('test-session', {
       action: 'password',
       text: 'test-password',
     });
     expect(container.textContent).toContain('Password not accepted');
+    expect(container.querySelector('#scan-site-password').value).toBe('test-password');
+    expect(container.querySelector('.field-error').textContent).toBe('Password not accepted');
+    expect(container.querySelector('#scan-site-password').getAttribute('aria-invalid')).toBe('true');
+  });
 
-    api.sendScanAuthAction.mockResolvedValue({ success: true, simplePasswordGate: true });
-    await click(getButton('Use browser sign-in instead'));
-    expect(container.querySelector('.scan-auth-browser-frame')).not.toBeNull();
-    await click(getButton('Enter'));
-    expect(container.querySelector('.scan-auth-browser-frame')).not.toBeNull();
+  test('unsupported browser login gives a clear limit and cleans up without showing screenshot controls', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, authCount: 2, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'unsupported-session', status: 'interactive', simplePasswordGate: false });
+    await renderApp();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-bar__input'), 'https://example.com');
+      await flushAsync();
+    });
+    await click(getButton('Scan'));
+    await click(getButton('Enter password'));
+    expect(container.textContent).toContain('Interactive sign-in unavailable');
+    expect(container.querySelector('.scan-auth-browser-frame')).toBeNull();
+    expect(getButton('Type')).toBeUndefined();
+    expect(getButton('Use this login')).toBeUndefined();
+    expect(api.deleteScanAuthSession).toHaveBeenCalledWith('unsupported-session');
+    expect(api.getScanAuthScreenshot).not.toHaveBeenCalled();
+  });
+
+  test('closing during password submission prevents the delayed response from starting a scan', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, authCount: 2, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'cancel-session', status: 'interactive', simplePasswordGate: true });
+    let finishAction;
+    api.sendScanAuthAction.mockImplementation(() => new Promise((resolve) => { finishAction = resolve; }));
+    await renderApp();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-bar__input'), 'https://example.com');
+      await flushAsync();
+    });
+    await click(getButton('Scan'));
+    await click(getButton('Enter password'));
+    await act(async () => {
+      changeValue(container.querySelector('#scan-site-password'), 'test-password');
+      await flushAsync();
+    });
+    await click(getButton('Unlock and scan'));
+    await click(container.querySelector('.modal-close'));
+    await act(async () => {
+      finishAction({ success: true });
+      await flushAsync();
+    });
+    expect(api.completeScanAuthSession).not.toHaveBeenCalled();
+    expect(api.deleteScanAuthSession).toHaveBeenCalledWith('cancel-session');
+    expect(container.querySelector('#scan-site-password')).toBeNull();
   });
 
   test('logged-in modify opens the projects panel', async () => {

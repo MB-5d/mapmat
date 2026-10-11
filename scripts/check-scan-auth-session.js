@@ -55,8 +55,28 @@ function hasSessionCookie(req) {
 }
 
 function createFixtureServer() {
+  const passwordAttempts = new Map();
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://fixture.local');
+    if (url.pathname.startsWith('/page-gates/') && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        passwordAttempts.set(url.pathname, (passwordAttempts.get(url.pathname) || 0) + 1);
+        const correct = new URLSearchParams(body).get('password')
+          === (url.pathname.endsWith('/different') ? 'different-password' : 'fixture-password');
+        setTimeout(() => {
+          res.writeHead(correct ? 200 : 401, {
+            'content-type': 'application/json',
+            ...(correct && !url.pathname.endsWith('/transient') ? {
+              'set-cookie': `page_${url.pathname.split('/').pop()}=ok; Path=/; SameSite=Lax`,
+            } : {}),
+          });
+          res.end(JSON.stringify({ ok: correct }));
+        }, 350);
+      });
+      return;
+    }
     if (url.pathname === '/login' && req.method === 'POST') {
       req.resume();
       req.on('end', () => {
@@ -90,6 +110,32 @@ function createFixtureServer() {
           '<a href="/still-locked">Still locked</a>',
         ].join(''),
       });
+    } else if (url.pathname === '/external-form') {
+      response = html({ status: 401, title: 'Secure', body: '<form action="https://example.org/login"><input type="password"><button>Unlock</button></form>' });
+    } else if (url.pathname === '/get-form') {
+      response = html({ status: 401, title: 'Secure', body: '<form method="get" action="/page-gates/page1"><input type="password" name="password"><button>Unlock</button></form>' });
+    } else if (url.pathname === '/page-gates') {
+      response = html({ title: 'Page Gates', body: Array.from({ length: 12 }, (_, index) => (
+        `<a href="/page-gates/page${index + 1}">Page ${index + 1}</a>`
+      )).join('') + '<a href="/page-gates/different">Different password</a><a href="/page-gates/account">Account login</a>' });
+    } else if (url.pathname === '/page-gates/account') {
+      response = html({ status: 401, title: 'Sign in', body: '<form><input type="email"><input type="password"><button>Sign in</button></form>' });
+    } else if (url.pathname.startsWith('/page-gates/')) {
+      const name = url.pathname.split('/').pop();
+      const content = `<h1>Unlocked ${name}</h1>${name === 'page1' ? '<a href="/page-gates/deeper">New protected page</a>' : ''}`;
+      response = String(req.headers.cookie || '').includes(`page_${name}=ok`)
+        ? html({ title: `Unlocked ${name}`, body: content })
+        : html({ status: 401, title: 'Secure', body: `<form class="password-form">
+          <input type="password" name="password"><button type="submit">Unlock</button><div class="error-message"></div>
+          </form><script>
+          window.Static = { SQUARESPACE_CONTEXT: { pageType: 103 } };
+          const form = document.querySelector('form');
+          form.addEventListener('submit', async event => {
+            event.preventDefault();
+            const response = await fetch(location.pathname, { method: 'POST', body: new URLSearchParams(new FormData(form)) });
+            if (!response.ok) { document.querySelector('.error-message').textContent = 'Incorrect password'; return; }
+            ${name === 'transient' ? `document.body.innerHTML = ${JSON.stringify(content)};` : 'location.reload();'}
+          });</script>` });
     } else if (url.pathname === '/many') {
       response = html({
         title: 'Many Protected Pages',
@@ -147,7 +193,10 @@ function createFixtureServer() {
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve(server));
+    server.listen(0, '127.0.0.1', () => {
+      server.passwordAttempts = passwordAttempts;
+      resolve(server);
+    });
   });
 }
 
@@ -266,6 +315,62 @@ async function main() {
       body: JSON.stringify({ url: `${fixtureBase}/many` }),
     });
     assert.strictEqual(manyPrecheck.authCount, 12, 'precheck should inspect more than eight linked protected pages');
+
+    const pageGateSession = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, sampleUrls: [`${fixtureBase}/page-gates/page1`] }),
+    });
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}/action`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'incorrect' }),
+    }), /failed 409: This site did not accept the password/);
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}/action`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'fixture-password' }),
+    });
+    const pageGateReady = await fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}/complete`, {
+      method: 'POST', headers: authHeaders,
+    });
+    assert.strictEqual(pageGateReady.ready, true, 'delayed JavaScript login must finish before verification');
+    assert.ok(!JSON.stringify(pageGateReady).includes('fixture-password'), 'password must not be returned');
+    const pageGateJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, maxPages: 100, options: { authenticatedPages: true }, authSessionId: pageGateSession.sessionId }),
+    });
+    const pageGateResult = await pollScanJob(pageGateJob.jobId, pageGateJob.jobAccessToken);
+    const pageGateNodes = flattenTree(pageGateResult.root);
+    for (const name of [...Array.from({ length: 12 }, (_, index) => `page${index + 1}`), 'deeper']) {
+      const node = pageGateNodes.find((item) => item.url === `${fixtureBase}/page-gates/${name}`);
+      assert.ok(node && !node.authRequired && node.title === `Unlocked ${name}`, `one password must unlock ${name}`);
+    }
+    assert.strictEqual(fixture.passwordAttempts.get('/page-gates/different'), 1, 'a different password must not trigger repeated retries');
+    assert.ok(!fixture.passwordAttempts.has('/page-gates/account'), 'account-login fields must not receive the site password');
+    assert.strictEqual(pageGateResult.partialReason, 'auth_required', 'different login boundaries must remain accurately locked');
+    assert.ok(!JSON.stringify(pageGateResult).includes('fixture-password'), 'scan results must never contain the password');
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}`, { headers: authHeaders }), /failed 404/);
+
+    const transientSession = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, sampleUrls: [`${fixtureBase}/page-gates/transient`] }),
+    });
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${transientSession.sessionId}/action`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'fixture-password' }),
+    }), /failed 409: The page opened, but the site did not keep this login/);
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${transientSession.sessionId}`, { method: 'DELETE', headers: authHeaders });
+
+    const externalForm = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: fixtureBase, sampleUrls: [`${fixtureBase}/external-form`] }),
+    });
+    assert.strictEqual(externalForm.simplePasswordGate, false, 'an external form action must not receive the site password');
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${externalForm.sessionId}/action`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'fixture-password' }),
+    }), /failed 409: This site needs interactive sign-in/);
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${externalForm.sessionId}`, { method: 'DELETE', headers: authHeaders });
+    const getForm = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: fixtureBase, sampleUrls: [`${fixtureBase}/get-form`] }),
+    });
+    assert.strictEqual(getForm.simplePasswordGate, false, 'a native GET form must not put the password in a URL');
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${getForm.sessionId}`, { method: 'DELETE', headers: authHeaders });
 
     const simpleGate = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
       method: 'POST',

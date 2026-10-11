@@ -71,6 +71,7 @@ const {
 } = require('./utils/scanAuthState');
 const { installScanAuthNetworkGuard, isAllowedScanAuthRequest } = require('./utils/scanAuthNetwork');
 const { createScanAuthProxy } = require('./utils/scanAuthProxy');
+const { hasSimplePasswordGate, submitSimpleScanPassword } = require('./utils/scanAuthPassword');
 const {
   getInvalidScanResultMessage,
   getInvalidScanResultReason,
@@ -3189,6 +3190,8 @@ const SCAN_AUTH_FEATURE_ENABLED = parseEnvBool(process.env.SCAN_AUTH_FEATURE_ENA
 const SCAN_AUTH_INTERACTIVE_SUPPORTED = SCAN_AUTH_FEATURE_ENABLED;
 const SCAN_AUTH_VIEWPORT = { width: 1365, height: 900 };
 const scanAuthSessions = new Map();
+const scanAuthStateOwners = new WeakMap();
+const scanAuthContextOwners = new WeakMap();
 let scanAuthProxyPromise = null;
 
 function getScanAuthProxyOptions() {
@@ -3242,6 +3245,9 @@ function createScanAuthSession({ safeUrl, req }) {
     createdAt: now,
     expiresAt: now + SCAN_AUTH_SESSION_TTL_MS,
     storageState: null,
+    password: null,
+    passwordAttempts: new Set(),
+    scanContexts: new Set(),
     status: 'pending',
     pageUrl: safeUrl,
     sampleUrls: [],
@@ -3250,7 +3256,7 @@ function createScanAuthSession({ safeUrl, req }) {
   return session;
 }
 
-function closeScanAuthSession(session) {
+function closeScanAuthBrowser(session) {
   if (!session) return;
   const context = session.browserContext;
   session.page = null;
@@ -3260,6 +3266,16 @@ function closeScanAuthSession(session) {
       console.warn('Scan auth browser cleanup failed:', error.message);
     });
   }
+}
+
+function closeScanAuthSession(session) {
+  if (!session) return;
+  session.password = null;
+  session.storageState = null;
+  session.passwordAttempts.clear();
+  closeScanAuthBrowser(session);
+  session.scanContexts.forEach((context) => context.close().catch(() => {}));
+  session.scanContexts.clear();
 }
 
 function cleanupExpiredScanAuthSessions() {
@@ -3309,7 +3325,7 @@ function getPublicScanOptions(options) {
   return publicOptions;
 }
 
-async function createAuthenticatedBrowserContext(storageState, viewport = { width: 1365, height: 900 }) {
+async function createAuthenticatedBrowserContext(storageState, viewport = { width: 1365, height: 900 }, session = null) {
   const browserInstance = await getBrowser();
   const proxy = await getScanAuthProxyOptions();
   const context = await browserInstance.newContext({
@@ -3326,6 +3342,11 @@ async function createAuthenticatedBrowserContext(storageState, viewport = { widt
   });
   try {
     await installScanAuthNetworkGuard(context, assertSafeUrl);
+    if (session) {
+      scanAuthContextOwners.set(context, session);
+      session.scanContexts.add(context);
+      context.on('close', () => session.scanContexts.delete(context));
+    }
     return context;
   } catch (error) {
     await context.close().catch(() => {});
@@ -3333,20 +3354,9 @@ async function createAuthenticatedBrowserContext(storageState, viewport = { widt
   }
 }
 
-async function hasSimplePasswordGate(page) {
-  return page.evaluate(() => {
-    const visible = (element) => !element.disabled && element.getClientRects().length > 0;
-    const passwords = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
-    if (passwords.length !== 1 || !passwords[0].form) return false;
-    const fields = Array.from(passwords[0].form.querySelectorAll('input, textarea, select'))
-      .filter((element) => element.type !== 'hidden' && visible(element));
-    return fields.length === 1 && fields[0] === passwords[0];
-  }).catch(() => false);
-}
-
 async function startInteractiveScanAuthSession(session) {
   if (!session || session.status === 'ready') return session;
-  const context = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT);
+  const context = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT, session);
   session.browserContext = context;
   context.on('page', async (newPage) => {
     const opener = await newPage.opener().catch(() => null);
@@ -3364,7 +3374,7 @@ async function startInteractiveScanAuthSession(session) {
     session.lastError = error.message || 'Target-site login page did not finish loading';
   }
   session.pageUrl = page.url();
-  session.simplePasswordGate = await hasSimplePasswordGate(page);
+  session.simplePasswordGate = await hasSimplePasswordGate(page, session.origin);
   return session;
 }
 
@@ -3374,13 +3384,13 @@ async function getInteractiveScanAuthPage(req, sessionId) {
   if (!session.browserContext || !session.page || session.page.isClosed()) {
     try {
       if (!session.browserContext) {
-        session.browserContext = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT);
+        session.browserContext = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT, session);
       }
       const page = await session.browserContext.newPage();
       session.page = page;
       await page.goto(session.pageUrl || session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
       session.pageUrl = page.url();
-      session.simplePasswordGate = await hasSimplePasswordGate(page);
+      session.simplePasswordGate = await hasSimplePasswordGate(page, session.origin);
     } catch (error) {
       session.lastError = error.message || 'Target-site login browser closed';
       return null;
@@ -4288,11 +4298,24 @@ async function fetchPageWithBrowserContext(context, url) {
     page = await context.newPage();
     page.setDefaultTimeout(20000);
     page.setDefaultNavigationTimeout(20000);
-    const response = await page.goto(url, {
+    let response = await page.goto(url, {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+    const session = scanAuthContextOwners.get(context);
+    if (session?.password && !isScanAuthSessionExpired(session)
+      && new URL(url).origin === session.origin
+      && !session.passwordAttempts.has(url)
+      && await hasSimplePasswordGate(page, session.origin)
+      && classifyScanResponse({ html: await page.content(), status: response?.status(), url, finalUrl: page.url() }).isAuthStatus) {
+      session.passwordAttempts.add(url);
+      try {
+        response = await submitSimpleScanPassword(page, session.password, session.origin);
+      } catch (error) {
+        if (error.code !== 'scan_auth_password_rejected' && error.code !== 'scan_auth_browser_required') throw error;
+      }
+    }
     const html = await page.content();
     if (Buffer.byteLength(String(html || ''), 'utf8') > SCAN_HTML_RESPONSE_MAX_BYTES) {
       throw new Error('Scan page response too large');
@@ -4984,8 +5007,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const normalizeUrl = (raw) => normalizeScanRedirectUrl(raw, transportUpgrade);
   const requestedSeedUrl = normalizeUrl(startUrl);
   const authStorageState = normalizePlaywrightStorageState(options.authSessionStorageState);
+  const authSession = options.authSessionStorageState && scanAuthStateOwners.get(options.authSessionStorageState);
   const authContext = authStorageState
-    ? await createAuthenticatedBrowserContext(authStorageState)
+    ? await createAuthenticatedBrowserContext(authStorageState, SCAN_AUTH_VIEWPORT, authSession)
     : null;
   let prefetchedRoot = null;
   // Resolve HTTP transport before initializing any discovery queues or scope.
@@ -9413,6 +9437,14 @@ async function processJob(job) {
 
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
 
+      if (payload.options?.authSessionId && !getReadyScanAuthStorageStateForJob({
+        sessionId: payload.options.authSessionId,
+        ownerKey: payload.authSessionOwnerKey,
+        safeUrl: payload.url,
+      })) {
+        throw new Error('The temporary login expired during this scan. Log in again and retry.');
+      }
+
       await progressState.writePromise;
       if (progressState.lastProgress) {
         await updateJobProgress(jobId, progressState.lastProgress);
@@ -9845,18 +9877,20 @@ app.get('/scan-auth/sessions/:id/screenshot', authMiddleware, requireAuth, requi
 
 app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const target = await getInteractiveScanAuthPage(req, req.params.id);
-  if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
+  if (!target) return res.status(410).json({ error: 'This login session expired. Close this dialog and start the scan again.', code: 'scan_auth_expired' });
   const { action, x, y, text, key } = req.body || {};
   try {
     if (action === 'password') {
-      if (!(await hasSimplePasswordGate(target.page))) {
-        return res.status(409).json({ error: 'This page needs browser sign-in instead.' });
-      }
       const password = String(text || '');
       if (!password) return res.status(400).json({ error: 'Enter a site password.' });
-      const field = target.page.locator('input[type="password"]:visible').first();
-      await field.fill(password);
-      await field.press('Enter');
+      if (password.length > 2048) return res.status(400).json({ error: 'This password is too long.' });
+      await submitSimpleScanPassword(target.page, password, target.session.origin);
+      if (scanAuthSessions.get(target.session.id) !== target.session || isScanAuthSessionExpired(target.session)) {
+        return res.status(410).json({ error: 'This login session expired. Start the scan again.', code: 'scan_auth_expired' });
+      }
+      target.session.password = password;
+      target.session.passwordAttempts.clear();
+      target.session.passwordAttempts.add(target.page.url());
     } else if (action === 'click') {
       await target.page.mouse.click(Number(x), Number(y));
     } else if (action === 'type') {
@@ -9867,21 +9901,25 @@ app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireA
       return res.status(400).json({ error: 'Unsupported login action' });
     }
     target.session.pageUrl = target.page.url();
-    target.session.simplePasswordGate = await hasSimplePasswordGate(target.page);
+    target.session.simplePasswordGate = await hasSimplePasswordGate(target.page, target.session.origin);
     return res.json({
       success: true,
       pageUrl: target.session.pageUrl,
       simplePasswordGate: Boolean(target.session.simplePasswordGate),
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Failed to control login browser' });
+    const status = error.code === 'scan_auth_login_timeout' ? 504 : error.code?.startsWith('scan_auth_') ? 409 : 500;
+    return res.status(status).json({
+      error: error.code?.startsWith('scan_auth_') ? error.message : 'Could not connect to this site. Try again or continue without login.',
+      code: error.code?.startsWith('scan_auth_') ? error.code : 'scan_auth_connection_failed',
+    });
   }
 });
 
 app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const session = getScanAuthSessionForRequest(req, req.params.id);
   if (!session || !session.browserContext) {
-    return res.status(404).json({ error: 'Interactive login session not found' });
+    return res.status(410).json({ error: 'This login session expired. Close this dialog and start the scan again.', code: 'scan_auth_expired' });
   }
   try {
     if (!session.sampleUrls.length) {
@@ -9904,12 +9942,16 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
       }
     }
     if (!unlocked) {
-      return res.status(409).json({ error: 'Login has not unlocked the protected pages yet. Finish signing in, then try again.' });
+      return res.status(409).json({ error: 'Access could not be confirmed. Try again or continue without login.', code: 'scan_auth_unverified' });
+    }
+    if (scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session)) {
+      return res.status(410).json({ error: 'This login session expired. Start the scan again.', code: 'scan_auth_expired' });
     }
     session.storageState = scopeScanAuthStorageState(await session.browserContext.storageState(), session);
+    scanAuthStateOwners.set(session.storageState, session);
     session.status = 'ready';
     session.pageUrl = session.page?.url?.() || session.pageUrl || session.seedUrl;
-    closeScanAuthSession(session);
+    closeScanAuthBrowser(session);
     return res.json({
       sessionId: session.id,
       status: session.status,
@@ -9918,7 +9960,7 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
       pageUrl: session.pageUrl,
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Failed to finish target-site login' });
+    return res.status(500).json({ error: 'Could not verify access to this site. Try again or continue without login.', code: 'scan_auth_connection_failed' });
   }
 });
 
