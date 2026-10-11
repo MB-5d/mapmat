@@ -13691,6 +13691,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setScanAuthPrompt({
           url,
           preserveName,
+          authFlow: { ...authFlow, scanOptionsOverride: activeScanOptions },
           authCount: precheck.authCount || 0,
           sampleUrls: precheck.sampleUrls || [],
           interactiveLoginSupported: precheck.interactiveLoginSupported === true,
@@ -14408,7 +14409,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       api.deleteScanAuthSession(prompt.authBrowser.sessionId).catch(() => {});
     }
     setScanAuthPrompt(null);
-    scan(prompt.url, prompt.preserveName, { skipAuthPrecheck: true });
+    scan(prompt.url, prompt.preserveName, { ...prompt.authFlow, skipAuthPrecheck: true });
   };
 
   const closeScanAuthPrompt = () => {
@@ -14441,6 +14442,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (session?.status === 'ready' && session?.sessionId) {
         setScanAuthPrompt(null);
         scan(prompt.url, prompt.preserveName, {
+          ...prompt.authFlow,
           skipAuthPrecheck: true,
           authSessionId: session.sessionId,
         });
@@ -14538,7 +14540,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (requestId !== scanAuthRequestRef.current) return;
       if (!session?.ready) throw new Error('That password did not unlock the protected page.');
       setScanAuthPrompt(null);
-      scan(prompt.url, prompt.preserveName, { skipAuthPrecheck: true, authSessionId: sessionId });
+      scan(prompt.url, prompt.preserveName, { ...prompt.authFlow, skipAuthPrecheck: true, authSessionId: sessionId });
     } catch (err) {
       if (requestId !== scanAuthRequestRef.current) return;
       setScanAuthPrompt((current) => current ? {
@@ -14559,6 +14561,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!session?.ready) throw new Error('Login session was not ready');
       setScanAuthPrompt(null);
       scan(prompt.url, prompt.preserveName, {
+        ...prompt.authFlow,
         skipAuthPrecheck: true,
         authSessionId: sessionId,
       });

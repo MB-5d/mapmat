@@ -65,11 +65,13 @@ function createFixtureServer() {
         passwordAttempts.set(url.pathname, (passwordAttempts.get(url.pathname) || 0) + 1);
         const correct = new URLSearchParams(body).get('password')
           === (url.pathname.endsWith('/different') ? 'different-password' : 'fixture-password');
+        const previousUnlocks = String(req.headers.cookie || '').match(/page_unlocks=([^;]*)/)?.[1]?.split(',') || [];
+        const unlocks = [...new Set([...previousUnlocks, url.pathname.split('/').pop()])];
         setTimeout(() => {
           res.writeHead(correct ? 200 : 401, {
             'content-type': 'application/json',
             ...(correct && !url.pathname.endsWith('/transient') ? {
-              'set-cookie': `page_${url.pathname.split('/').pop()}=ok; Path=/; SameSite=Lax`,
+              'set-cookie': `page_unlocks=${unlocks.join(',')}; Path=/; SameSite=Lax`,
             } : {}),
           });
           res.end(JSON.stringify({ ok: correct }));
@@ -123,7 +125,8 @@ function createFixtureServer() {
     } else if (url.pathname.startsWith('/page-gates/')) {
       const name = url.pathname.split('/').pop();
       const content = `<h1>Unlocked ${name}</h1>${name === 'page1' ? '<a href="/page-gates/deeper">New protected page</a>' : ''}`;
-      response = String(req.headers.cookie || '').includes(`page_${name}=ok`)
+      const unlocks = String(req.headers.cookie || '').match(/page_unlocks=([^;]*)/)?.[1]?.split(',') || [];
+      response = unlocks.includes(name)
         ? html({ title: `Unlocked ${name}`, body: content })
         : html({ status: 401, title: 'Secure', body: `<form class="password-form">
           <input type="password" name="password"><button type="submit">Unlock</button><div class="error-message"></div>
@@ -345,6 +348,9 @@ async function main() {
     assert.ok(!fixture.passwordAttempts.has('/page-gates/account'), 'account-login fields must not receive the site password');
     assert.strictEqual(pageGateResult.partialReason, 'auth_required', 'different login boundaries must remain accurately locked');
     assert.ok(!JSON.stringify(pageGateResult).includes('fixture-password'), 'scan results must never contain the password');
+    for (const name of Array.from({ length: 12 }, (_, index) => `page${index + 1}`)) {
+      assert.strictEqual(fixture.passwordAttempts.get(`/page-gates/${name}`), name === 'page1' ? 2 : 1, `access to ${name} must survive later unlocks`);
+    }
     await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}`, { headers: authHeaders }), /failed 404/);
 
     const transientSession = await fetchJson(`${API_BASE}/scan-auth/sessions`, {

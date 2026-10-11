@@ -3247,6 +3247,7 @@ function createScanAuthSession({ safeUrl, req }) {
     storageState: null,
     password: null,
     passwordAttempts: new Set(),
+    passwordQueue: Promise.resolve(),
     scanContexts: new Set(),
     status: 'pending',
     pageUrl: safeUrl,
@@ -4309,12 +4310,24 @@ async function fetchPageWithBrowserContext(context, url) {
       && !session.passwordAttempts.has(url)
       && await hasSimplePasswordGate(page, session.origin)
       && classifyScanResponse({ html: await page.content(), status: response?.status(), url, finalUrl: page.url() }).isAuthStatus) {
-      session.passwordAttempts.add(url);
-      try {
-        response = await submitSimpleScanPassword(page, session.password, session.origin);
-      } catch (error) {
-        if (error.code !== 'scan_auth_password_rejected' && error.code !== 'scan_auth_browser_required') throw error;
-      }
+      // Some sites replace one shared cookie with the full list of unlocked pages.
+      // Parallel submissions can overwrite each other's newly granted access.
+      const unlock = session.passwordQueue.then(async () => {
+        if (scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session) || !session.password) {
+          throw Object.assign(new Error('The temporary login expired. Log in again before scanning.'), { status: 410 });
+        }
+        if (session.passwordAttempts.has(url)) return;
+        session.passwordAttempts.add(url);
+        try {
+          response = await submitSimpleScanPassword(page, session.password, session.origin);
+          // A successful login may be reused again if the site later drops access.
+          session.passwordAttempts.delete(url);
+        } catch (error) {
+          if (error.code !== 'scan_auth_password_rejected' && error.code !== 'scan_auth_browser_required') throw error;
+        }
+      });
+      session.passwordQueue = unlock.catch(() => {});
+      await unlock;
     }
     const html = await page.content();
     if (Buffer.byteLength(String(html || ''), 'utf8') > SCAN_HTML_RESPONSE_MAX_BYTES) {
@@ -9890,7 +9903,6 @@ app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireA
       }
       target.session.password = password;
       target.session.passwordAttempts.clear();
-      target.session.passwordAttempts.add(target.page.url());
     } else if (action === 'click') {
       await target.page.mouse.click(Number(x), Number(y));
     } else if (action === 'type') {

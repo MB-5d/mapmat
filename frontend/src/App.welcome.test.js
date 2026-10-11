@@ -18,6 +18,7 @@ vi.mock('./api', () => ({
   getMapInvitePreview: vi.fn(),
   getMapAccessPreview: vi.fn(),
   getScanEntitlementPreview: vi.fn(),
+  createScanJob: vi.fn(),
   precheckScanAuth: vi.fn(),
   createScanAuthSession: vi.fn(),
   getScanAuthScreenshot: vi.fn(),
@@ -343,6 +344,39 @@ describe('App blank home and welcome modal', () => {
     expect(getButton('Use this login')).toBeUndefined();
     expect(api.deleteScanAuthSession).toHaveBeenCalledWith('unsupported-session');
     expect(api.getScanAuthScreenshot).not.toHaveBeenCalled();
+  });
+
+  test.each(['password', 'without login'])('scan limit acknowledgement survives continuing %s', async (choice) => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.getScanEntitlementPreview.mockResolvedValue({
+      entitlement: { requestedPages: 50000, allowedPages: 100, capped: true },
+    });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, authCount: 10, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'limit-session', status: 'interactive', simplePasswordGate: true });
+    api.sendScanAuthAction.mockResolvedValue({ success: true });
+    api.completeScanAuthSession.mockResolvedValue({ ready: true });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped after scan creation'), { status: 400 }));
+    await renderApp();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-bar__input'), 'https://example.com');
+      await flushAsync();
+    });
+    await click(getButton('Scan'));
+    expect(container.textContent).toContain('Scan limits');
+    await click(getButton('Continue'));
+    expect(container.textContent).toContain('At least 10 pages');
+    if (choice === 'password') {
+      await click(getButton('Enter password'));
+      await act(async () => { changeValue(container.querySelector('#scan-site-password'), 'test-password'); });
+      await click(getButton('Unlock and scan'));
+    } else {
+      await click(getButton('Scan without login'));
+    }
+    expect(api.createScanJob).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain('Scan limits');
+    expect(api.createScanJob.mock.calls[0][0].options.authenticatedPages).toBe(true);
+    if (choice === 'password') expect(api.createScanJob.mock.calls[0][0].authSessionId).toBe('limit-session');
   });
 
   test('closing during password submission prevents the delayed response from starting a scan', async () => {
