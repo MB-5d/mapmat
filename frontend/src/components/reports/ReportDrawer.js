@@ -16,6 +16,7 @@ import {
 
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
+import CaptureImage from '../ui/CaptureImage';
 import Chip from '../ui/Chip';
 import IconButton from '../ui/IconButton';
 import { MenuItem, MenuPanel, MenuScrollArea } from '../ui/Menu';
@@ -857,7 +858,7 @@ const ReportDrawer = ({
                     <div className={`report-detail-main ${entry.thumbnailUrl ? '' : 'report-detail-main--no-thumb'}`}>
                       {entry.thumbnailUrl ? (
                         <div className="report-thumb">
-                          <img src={entry.thumbnailUrl} alt={entry.title || entry.url} />
+                          <CaptureImage src={entry.thumbnailUrl} alt={entry.title || entry.url} />
                         </div>
                       ) : null}
                       <div className="report-detail-right">

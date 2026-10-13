@@ -126,6 +126,8 @@ const {
   removeScreenshotWorkspace,
 } = require('./utils/screenshotWorkspace');
 const { dismissScreenshotObstructions } = require('./utils/screenshotPreparation');
+const { createPrivateScanCaptureStore, createPrivateScanCaptureHandler, isPrivateScanCaptureKey } = require('./utils/privateScanCapture');
+const { captureAuthenticatedScanResult } = require('./utils/authenticatedScanCapture');
 const {
   ACTIVITY_SCOPES,
   ACTIVITY_TYPES,
@@ -258,13 +260,24 @@ app.use((err, req, res, next) => {
 });
 
 const SCREENSHOT_DIR = SCREENSHOT_LOCAL_DIR;
+let privateScanCaptureStore = null;
+function getPrivateScanCaptureStore() {
+  if (!privateScanCaptureStore) {
+    privateScanCaptureStore = createPrivateScanCaptureStore({
+      encryptionKey: process.env.PRIVATE_SCAN_CAPTURE_KEY,
+      saveObject: saveScreenshotObject,
+      readObject: readScreenshotObject,
+    });
+  }
+  return privateScanCaptureStore;
+}
 if (!fs.existsSync(SCREENSHOT_DIR)) {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 }
 app.get(`${SCREENSHOT_PUBLIC_BASE}/:filename`, async (req, res) => {
   try {
     const key = extractScreenshotStorageKey(req.params.filename);
-    if (!key) return res.status(404).send('Not found');
+    if (!key || isPrivateScanCaptureKey(key)) return res.status(404).send('Not found');
 
     const object = await readScreenshotObject(key);
     if (!object?.buffer?.length) return res.status(404).send('Not found');
@@ -285,6 +298,10 @@ app.use('/auth', authRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api', apiRouter);
+app.get('/api/private-scan-captures/:filename', authMiddleware, requireAuth, createPrivateScanCaptureHandler({
+  getStore: getPrivateScanCaptureStore,
+  enabled: () => SCAN_AUTH_FEATURE_ENABLED,
+}));
 registerImageCaptureRoutes(app);
 app.use('/api', collaborationRouter);
 app.use('/api', realtimeRouter);
@@ -4292,7 +4309,7 @@ async function fetchPage(url, extraHeaders = {}, timeoutMs = 20000) {
   };
 }
 
-async function fetchPageWithBrowserContext(context, url) {
+async function fetchPageWithBrowserContext(context, url, capturePage = null) {
   const startedAt = Date.now();
   let page = null;
   try {
@@ -4334,6 +4351,7 @@ async function fetchPageWithBrowserContext(context, url) {
       throw new Error('Scan page response too large');
     }
     const finalUrl = normalizeUrl(page.url() || response?.url?.() || url);
+    if (capturePage) await capturePage(page, { html, status: response?.status(), finalUrl });
     return {
       html,
       status: response?.status?.() || 0,
@@ -5024,6 +5042,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const authContext = authStorageState
     ? await createAuthenticatedBrowserContext(authStorageState, SCAN_AUTH_VIEWPORT, authSession)
     : null;
+  if (authSession && options._authenticatedCapture) authSession.captureContext = authContext;
   let prefetchedRoot = null;
   // Resolve HTTP transport before initializing any discovery queues or scope.
   // Reuse the response when crawling the root so it consumes one page allowance.
@@ -8745,7 +8764,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     ...scanDiagnostics.phaseTimingsMs,
   });
 
-  if (authContext) {
+  if (authContext && !options._authenticatedCapture) {
     await authContext.close().catch(() => {});
   }
   await Promise.all(
@@ -9412,8 +9431,10 @@ async function processJob(job) {
         throw new Error('The temporary login was lost. Log in again and retry this scan.');
       }
       const progressCb = (progress) => {
+        const phaseChanged = progress.phase !== progressState.lastProgress?.phase;
         const nextProgress = {
           ...progress,
+          ...(payload.authenticatedCaptureType && progress.final ? { final: false } : {}),
           sequence: ++progressState.sequence,
         };
         progressState.lastProgress = nextProgress;
@@ -9421,7 +9442,7 @@ async function processJob(job) {
         const scanned = Math.max(0, Number(nextProgress.scanned || 0) || 0);
         const mapped = Math.max(0, Number(nextProgress.mapped || 0) || 0);
         const mappedChanged = mapped !== progressState.lastMapped;
-        const forceUpdate = nextProgress?.final === true;
+        const forceUpdate = nextProgress?.final === true || phaseChanged;
         if (!forceUpdate && scanned - progressState.lastScanned < 5 && !mappedChanged && now - progressState.lastUpdate < 500) {
           return;
         }
@@ -9442,6 +9463,7 @@ async function processJob(job) {
         {
           ...(payload.options || {}),
           ...(authSessionStorageState ? { authSessionStorageState } : {}),
+          _authenticatedCapture: Boolean(payload.authenticatedCaptureType && authSessionStorageState),
           _entitlementCappedScan: Boolean(payload.entitlement?.capped),
         },
         progressCb,
@@ -9479,6 +9501,60 @@ async function processJob(job) {
       if (failureError) {
         await markJobFailed(jobId, failureError);
         return;
+      }
+      if (payload.authenticatedCaptureType && authSessionStorageState) {
+        progressCb({ ...(progressState.lastProgress || {}), final: false, phase: 'authenticated_capture' });
+        const session = scanAuthSessions.get(payload.options.authSessionId);
+        const store = getPrivateScanCaptureStore();
+        const verifySession = async () => {
+          if (!session || scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session)) {
+            throw Object.assign(new Error('The temporary login expired before capture finished. Log in again.'), { code: 'scan_auth_expired' });
+          }
+          const status = await readJobStatus();
+          if (status === JOB_STATUS.canceled) throw Object.assign(new Error('Authenticated capture canceled.'), { code: 'scan_auth_canceled' });
+          return status === JOB_STATUS.stopping;
+        };
+        const summary = await captureAuthenticatedScanResult({
+          result, origin: session.origin, captureType: payload.authenticatedCaptureType,
+          limit: payload.authenticatedCaptureLimit, shouldStop: verifySession,
+          capture: async (url) => {
+            let asset;
+            let captureStage = 'navigation';
+            try {
+            await fetchPageWithBrowserContext(session.captureContext, await assertSafeUrl(url), async (page, response) => {
+              captureStage = 'access_verification';
+              await verifySession();
+              if (new URL(response.finalUrl).origin !== session.origin || response.status >= 400
+                || classifyScanResponse({ ...response, url }).isAuthStatus || await hasSimplePasswordGate(page, session.origin)) throw new Error('Page remains protected');
+              await page.setViewportSize({ width: SCREENSHOT_THUMB_VIEWPORT_WIDTH, height: SCREENSHOT_THUMB_VIEWPORT_HEIGHT });
+              captureStage = 'page_preparation';
+              await dismissScreenshotObstructions(page);
+              await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE });
+              await page.evaluate(() => Promise.race([
+                document.fonts?.ready || Promise.resolve(),
+                new Promise((resolve) => setTimeout(resolve, 1500)),
+              ]));
+              if (payload.authenticatedCaptureType === 'full' && await page.evaluate(() => document.documentElement.scrollHeight) > SCREENSHOT_FULL_MAX_HEIGHT) throw new Error('Full capture exceeds the height limit');
+              captureStage = 'screenshot';
+              const buffer = await page.screenshot({ type: 'jpeg', quality: SCREENSHOT_FULL_JPEG_QUALITY,
+                fullPage: payload.authenticatedCaptureType === 'full', animations: 'disabled', timeout: 15000 });
+              await verifySession();
+              captureStage = 'private_storage';
+              asset = await store.save({ ownerKey: session.ownerKey, buffer });
+            });
+            return asset;
+            } catch (error) {
+              error.captureStage = captureStage;
+              error.captureReason = String(error.message || '').match(/net::ERR_[A-Z_]+/)?.[0]
+                || (/Target.*closed|browser.*closed|context.*closed/i.test(error.message || '') ? 'browser_closed'
+                  : error.name === 'TimeoutError' ? 'timeout' : 'failed');
+              throw error;
+            }
+          },
+        });
+        await verifySession();
+        await debitImageCaptureCreditsForJobAsync({ jobId, jobUserId: job.user_id, result: summary });
+        await progressState.writePromise;
       }
       await debitScanPagesForJobAsync({
         jobId,
@@ -10205,7 +10281,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
 
 // Background scan jobs
 app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan_job'), async (req, res) => {
-  const { url, maxPages, maxDepth, options, authSessionId } = req.body || {};
+  const { url, maxPages, maxDepth, options, authSessionId, authenticatedCaptureType } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   try {
@@ -10221,6 +10297,20 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
     }
     if (readyAuthSession && !JOB_WORKER_TYPES.includes(JOB_TYPES.scan)) {
       return res.status(503).json({ error: 'Authenticated scanning is unavailable on this server' });
+    }
+    let authenticatedCaptureLimit = 0;
+    if (authenticatedCaptureType) {
+      if (!readyAuthSession || !['thumb', 'full'].includes(authenticatedCaptureType)) {
+        return res.status(400).json({ error: 'A temporary login and valid capture type are required.' });
+      }
+      if (process.env.DISABLE_SCREENSHOTS === 'true') return res.status(503).json({ error: 'Screenshots are disabled.' });
+      try { getPrivateScanCaptureStore(); } catch {
+        return res.status(503).json({ error: 'Private screenshot storage is not configured.' });
+      }
+      const cost = getScreenshotCreditCost({ type: authenticatedCaptureType });
+      const budget = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.screenshotCapture, { credits: cost });
+      if (!budget) return;
+      authenticatedCaptureLimit = budget.entitlement.unlimited ? 100 : Math.min(100, Math.floor(budget.entitlement.remaining / cost));
     }
     const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
     if (!scanEntitlement.allowed) {
@@ -10263,6 +10353,8 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
           ...(readyAuthSession ? { authSessionId: readyAuthSession.id } : {}),
         },
         authSessionOwnerKey: readyAuthSession?.ownerKey || null,
+        authenticatedCaptureType: authenticatedCaptureType || null,
+        authenticatedCaptureLimit,
         accessToken: jobAccessToken,
         entitlement: entitlementPayload,
         idempotencyKey,

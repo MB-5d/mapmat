@@ -5,6 +5,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 
 const BACKEND_PORT = Number(process.env.SCAN_AUTH_BACKEND_PORT || 4326);
 const API_BASE = process.env.API_BASE || `http://127.0.0.1:${BACKEND_PORT}`;
@@ -252,6 +253,8 @@ function spawnBackend(tempDir) {
       SCAN_AUTH_FEATURE_ENABLED: 'true',
       ALLOW_PRIVATE_NETWORKS: 'true',
       SCREENSHOT_STORAGE_PROVIDER: 'local',
+      SCREENSHOT_STORAGE_DIR: path.join(tempDir, 'captures'),
+      PRIVATE_SCAN_CAPTURE_KEY: crypto.randomBytes(32).toString('hex'),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -336,10 +339,18 @@ async function main() {
     assert.ok(!JSON.stringify(pageGateReady).includes('fixture-password'), 'password must not be returned');
     const pageGateJob = await fetchJson(`${API_BASE}/scan-jobs`, {
       method: 'POST', headers: authHeaders,
-      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, maxPages: 100, options: { authenticatedPages: true }, authSessionId: pageGateSession.sessionId }),
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, maxPages: 100, options: { authenticatedPages: true }, authSessionId: pageGateSession.sessionId, authenticatedCaptureType: 'thumb' }),
     });
     const pageGateResult = await pollScanJob(pageGateJob.jobId, pageGateJob.jobAccessToken);
     const pageGateNodes = flattenTree(pageGateResult.root);
+    assert.ok(pageGateResult.authenticatedCaptureSummary.captured >= 13, 'authenticated thumbnails must be captured before the login is deleted');
+    const privateNode = pageGateNodes.find((node) => node.url === `${fixtureBase}/page-gates/page2`);
+    assert.ok(privateNode.thumbnailUrl?.startsWith('/api/private-scan-captures/'));
+    const privateImage = await fetchRaw(`${API_BASE}${privateNode.thumbnailUrl}`, { headers: authHeaders });
+    assert.strictEqual(privateImage.headers.get('content-type'), 'image/jpeg');
+    assert.strictEqual(privateImage.headers.get('cache-control'), 'private, no-store');
+    assert.strictEqual((await fetch(`${API_BASE}${privateNode.thumbnailUrl}`)).status, 401);
+    assert.strictEqual((await fetch(`${API_BASE}/screenshots/${privateNode.thumbnailUrl.split('/').pop()}`)).status, 404);
     for (const name of [...Array.from({ length: 12 }, (_, index) => `page${index + 1}`), 'deeper']) {
       const node = pageGateNodes.find((item) => item.url === `${fixtureBase}/page-gates/${name}`);
       assert.ok(node && !node.authRequired && node.title === `Unlocked ${name}`, `one password must unlock ${name}`);

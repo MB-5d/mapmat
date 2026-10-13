@@ -16,6 +16,7 @@ import NodeActionBar from './NodeActionBar';
 import NodeBadge from './NodeBadge';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
+import CaptureImage from '../ui/CaptureImage';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
@@ -359,7 +360,7 @@ const NodeCard = ({
           )}
           {hasThumb && shouldLoadThumb && !thumbError ? (
             <>
-              <img
+              <CaptureImage
                 className="thumb-img"
                 src={thumb}
                 alt={node.title}

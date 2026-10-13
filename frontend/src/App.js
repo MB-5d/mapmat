@@ -11017,7 +11017,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       setThumbnailScopeIds(new Set());
       setShowThumbnails(true);
       setShowImageMenu(false);
-      showToast('No pages with URLs to capture', 'info');
+      showToast(collectAllNodesWithOrphans(root, orphans).some((node) => node.authPreviewUnavailable)
+        ? 'Run an authenticated rescan to capture or refresh protected images.' : 'No pages with URLs to capture', 'info');
       return;
     }
     if (targetMode === 'captured' && candidates.length === 0) {
@@ -11497,7 +11498,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       ? collectAllNodesWithOrphans(root, orphans).find((node) => node.id === nodeId)
       : null;
     if (selectedPage?.authPreviewUnavailable) {
-      showToast('Previews are unavailable for login-protected pages in this beta.', 'info');
+      showToast('Run an authenticated rescan to capture or refresh protected images.', 'info');
       return;
     }
     const normalizedCaptureType = captureType === 'thumb' ? 'thumb' : 'full';
@@ -11627,7 +11628,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     const { candidates: targets, total, cachedCount } = getFullScreenshotCandidates(scope, invalidIds, targetMode);
     if (total === 0) {
       setShowImageMenu(false);
-      showToast('No pages with URLs to capture', 'info');
+      showToast(collectAllNodesWithOrphans(root, orphans).some((node) => node.authPreviewUnavailable)
+        ? 'Run an authenticated rescan to capture or refresh protected images.' : 'No pages with URLs to capture', 'info');
       return;
     }
     if (targetMode === 'captured' && targets.length === 0) {
@@ -13730,6 +13732,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             maxPages: maxPagesForRequest,
             options: scanConfig,
             ...(authFlow.authSessionId ? { authSessionId: authFlow.authSessionId } : {}),
+            ...(authFlow.authSessionId ? { authenticatedCaptureType: 'thumb' } : {}),
           });
           break;
         } catch (error) {
@@ -14015,6 +14018,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       } else if (normalizedPartialReason === 'auth_required') {
         const locked = data.blockedSections?.filter((section) => section.reason === 'auth_required').length || 0;
         showToast(`Partial scan: ${locked} page${locked === 1 ? '' : 's'} still require${locked === 1 ? 's' : ''} login.`, 'warning');
+      } else if (data.authenticatedCaptureSummary?.failed > 0) {
+        showToast(`Scan finished, but ${data.authenticatedCaptureSummary.failed} image captures failed. ${data.authenticatedCaptureSummary.captured} captured.`, 'warning');
       } else if (data.blockedSections?.length) {
         const blockedUrl = data.blockedSections[0]?.url || hostname;
         showToast(`Scan complete. Crawling was restricted at ${blockedUrl}.`, 'warning');
