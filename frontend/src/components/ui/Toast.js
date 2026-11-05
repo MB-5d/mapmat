@@ -41,7 +41,7 @@ const Toast = ({
 
   return (
     <StatusAlert
-      className={classNames('toast', `toast-${resolvedType}`, className)}
+      className={classNames('toast', `toast-${resolvedType}`, action && 'toast--actionable', className)}
       tone={resolvedType === 'loading' ? 'loading' : resolvedTone}
       iconSize={18}
       title={title}
