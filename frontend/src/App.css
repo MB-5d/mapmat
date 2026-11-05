@@ -7996,6 +7996,29 @@ body {
   pointer-events: auto;
 }
 
+.toast--actionable .ui-status-alert__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast--actionable .ui-status-alert__summary {
+  display: block;
+  max-height: none;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+@media (max-width: 480px) {
+  .toast--actionable {
+    flex-wrap: wrap;
+  }
+
+  .toast--actionable .ui-status-alert__actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .toast-close.ui-icon-btn {
   width: 24px;
   height: 24px;
