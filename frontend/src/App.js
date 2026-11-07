@@ -215,6 +215,7 @@ import {
   buildPlanCardsFromBillingCatalog,
   buildPageCreditPackCards,
   buildScreenshotCreditPackCards,
+  getSubscriptionAccessNotice,
 } from './utils/billingPlans';
 import {
   buildConnectorBezier,
@@ -5486,16 +5487,39 @@ export default function App({ currentRoute, navigateToRoute }) {
     setEntitlementLockModal({ title, message, actionLabel, actionContext });
   }, []);
 
+  const showSubscriptionNotice = useCallback((entitlements = currentUser?.entitlements) => {
+    const canManageBilling = !entitlements?.account?.ownerUserId
+      || entitlements.account.ownerUserId === currentUser?.id;
+    const notice = getSubscriptionAccessNotice(entitlements, canManageBilling);
+    if (!notice) return;
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToast({ ...notice, kind: 'subscription', type: 'error', persistent: true });
+  }, [currentUser?.entitlements, currentUser?.id]);
+
+  const subscriptionNoticeKey = getSubscriptionAccessNotice(currentUser?.entitlements)
+    ? `${currentUser?.id}:${currentUser?.entitlements?.account?.id}:${currentUser?.entitlements?.account?.state}:${currentUser?.entitlements?.account?.stripeSubscriptionStatus}:${isPrimaryBillingOwner}`
+    : null;
+  const shownSubscriptionNoticeRef = useRef(null);
+  useEffect(() => {
+    if (!subscriptionNoticeKey) {
+      shownSubscriptionNoticeRef.current = null;
+      setToast((current) => current?.kind === 'subscription' ? null : current);
+    } else if (shownSubscriptionNoticeRef.current !== subscriptionNoticeKey) {
+      shownSubscriptionNoticeRef.current = subscriptionNoticeKey;
+      showSubscriptionNotice();
+    }
+  }, [subscriptionNoticeKey, showSubscriptionNotice]);
+
   const handleEntitlementError = useCallback((error, fallbackMessage = 'Your current account does not allow this action.') => {
     if (!isEntitlementError(error)) return false;
     syncEntitlementsFromError(error);
     const code = getEntitlementErrorCode(error);
     const entitlements = error?.payload?.entitlements || currentUser?.entitlements || null;
     if (code === 'ACCOUNT_ARCHIVED' || entitlements?.archived) {
-      showEntitlementLock({
-        title: 'Account archived',
-        message: 'This account is archived. Existing work can still be viewed, but new scans, screenshots, downloads, invites, and shares are locked.',
-      });
+      showSubscriptionNotice({ ...entitlements, archived: true });
       return true;
     }
     showEntitlementLock({
@@ -5503,17 +5527,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       message: error?.message || error?.payload?.error || fallbackMessage,
     });
     return true;
-  }, [currentUser?.entitlements, showEntitlementLock, syncEntitlementsFromError]);
+  }, [currentUser?.entitlements, showEntitlementLock, showSubscriptionNotice, syncEntitlementsFromError]);
 
-  const guardAccountCanCreateWork = useCallback((label = 'This action') => {
+  const guardAccountCanCreateWork = useCallback(() => {
     const entitlements = currentUser?.entitlements || null;
     if (!entitlements?.archived) return true;
-    showEntitlementLock({
-      title: 'Account archived',
-      message: `${label} is locked while this account is archived. Existing work can still be viewed from the account.`,
-    });
+    showSubscriptionNotice(entitlements);
     return false;
-  }, [currentUser?.entitlements, showEntitlementLock]);
+  }, [currentUser?.entitlements, showSubscriptionNotice]);
 
   const getClientScanEntitlementPreview = useCallback((requestedPages = DEFAULT_SCAN_REQUESTED_PAGES, context = {}) => {
     const effectiveUser = context.user || currentUser || null;
@@ -13552,6 +13573,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     const effectiveCurrentUser = authFlow.currentUser || currentUser;
     const effectiveIsLoggedIn = Boolean(authFlow.currentUser) || isLoggedIn;
+    if (effectiveCurrentUser?.entitlements?.archived) {
+      showSubscriptionNotice(effectiveCurrentUser.entitlements);
+      return;
+    }
     const activeScanOptions = authFlow.scanOptionsOverride
       ? { ...scanOptions, ...authFlow.scanOptionsOverride }
       : scanOptions;
@@ -19929,7 +19954,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canvasGridSize = canvasGridMetrics.size;
   const canvasGridDotRadius = canvasGridMetrics.dotRadius;
   const scanLockedByArchive = Boolean(currentUser?.entitlements?.archived);
-  const archiveScanTitle = 'New scans are locked while this account is archived';
+  const archiveScanTitle = 'Renew your subscription to start a new scan';
   const showAppHomeGrid = !hasMap
     && currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'home';
@@ -20145,7 +20170,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
         onScan={scan}
         scanLabel={canTopbarRescan ? 'Update' : 'Scan'}
-        scanDisabled={isDefaultWorkspaceScanModalVisible || loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !canTopbarRescan)}
+        scanDisabled={isDefaultWorkspaceScanModalVisible || loading || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !canTopbarRescan)}
         scanTitle={isDefaultWorkspaceScanModalVisible ? 'Scan in progress' : scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasEntitlementRescanUpgrade ? "Rescan with current plan limits" : hasTopbarRescanChanges ? "Update scan with changed options" : "Change scan options to update"}
         scanControlsDisabled={isDefaultWorkspaceScanModalVisible || loading}
         optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap || (hasMap && !!currentMap?.id)}
@@ -20318,7 +20343,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
                     onScan={scan}
                     scanLabel="Scan"
-                    scanDisabled={isDefaultWorkspaceScanModalVisible || loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput)}
+                    scanDisabled={isDefaultWorkspaceScanModalVisible || loading || isImportedMap || !sanitizeUrl(urlInput)}
                     scanTitle={isDefaultWorkspaceScanModalVisible ? 'Scan in progress' : scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
                     controlsDisabled={isDefaultWorkspaceScanModalVisible || loading}
                     optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap}
@@ -22442,9 +22467,28 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       {toast && (
         <Toast
+          title={toast.title}
           message={toast.message}
           type={toast.type}
           onDismiss={dismissToast}
+          action={toast.kind === 'subscription' && toast.action ? (
+            <Button
+              type="secondary"
+              buttonStyle="mono"
+              size="sm"
+              loading={billingActionKey === 'portal:subscription-renewal'}
+              onClick={() => {
+                if (toast.action === 'portal') {
+                  handleBillingPortal('subscription-renewal');
+                } else {
+                  dismissToast();
+                  openPlansModal('subscription-renewal');
+                }
+              }}
+            >
+              {toast.actionLabel}
+            </Button>
+          ) : null}
         />
       )}
 

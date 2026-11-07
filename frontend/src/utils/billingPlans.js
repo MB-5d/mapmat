@@ -5,6 +5,22 @@ export const BILLING_CYCLE_OPTIONS = [
 
 export const PAID_BILLING_PLAN_KEYS = ['pro', 'studio', 'agency'];
 
+export function getSubscriptionAccessNotice(entitlements, canManageBilling = true) {
+  const account = entitlements?.account;
+  const paused = account?.stripeSubscriptionStatus === 'paused' || account?.state === 'paused';
+  const archived = entitlements?.archived || ['archived', 'free_limited'].includes(account?.state);
+  if (!paused && !archived) return null;
+
+  return {
+    title: paused ? 'Subscription paused' : 'Subscription inactive',
+    message: canManageBilling
+      ? (paused ? 'Manage billing to resume your subscription.' : 'Renew to create new work. Existing maps are still available.')
+      : 'Ask the account owner to reactivate your subscription.',
+    actionLabel: canManageBilling ? (paused ? 'Manage billing' : 'Renew subscription') : null,
+    action: canManageBilling ? (paused ? 'portal' : 'plans') : null,
+  };
+}
+
 const PLAN_ORDER = ['free', 'pro', 'studio', 'agency'];
 const SCREENSHOT_CREDITS_METER = 'screenshot_credits';
 const PAGE_CREDITS_METERS = new Set(['active_pages', 'crawl_pages']);

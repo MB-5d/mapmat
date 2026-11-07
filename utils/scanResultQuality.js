@@ -37,6 +37,23 @@ function normalizeProgress(progress = {}) {
   };
 }
 
+function flagScanScopeDiscoveryFailure(result) {
+  const diagnostics = result?.scanDiagnostics || {};
+  if (Number(diagnostics.rootStatus) >= 200 && Number(diagnostics.rootStatus) < 300
+    && diagnostics.rootClassification === 'active'
+    && toNonNegativeInteger(diagnostics.rootAllowedLinks) === 0
+    && toNonNegativeInteger(diagnostics.rootSameSiteLinksRejectedByScope) > 0) {
+    // Fallback guesses do not prove that real site navigation was discovered.
+    diagnostics.discoveryScopeFailed = true;
+    if (result.partialReason && result.partialReason !== 'root_discovery_failed') {
+      diagnostics.previousPartialReason = result.partialReason;
+    }
+    result.partial = true;
+    result.partialReason = 'root_discovery_failed';
+  }
+  return result;
+}
+
 const ROOT_ONLY_RECLASSIFIABLE_PARTIAL_REASONS = new Set([
   'entitlement_cap',
   'stopped_by_user',
@@ -149,4 +166,5 @@ module.exports = {
   getInvalidScanResultReason,
   getRootOnlyCollapseReasons,
   hardenCollapsedScanResult,
+  flagScanScopeDiscoveryFailure,
 };

@@ -17,6 +17,12 @@ vi.mock('./api', () => ({
   getPendingAccessRequests: vi.fn(),
   getMapInvitePreview: vi.fn(),
   getMapAccessPreview: vi.fn(),
+  getScanEntitlementPreview: vi.fn(),
+  getBillingConfig: vi.fn(),
+  createBillingPortalSession: vi.fn(),
+  refreshBillingAccount: vi.fn(),
+  createScanJob: vi.fn(),
+  precheckScanAuth: vi.fn(),
   login: vi.fn(),
   signup: vi.fn(),
 }));
@@ -111,6 +117,7 @@ describe('App blank home and welcome modal', () => {
     window.localStorage.clear();
 
     api.getMe.mockRejectedValue(new Error('Not authenticated'));
+    api.getBillingConfig.mockResolvedValue({ enabled: true, plans: [], addOns: [] });
     api.getShare.mockResolvedValue({ share: {} });
     api.getShareStatus.mockResolvedValue({ share: {} });
     api.getProjects.mockResolvedValue({ projects: [] });
@@ -223,6 +230,104 @@ describe('App blank home and welcome modal', () => {
     expect(getWelcomeCloseButton()).not.toBeNull();
     expect(getButton('Close')).toBeUndefined();
     expect(container.querySelector('.welcome-modal-copy h2')).toBeNull();
+  });
+
+  test('archived account gets a persistent error toast with a working renewal action', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: {
+      ...defaultUser,
+      entitlements: { archived: true, account: { id: 'account-1', ownerUserId: defaultUser.id, state: 'archived' } },
+    } });
+    await renderApp();
+
+    const toast = container.querySelector('.toast-error');
+    expect(toast?.getAttribute('role')).toBe('alert');
+    expect(toast?.textContent).toContain('Subscription inactive');
+    expect(getButton('Renew subscription')).toBeDefined();
+    await click(getButton('Renew subscription'));
+    expect(container.querySelector('.plans-modal')).not.toBeNull();
+    expect(api.getBillingConfig).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.toast')).toBeNull();
+  });
+
+  test('archived scan attempts restore the renewal toast without starting a scan', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: {
+      ...defaultUser,
+      entitlements: { archived: true, account: { ownerUserId: defaultUser.id, state: 'archived' } },
+    } });
+    await renderApp();
+    await click(container.querySelector('.toast button[aria-label="Dismiss notification"]'));
+    expect(container.querySelector('.toast')).toBeNull();
+    await act(async () => {
+      changeValue(container.querySelector('.blank-scan-shell input'), 'https://example.com');
+      await flushAsync();
+    });
+    expect(getButton('Scan').disabled).toBe(false);
+    await click(getButton('Scan'));
+    expect(container.querySelectorAll('.toast')).toHaveLength(1);
+    expect(getButton('Renew subscription')).toBeDefined();
+    expect(api.getScanEntitlementPreview).not.toHaveBeenCalled();
+    expect(api.precheckScanAuth).not.toHaveBeenCalled();
+    expect(api.createScanJob).not.toHaveBeenCalled();
+  });
+
+  test('paused subscription opens billing and reports a portal failure', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: {
+      ...defaultUser,
+      entitlements: { archived: false, account: { ownerUserId: defaultUser.id, state: 'active', stripeSubscriptionStatus: 'paused' } },
+    } });
+    api.createBillingPortalSession.mockRejectedValue(new Error('Billing is temporarily unavailable. Please try again.'));
+    await renderApp();
+    expect(container.querySelector('.toast')?.textContent).toContain('Subscription paused');
+    await click(getButton('Manage billing'));
+    expect(api.createBillingPortalSession).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.toast-error')?.textContent).toContain('Billing is temporarily unavailable. Please try again.');
+  });
+
+  test('an archived member is directed to the owner without billing access', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: {
+      ...defaultUser,
+      entitlements: { archived: true, account: { ownerUserId: 'another-user', state: 'archived' } },
+    } });
+    await renderApp();
+    expect(container.querySelector('.toast')?.textContent).toContain('Ask the account owner');
+    expect(getButton('Renew subscription')).toBeUndefined();
+    expect(getButton('Manage billing')).toBeUndefined();
+  });
+
+  test('renewal clears the inactive notice after the account refreshes', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: {
+      ...defaultUser,
+      entitlements: { archived: true, account: { ownerUserId: defaultUser.id, state: 'archived' } },
+    } });
+    await renderApp();
+    expect(getButton('Renew subscription')).toBeDefined();
+    const entitlements = { archived: false, account: { ownerUserId: defaultUser.id, state: 'active' } };
+    api.getMe.mockResolvedValue({ user: { ...defaultUser, entitlements } });
+    api.refreshBillingAccount.mockResolvedValue({ refreshed: true, entitlements });
+    await renderApp({
+      ...baseRoute,
+      pathname: '/app',
+      search: '?billing=success',
+      searchParams: new URLSearchParams('billing=success'),
+    });
+    expect(api.refreshBillingAccount).toHaveBeenCalled();
+    expect(getButton('Renew subscription')).toBeUndefined();
+    expect(container.querySelector('.toast-error')).toBeNull();
+  });
+
+  test('active and scheduled-to-cancel subscriptions do not show the inactive notice', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: {
+      ...defaultUser,
+      entitlements: { archived: false, account: { state: 'active', stripeSubscriptionStatus: 'active', cancelAtPeriodEnd: true } },
+    } });
+    await renderApp();
+    expect(container.querySelector('.toast')).toBeNull();
   });
 
   test('renders updated blank-home copy with upload before modify', async () => {
