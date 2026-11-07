@@ -3176,6 +3176,18 @@ const mergeRescanResults = ({
   });
 
   const hydratedKeys = new Set();
+  const imageFields = ['thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl'];
+  const isPrivateImage = (value) => String(value || '').startsWith('/api/private-scan-captures/');
+  const markRetainedPrivatePreview = (existing, next) => {
+    if (!imageFields.some((field) => isPrivateImage(existing[field]) && next[field] === existing[field])) return next;
+    return {
+      ...next,
+      authCaptureRequired: true,
+      authPreviewUnavailable: true,
+      ...(existing.privateCaptureExpiresAt != null && next.privateCaptureExpiresAt == null
+        ? { privateCaptureExpiresAt: existing.privateCaptureExpiresAt } : {}),
+    };
+  };
   const preserveFields = [
     'id',
     'title',
@@ -3206,12 +3218,15 @@ const mergeRescanResults = ({
       if (key) hydratedKeys.add(key);
       if (existing.id) hydratedKeys.add(`id:${existing.id}`);
       preserveFields.forEach((field) => {
-        if (['thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl'].includes(field) && node[field]) return;
+        // Do not pair a fresh private thumbnail with an older full-size image
+        // whose expiry belongs to a different capture.
+        if (imageFields.includes(field) && (node[field] || imageFields.some((key) => isPrivateImage(node[key])))) return;
         const value = existing[field];
         if (value !== undefined && value !== null && value !== '') {
           next[field] = value;
         }
       });
+      return markRetainedPrivatePreview(existing, next);
     }
     return next;
   };
@@ -3231,7 +3246,7 @@ const mergeRescanResults = ({
       if (!key || hydratedKeys.has(key) || nextKeys.has(key)) return false;
       return hasUserPreservedNodeState(node, manualNodeIds);
     })
-    .map((node) => ({
+    .map((node) => markRetainedPrivatePreview(node, {
       ...node,
       children: [],
       orphanType: node.orphanType || 'orphan',
@@ -3246,10 +3261,15 @@ const mergeRescanResults = ({
 const deferAuthenticatedPreviews = ({ root, orphans = [] }) => {
   const deferNode = (node) => {
     if (!node) return node;
+    const isPage = node.url && !node.isMissing && !node.isVirtualMissing
+      && !node.isStructural && !node.isFile && !node.isError
+      && node.scanStatus !== 'missing' && node.nodeKind !== 'deferred-group';
     return {
       ...node,
-      authCaptureRequired: true,
-      authPreviewUnavailable: node.authPreviewUnavailable !== false,
+      ...(isPage ? {
+        authCaptureRequired: true,
+        authPreviewUnavailable: node.authPreviewUnavailable !== false,
+      } : {}),
       children: (node.children || []).map(deferNode),
     };
   };
@@ -3614,6 +3634,7 @@ export const __testing = {
   getDisplayScanLayerAvailability,
   applyScanArtifacts,
   mergeRescanResults,
+  deferAuthenticatedPreviews,
   applyDeferredCaptureResult,
   reconcileDeferredCaptureScanMeta,
   createDefaultLayerToggleState,

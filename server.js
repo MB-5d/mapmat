@@ -119,6 +119,9 @@ const {
   saveScreenshotJson,
   saveScreenshotObject,
   statScreenshotObject,
+  listScreenshotObjects,
+  readScreenshotObjectPrefix,
+  removeScreenshotObject,
 } = require('./utils/screenshotStorage');
 const {
   createScreenshotWorkspace,
@@ -128,6 +131,8 @@ const {
 const { dismissScreenshotObstructions } = require('./utils/screenshotPreparation');
 const { createPrivateScanCaptureStore, createPrivateScanCaptureHandler, isPrivateScanCaptureKey } = require('./utils/privateScanCapture');
 const { captureAuthenticatedScanResult } = require('./utils/authenticatedScanCapture');
+const { extractPageLinkOrder, getSiblingLinkRanks } = require('./utils/scanPageOrder');
+const { createPrivateScanCaptureCleanup } = require('./utils/privateScanCaptureCleanup');
 const {
   ACTIVITY_SCOPES,
   ACTIVITY_TYPES,
@@ -3271,7 +3276,19 @@ function createScanAuthSession({ safeUrl, req }) {
     sampleUrls: [],
   };
   scanAuthSessions.set(id, session);
+  scheduleScanAuthExpiry(session);
   return session;
+}
+
+function scheduleScanAuthExpiry(session) {
+  clearTimeout(session.expiryTimer);
+  session.expiryTimer = setTimeout(() => {
+    if (scanAuthSessions.get(session.id) !== session) return;
+    if (!isScanAuthSessionExpired(session)) { scheduleScanAuthExpiry(session); return; }
+    closeScanAuthSession(session);
+    scanAuthSessions.delete(session.id);
+  }, Math.max(1, session.expiresAt - Date.now()));
+  session.expiryTimer.unref?.();
 }
 
 function closeScanAuthBrowser(session) {
@@ -3288,6 +3305,7 @@ function closeScanAuthBrowser(session) {
 
 function closeScanAuthSession(session) {
   if (!session) return;
+  clearTimeout(session.expiryTimer);
   session.password = null;
   session.storageState = null;
   session.passwordAttempts.clear();
@@ -3309,6 +3327,22 @@ function cleanupExpiredScanAuthSessions() {
 if (SCAN_AUTH_FEATURE_ENABLED) {
   const timer = setInterval(cleanupExpiredScanAuthSessions, 60 * 1000);
   timer.unref?.();
+  if (RUN_WEB) {
+    const cleanup = createPrivateScanCaptureCleanup({
+      listObjects: listScreenshotObjects,
+      readHeader: readScreenshotObjectPrefix,
+      removeObject: removeScreenshotObject,
+    });
+    const runCleanup = () => cleanup.run()
+      .then(summary => {
+        if (summary.deleted || summary.failed) console.info('[private-capture-cleanup]', JSON.stringify(summary));
+      })
+      .catch(() => console.warn('[private-capture-cleanup] Storage sweep failed; retrying next interval.'));
+    const cleanupTimer = setInterval(runCleanup, 60000);
+    cleanupTimer.unref?.();
+    const initialCleanup = setTimeout(runCleanup, 1000);
+    initialCleanup.unref?.();
+  }
 }
 
 function getScanAuthSessionForRequest(req, sessionId, safeUrl = null) {
@@ -4320,8 +4354,15 @@ async function fetchPage(url, extraHeaders = {}, timeoutMs = 20000) {
 
 async function fetchPageWithBrowserContext(context, url, capturePage = null) {
   const startedAt = Date.now();
+  const session = scanAuthContextOwners.get(context);
+  const verifyAccess = () => {
+    if (session && (scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session))) {
+      throw Object.assign(new Error('The temporary login expired. Log in again before scanning.'), { code: 'scan_auth_expired', status: 410 });
+    }
+  };
   let page = null;
   try {
+    verifyAccess();
     page = await context.newPage();
     page.setDefaultTimeout(20000);
     page.setDefaultNavigationTimeout(20000);
@@ -4330,7 +4371,7 @@ async function fetchPageWithBrowserContext(context, url, capturePage = null) {
       timeout: 20000,
     });
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
-    const session = scanAuthContextOwners.get(context);
+    verifyAccess();
     if (session?.password && !isScanAuthSessionExpired(session)
       && new URL(url).origin === session.origin
       && !session.passwordAttempts.has(url)
@@ -5275,6 +5316,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const focusedListingOrder = new Map();
   const focusedListingParentByUrl = new Map();
   const sitemapOrder = new Map();
+  const pageLinkOrderByUrl = new Map();
   const sitemapNumberingOrder = new Map();
   const sitemapCompleteParentUrls = new Set();
   let sitemapDocumentCounter = 0;
@@ -6641,6 +6683,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const links = classification.shouldExtractLinks && !suppressLinkDiscovery
       ? extractLinks(html, finalUrl || url).map((link) => normalizeUrl(link)).filter(Boolean)
       : [];
+    if (classification.shouldExtractLinks && !suppressLinkDiscovery) {
+      pageLinkOrderByUrl.set(url, extractPageLinkOrder(html, finalUrl || url, normalizeUrl));
+    }
     if (
       scanScope.focused
       && !suppressLinkDiscovery
@@ -8080,11 +8125,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const sortTree = (node, depth = 0) => {
     if (!node?.children?.length) return;
+    const linkRanks = getSiblingLinkRanks(node.children,
+      pageLinkOrderByUrl.get(node.url) || pageLinkOrderByUrl.get(node.finalUrl) || [], normalizeUrl);
     node.children.sort((a, b) => {
       if (a?.nodeKind === 'deferred-group' && b?.nodeKind !== 'deferred-group') return 1;
       if (a?.nodeKind !== 'deferred-group' && b?.nodeKind === 'deferred-group') return -1;
       const scanNumberDifference = compareScanNumbers(a, b);
       if (scanNumberDifference !== 0) return scanNumberDifference;
+      if (!scanScope.focused) {
+        const leftRank = linkRanks.get(a);
+        const rightRank = linkRanks.get(b);
+        if (leftRank !== rightRank) return leftRank < rightRank ? -1 : 1;
+      }
       const sa = getSitemapIndex(a);
       const sb = getSitemapIndex(b);
       if (sa !== undefined && sb !== undefined && sa !== sb) return sa - sb;
@@ -10384,6 +10436,7 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
     if (readyAuthSession) {
       readyAuthSession.jobId = jobId;
       readyAuthSession.expiresAt = Date.now() + SCAN_AUTH_SESSION_TTL_MS;
+      scheduleScanAuthExpiry(readyAuthSession);
       scheduleClaimedJob(jobId);
     }
 

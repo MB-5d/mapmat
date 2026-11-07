@@ -609,6 +609,43 @@ describe('scan config and differential rescan behavior', () => {
     expect(root.privateCaptureExpiresAt).toBe(12345);
   });
 
+  test('a no-login rescan keeps private delivery metadata and labels retained previews as old', () => {
+    const existingRoot = { id: 'old', url: 'https://example.com', thumbnailUrl: '/api/private-scan-captures/old.bin',
+      privateCaptureExpiresAt: 12345, authCaptureRequired: true, authPreviewUnavailable: false, children: [] };
+    const nextRoot = { id: 'new', url: existingRoot.url, authRequired: true, children: [] };
+    const { root } = mergeRescanResults({ existingRoot, nextRoot });
+    expect(root.thumbnailUrl).toBe(existingRoot.thumbnailUrl);
+    expect(root.privateCaptureExpiresAt).toBe(12345);
+    expect(root.authCaptureRequired).toBe(true);
+    expect(root.authPreviewUnavailable).toBe(true);
+    expect(root.authRequired).toBe(true);
+    expect(existingRoot.authPreviewUnavailable).toBe(false);
+  });
+
+  test('a fresh private preview does not retain an older full-size asset with a different expiry', () => {
+    const existingRoot = { id: 'old', url: 'https://example.com', thumbnailUrl: '/api/private-scan-captures/old.bin',
+      fullScreenshotUrl: '/api/private-scan-captures/old-full.bin', privateCaptureExpiresAt: 1000, children: [] };
+    const nextRoot = { id: 'new', url: existingRoot.url, thumbnailUrl: '/api/private-scan-captures/new.bin',
+      privateCaptureExpiresAt: 2000, authPreviewUnavailable: false, children: [] };
+    const { root } = mergeRescanResults({ existingRoot, nextRoot });
+    expect(root.fullScreenshotUrl).toBeUndefined();
+    expect(root.thumbnailUrl).toBe(nextRoot.thumbnailUrl);
+    expect(root.privateCaptureExpiresAt).toBe(2000);
+    expect(root.authPreviewUnavailable).toBe(false);
+  });
+
+  test('authenticated preview flags exclude missing parents, groups, and errors', () => {
+    const { root } = __testing.deferAuthenticatedPreviews({ root: { url: 'https://example.com', children: [
+      { url: 'https://example.com/missing', isVirtualMissing: true, scanStatus: 'missing' },
+      { url: '', nodeKind: 'deferred-group' },
+      { url: 'https://example.com/error', isError: true },
+      { url: 'https://example.com/private', authRequired: true },
+    ] } });
+    expect(root.authCaptureRequired).toBe(true);
+    expect(root.children.slice(0, 3).every(node => node.authCaptureRequired === undefined)).toBe(true);
+    expect(root.children[3].authCaptureRequired).toBe(true);
+  });
+
   test('differential rescan preserves edited nodes and manual connection endpoints', () => {
     const existingRoot = {
       id: 'home-old',

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const cheerio = require('cheerio');
 
 const SCREENSHOT_PUBLIC_BASE = '/screenshots';
 const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH || null;
@@ -124,15 +125,19 @@ function encodeKey(key) {
   return String(key || '').split('/').map(encodeURIComponent).join('/');
 }
 
-function signedR2Request({ method, key, body = Buffer.alloc(0), contentType = 'application/octet-stream' }) {
-  const safeKey = normalizeStorageKey(key);
+function signedR2Request({ method, key, query = {}, extraHeaders = {}, body = Buffer.alloc(0), contentType = 'application/octet-stream' }) {
+  const safeKey = key === undefined ? null : normalizeStorageKey(key);
   const bodyBuffer = Buffer.isBuffer(body) ? body : Buffer.from(String(body || ''));
   const bodyHash = hash(bodyBuffer);
   const now = amzDate();
   const dateValue = dateStamp(now);
   const host = new URL(R2_ENDPOINT).host;
-  const canonicalUri = `/${encodeURIComponent(R2_BUCKET)}/${encodeKey(safeKey)}`;
+  const canonicalUri = `/${encodeURIComponent(R2_BUCKET)}${safeKey === null ? '' : `/${encodeKey(safeKey)}`}`;
+  const encodeQuery = (value) => encodeURIComponent(value).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+  const canonicalQuery = Object.entries(query).sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, value]) => `${encodeQuery(name)}=${encodeQuery(value)}`).join('&');
   const headers = {
+    ...extraHeaders,
     host,
     'x-amz-content-sha256': bodyHash,
     'x-amz-date': now,
@@ -149,7 +154,7 @@ function signedR2Request({ method, key, body = Buffer.alloc(0), contentType = 'a
   const canonicalRequest = [
     method,
     canonicalUri,
-    '',
+    canonicalQuery,
     canonicalHeaders,
     signedHeaders,
     bodyHash,
@@ -171,7 +176,7 @@ function signedR2Request({ method, key, body = Buffer.alloc(0), contentType = 'a
   delete requestHeaders.host;
 
   return {
-    url: `${R2_ENDPOINT}${canonicalUri}`,
+    url: `${R2_ENDPOINT}${canonicalUri}${canonicalQuery ? `?${canonicalQuery}` : ''}`,
     headers: requestHeaders,
     body: method === 'HEAD' ? undefined : bodyBuffer,
   };
@@ -331,6 +336,74 @@ async function removeLocalScreenshotFile(filename) {
   await fs.promises.unlink(path.join(SCREENSHOT_LOCAL_DIR, normalizeStorageKey(filename)));
 }
 
+// Bounded storage operations used by the private-image expiry sweep. These
+// throw on provider failures so cleanup cannot report a failed pass as success.
+async function listScreenshotObjects({ prefix, cursor = null, limit = 200 }) {
+  if (!prefix || !/^[a-zA-Z0-9_-]+$/.test(prefix)) throw new Error('Invalid storage prefix');
+  const pageSize = Math.max(1, Math.min(1000, Math.floor(limit)));
+  if (isR2Selected()) {
+    assertR2Configured();
+    const query = { 'list-type': '2', prefix, 'max-keys': String(pageSize), ...(cursor ? { 'continuation-token': cursor } : {}) };
+    const request = signedR2Request({ method: 'GET', query });
+    const response = await fetch(request.url, { headers: request.headers, signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error(`R2 listing failed (${response.status})`);
+    const $ = cheerio.load(await response.text(), { xmlMode: true });
+    if (!$('ListBucketResult').length || $('Error').length) throw new Error('Invalid R2 listing');
+    const keys = $('Contents > Key').map((_, el) => $(el).text()).get();
+    const nextCursor = $('NextContinuationToken').text() || null;
+    if ($('IsTruncated').text() === 'true' && !nextCursor) throw new Error('R2 listing cursor missing');
+    return { keys, cursor: nextCursor };
+  }
+  const keys = [];
+  for await (const entry of await fs.promises.opendir(SCREENSHOT_LOCAL_DIR)) {
+    if (!entry.isFile() || !entry.name.startsWith(prefix) || (cursor && entry.name <= cursor)) continue;
+    keys.push(entry.name);
+    keys.sort();
+    if (keys.length > pageSize + 1) keys.pop();
+  }
+  const hasMore = keys.length > pageSize;
+  if (hasMore) keys.pop();
+  return { keys, cursor: hasMore ? keys.at(-1) : null };
+}
+
+async function readScreenshotObjectPrefix(key, bytes) {
+  const safeKey = normalizeStorageKey(key);
+  if (!Number.isInteger(bytes) || bytes < 1 || bytes > 1024) throw new Error('Invalid prefix length');
+  if (isR2Selected()) {
+    assertR2Configured();
+    const request = signedR2Request({ method: 'GET', key: safeKey, extraHeaders: { range: `bytes=0-${bytes - 1}` } });
+    const response = await fetch(request.url, { headers: request.headers, signal: AbortSignal.timeout(15000) });
+    if (response.status === 404) return null;
+    if (response.status !== 206 || Number(response.headers.get('content-length')) > bytes) {
+      await response.body?.cancel();
+      throw new Error(`R2 prefix read failed (${response.status})`);
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+  let file;
+  try {
+    file = await fs.promises.open(path.join(SCREENSHOT_LOCAL_DIR, safeKey), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    const buffer = Buffer.alloc(bytes);
+    const result = await file.read(buffer, 0, bytes, 0);
+    return buffer.subarray(0, result.bytesRead);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  } finally { await file?.close(); }
+}
+
+async function removeScreenshotObject(key) {
+  const safeKey = normalizeStorageKey(key);
+  if (isR2Selected()) {
+    assertR2Configured();
+    const request = signedR2Request({ method: 'DELETE', key: safeKey });
+    const response = await fetch(request.url, { method: 'DELETE', headers: request.headers, signal: AbortSignal.timeout(15000) });
+    if (!response.ok && response.status !== 404) throw new Error(`R2 deletion failed (${response.status})`);
+    return;
+  }
+  await fs.promises.unlink(path.join(SCREENSHOT_LOCAL_DIR, safeKey)).catch(error => { if (error.code !== 'ENOENT') throw error; });
+}
+
 module.exports = {
   SCREENSHOT_LOCAL_DIR,
   SCREENSHOT_PUBLIC_BASE,
@@ -348,4 +421,7 @@ module.exports = {
   statScreenshotObject,
   listLocalScreenshotFiles,
   removeLocalScreenshotFile,
+  listScreenshotObjects,
+  readScreenshotObjectPrefix,
+  removeScreenshotObject,
 };

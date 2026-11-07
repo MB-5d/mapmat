@@ -146,6 +146,12 @@ const NodeCard = ({
         variant: 'file',
       };
     }
+    if (node?.isMissing || node?.isVirtualMissing || node?.scanStatus === 'missing') {
+      return { icon: ImageOff, label: 'Missing page', text: 'No page preview', variant: 'file' };
+    }
+    if (node?.isError || node?.scanStatus === 'error') {
+      return { icon: AlertTriangle, label: node.httpErrorLabel || 'Page unavailable', text: 'No page preview', variant: 'error' };
+    }
     if (node?.authCaptureRequired || node?.authPreviewUnavailable || node?.authRequired) {
       return {
         icon: Lock,

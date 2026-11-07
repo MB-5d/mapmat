@@ -68,7 +68,7 @@ Local checks include protected fixtures with one password unlocking 13 pages and
 
 The authenticated `/api/private-scan-captures/:filename` read route returns owner-only images with `private, no-store` headers. The public `/screenshots/:filename` route rejects the reserved private prefix before reading storage. Feature-disabled, missing-key, wrong-owner, tampered, and expired states fail closed. Authenticated scan jobs write to this private store; ordinary public image jobs do not.
 
-The pilot retention ceiling is 24 hours. Expiry blocks reading; physical removal of expired ciphertext, R2 bucket lifecycle rules, key backup/rotation, durable map previews, and access for collaborators/shared maps remain rollout decisions. Do not treat this as production retention or sharing support. Local cross-origin browser checks cover private delivery, save/reopen, and refresh through a new authenticated draft. Live staging delivery and R2 lifecycle still need verification.
+The pilot retention ceiling is 24 hours. Expiry blocks reading; the staging hardening adds a bounded, recurring local/R2 sweep to physically remove expired ciphertext. Key backup/rotation, durable map previews, and access for collaborators/shared maps remain rollout decisions. Do not treat this as production retention or sharing support. Local cross-origin browser checks cover private delivery, save/reopen, and refresh through a new authenticated draft. Live staging delivery and R2 lifecycle still need verification.
 
 `npm run check:private-scan-capture` covers encryption/access/expiry plus the real backend HTTP route and local persistence in an isolated disposable fixture. It also verifies ordinary public screenshot delivery remains unchanged. Live R2 persistence has not been tested.
 
