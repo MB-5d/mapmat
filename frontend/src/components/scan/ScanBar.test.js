@@ -2,6 +2,7 @@ import React, { act, createRef } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import ScanBar from './ScanBar';
+import { AUTHENTICATED_SCAN_ENABLED } from '../../utils/constants';
 
 describe('ScanBar', () => {
   let container;
@@ -98,7 +99,7 @@ describe('ScanBar', () => {
     expect(container.querySelector('.scan-options-depth-label')).toBeNull();
     expect(container.textContent).not.toContain('during testing');
     expect(container.textContent).not.toContain('Not ready for testing yet');
-    expect(container.textContent).not.toContain('Authenticated pages');
+    expect(container.textContent.includes('Authenticated pages')).toBe(AUTHENTICATED_SCAN_ENABLED);
     expect(container.querySelector('.layers-panel-hint')).toBeNull();
     expect(container.querySelectorAll('.scan-options-group')).toHaveLength(4);
     expect(scanButton.className).toContain('ui-btn');

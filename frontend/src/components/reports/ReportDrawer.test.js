@@ -637,6 +637,21 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('https://example.com/private');
   });
 
+  test('separates pages needing login from other scan restrictions', () => {
+    renderDrawer({
+      scanMeta: {
+        partialReason: 'auth_required',
+        blockedSections: [
+          { url: 'https://example.com/limited', reason: 'crawler_limited' },
+          { url: 'https://example.com/private', reason: 'auth_required' },
+        ],
+      },
+    });
+
+    expect(container.textContent).toContain('Login required at https://example.com/private.');
+    expect(container.textContent).toContain('Blocked at https://example.com/limited.');
+  });
+
   test('hides stale scan-limit warning when a saved map only has one real page', () => {
     renderDrawer({
       entries: [entries[0]],

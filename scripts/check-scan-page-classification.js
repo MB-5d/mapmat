@@ -105,6 +105,39 @@ assert.strictEqual(authRequired.isAuthStatus, true);
 assert.strictEqual(authRequired.isErrorStatus, false);
 assert.strictEqual(authRequired.isInactiveStatus, false);
 
+const loginRedirect = classifyScanResponse({
+  url: 'https://example.com/private',
+  finalUrl: 'https://example.com/sign-in?next=%2Fprivate',
+  status: 200,
+  html: '<html><head><title>Welcome back</title></head><body>Enter your details</body></html>',
+});
+assert.strictEqual(loginRedirect.scanStatus, 'auth');
+assert.strictEqual(loginRedirect.metadataAvailable, false);
+
+const ssoRedirect = classifyScanResponse({
+  url: 'https://example.com/private',
+  finalUrl: 'https://accounts.google.com/v3/signin/identifier',
+  status: 200,
+  html: '<html><head><title>Sign in</title></head><body>Continue with Google</body></html>',
+});
+assert.strictEqual(ssoRedirect.scanStatus, 'auth');
+
+const loginForm = classifyScanResponse({
+  url: 'https://example.com/private',
+  finalUrl: 'https://example.com/private',
+  status: 200,
+  html: '<html><head><title>Sign in</title></head><body><form><input type="password"></form></body></html>',
+});
+assert.strictEqual(loginForm.scanStatus, 'auth');
+
+const publicLoginPage = classifyScanResponse({
+  url: 'https://example.com/login',
+  finalUrl: 'https://example.com/login',
+  status: 200,
+  html: '<html><head><title>Sign in</title></head><body><form><input type="password"></form></body></html>',
+});
+assert.strictEqual(publicLoginPage.scanStatus, 'active');
+
 const insights = analyzeMapInsights({
   root: {
     id: 'home',

@@ -353,6 +353,33 @@ describe('ui primitives', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  test('Modal keeps keyboard focus inside, tolerates rerenders, and restores the opener', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    const render = (show = true) => root.render(<Modal show={show} onClose={() => {}} title="Focus test">
+      <input aria-label="First field" /><button disabled>Unavailable</button><button>Last action</button>
+    </Modal>);
+    act(() => render());
+    const first = container.querySelector('.modal-close');
+    const last = [...container.querySelectorAll('button')].at(-1);
+    expect(document.activeElement).toBe(first);
+    act(() => {
+      last.focus();
+      last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    });
+    expect(document.activeElement).toBe(first);
+    act(() => first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true })));
+    expect(document.activeElement).toBe(last);
+    act(() => render());
+    expect(document.activeElement).toBe(last);
+    act(() => opener.focus());
+    expect(container.querySelector('[role="dialog"]').contains(document.activeElement)).toBe(true);
+    act(() => render(false));
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
   test('Modal closes on Escape', () => {
     const onClose = vi.fn();
 
