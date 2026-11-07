@@ -54,7 +54,15 @@ async function runHttp() {
         assert.deepEqual(actual, expected, `actual sibling order with authentication ${enabled}`);
         assert.equal(result.root.children.find(n => n.url.endsWith('/project-z')).authRequired, !enabled);
         console.log(`[scan-page-order] Real ${enabled ? 'authenticated' : 'ordinary, beta-disabled'} scan kept navigation/content order despite reversed sitemap and delayed responses.`);
-      } finally { child.kill('SIGTERM'); await new Promise(r => child.once('exit', r)); }
+      } finally {
+        if (child.exitCode === null && child.signalCode === null) {
+          const stopped = new Promise(r => child.once('exit', r));
+          child.kill('SIGTERM');
+          const timer = setTimeout(() => child.kill('SIGKILL'), 5000);
+          await stopped;
+          clearTimeout(timer);
+        }
+      }
     }
   } finally { fixture.closeAllConnections(); await new Promise(r => fixture.close(r)); fs.rmSync(dir, { recursive: true, force: true }); }
 }
