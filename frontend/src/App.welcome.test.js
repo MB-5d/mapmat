@@ -22,6 +22,7 @@ vi.mock('./api', () => ({
   createBillingPortalSession: vi.fn(),
   refreshBillingAccount: vi.fn(),
   createScanJob: vi.fn(),
+  precheckScanAuth: vi.fn(),
   login: vi.fn(),
   signup: vi.fn(),
 }));
