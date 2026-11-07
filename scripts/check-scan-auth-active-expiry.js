@@ -87,7 +87,13 @@ async function main() {
     if (process.env.SCAN_AUTH_EXPIRY_TEST_RESULT) fs.writeFileSync(process.env.SCAN_AUTH_EXPIRY_TEST_RESULT, JSON.stringify(result, null, 2));
     console.log(JSON.stringify(result));
   } finally {
-    backend.kill('SIGTERM'); await new Promise(resolve => backend.once('exit', resolve));
+    if (backend.exitCode === null && backend.signalCode === null) {
+      const stopped = new Promise(resolve => backend.once('exit', resolve));
+      backend.kill('SIGTERM');
+      const timer = setTimeout(() => backend.kill('SIGKILL'), 5000);
+      await stopped;
+      clearTimeout(timer);
+    }
     fixture.closeAllConnections(); await new Promise(resolve => fixture.close(resolve)); fs.rmSync(directory, { recursive: true, force: true });
   }
 }
