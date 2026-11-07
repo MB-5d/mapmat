@@ -2,7 +2,7 @@
 
 Target staging test URL: https://app-staging.vellic.io/app
 
-The beta is isolated on `codex/authenticated-scan-beta`. These fixes have not enabled or deployed it to staging or production.
+The single-password beta is enabled in staging. Production remains unchanged and authenticated scanning remains disabled there.
 
 Use only a site you are authorized to access. This beta supports single-password page gates. Enter one password per scan; Vellic temporarily reuses a successfully verified password on matching gates at the same origin, including pages discovered during the scan. Passwords and login state are removed at completion, cancellation, failure, or expiry. Sign in again for each rescan.
 
@@ -28,7 +28,7 @@ Browser/Google/SSO sign-in is deferred from this beta. Its implementation is pre
 
 - Mapping works without images. **Include private thumbnails** is off by default and explains the cost: one screenshot credit per captured page, including public pages, up to 100 pages within the available allowance. Missing private storage or zero screenshot credits falls back to mapping with an explanatory warning. Full-page capture is available only to backend validation, not the beta UI.
 - New thumbnails appear immediately and are current. An older preview preserved through a map-only rescan is labeled as not updated. Private images are owner-only and expire after 24 hours; shared/collaborator delivery and durable previews are not included.
-- The temporary login expires after 30 minutes. Long-running scans or a web-instance restart require another login.
+- The temporary login expires after 30 minutes. An exact-deadline timer closes the login and active scan contexts; page fetches also check expiry before using credentials. An expired scan fails with a fresh-login message instead of publishing a successful result. A web-instance restart also requires another login.
 - Reuse is limited to visible single-password gates using native POST forms or the recognized Squarespace JavaScript password form, with same-origin submission. Native GET forms, account logins, external form actions, and other origins never receive the site password automatically. Rejected automatic attempts are not repeated; a successfully verified password may be reapplied if the site drops that page's access. Unlinked pages cannot be found by the quick check.
 - Password submission waits for the page to unlock and reloads it to confirm access is reusable. Merely displaying content is not sufficient. Unlock requests are serialized within one temporary session so sites that replace a shared access cookie cannot overwrite parallel unlocks; normal page fetching stays parallel. The representative fixture covers delayed JavaScript forms, twelve pages sharing one cumulative access cookie, newly discovered pages, rejected passwords, non-reusable login, cancellation, and backend restart.
 - A user-authorized live-site check on mattbraun.design reproduced lost access after successful sample verification. After the fix, all returned protected pages, including Back to College and Building Icons, returned HTTP 200 with no login-required labels. Some independently broken site links still return 404; this is not a guarantee that every possible page exists or is discoverable. The credential was supplied in memory and is not included in test files or output.
@@ -49,3 +49,19 @@ After an approved staging deployment, verify the same flows on an authorized rea
 - Local browser checks passed for map-only scans, optional thumbnails, immediate current previews, save/reopen, fresh-login draft refresh, precheck retry/cancel, guest restrictions, keyboard containment, and supported tablet layout. With the frontend flag off, signed-in and guest public scans passed without auth requests.
 
 Staging and production were not changed by this validation.
+
+## Staging hardening — 2026-11-07
+
+- Missing/structural parent pages and HTTP errors retain their own preview labels, including saved maps with older private-preview flags.
+- Rescans that keep an older private image also keep its private-delivery/expiry metadata and mark it **Not updated by this scan**. Fresh private images replace old image variants rather than mixing different expiry periods. The saved original is unchanged.
+- Whole-site sibling order now prioritizes the parent's navigation links, then content links in document order. A synthetic parent takes the position of its first linked descendant. XML sitemap order is a fallback for unlinked pages; timestamps, tags, title sorting, and response speed do not override known link order. This applies to both ordinary and authenticated whole-site scans. Existing focused-scan numbering is preserved. CSS/masonry visual positions may differ from document order.
+- With authenticated scanning enabled, the web service sweeps private image storage on startup and every minute. Each pass checks at most 200 objects with five concurrent header reads, carries a pagination cursor between passes, and only deletes exact private-image filenames with expired headers. Larger backlogs take multiple passes. It works with local storage and R2, retries failures on subsequent passes, and does not depend on a user requesting an expired image. Public screenshots and unexpired private images are untouched. Provider failures are logged without credentials or image content.
+
+Checks:
+
+- `npm run check:scan-page-order`: real ordinary/authenticated crawler checks with reversed sitemap entries, delayed responses, and a nested project branch.
+- `npm run check:private-scan-capture`: delivery/encryption plus cleanup boundary, pagination, restart, retry, and provider-error checks.
+- `npm run check:scan-auth:active-expiry`: controlled real-time five-minute active-scan expiry check (the minimum supported lifetime).
+- `SCAN_AUTH_EXPIRY_TEST_TTL_MS=1800000 SCAN_AUTH_EXPIRY_TEST_CAPTURE=true npm run check:scan-auth:active-expiry`: the same active scan through the default 30-minute deadline, with private thumbnails requested. No production configuration changes are needed.
+
+The controlled expiry fixture tests the actual backend/browser process locally. Live staging cloud cleanup and deployed UI checks must be recorded separately. Google/account/MFA flows and the independent production security review remain outside this beta.

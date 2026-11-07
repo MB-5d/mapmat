@@ -615,6 +615,17 @@ describe('NodeCard', () => {
     expect(container.querySelector('.thumb-placeholder-blocked')).not.toBeNull();
   });
 
+  test.each([
+    [{ scanStatus: 'missing', isVirtualMissing: true }, 'Missing page'],
+    [{ scanStatus: 'error', isError: true, httpErrorLabel: 'HTTP 404 / Not Found' }, 'HTTP 404 / Not Found'],
+  ])('page status takes precedence over legacy private preview flags: %s', async (status, label) => {
+    await act(async () => root.render(<NodeCard node={{ id: 'old', url: 'https://example.com/missing',
+      authCaptureRequired: true, authPreviewUnavailable: true, ...status }} number="1" showThumbnails />));
+    expect(container.textContent).toContain(label);
+    expect(container.textContent).not.toContain('Login-protected page');
+    expect(container.textContent).not.toContain('Rescan with password for a preview');
+  });
+
   test('preserves but labels an older preview after an authenticated rescan', async () => {
     await act(async () => {
       root.render(

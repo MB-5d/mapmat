@@ -95,4 +95,5 @@ function createPrivateScanCaptureHandler({ getStore, enabled }) {
   };
 }
 
-module.exports = { createPrivateScanCaptureStore, createPrivateScanCaptureHandler, isPrivateScanCaptureKey };
+module.exports = { createPrivateScanCaptureStore, createPrivateScanCaptureHandler, isPrivateScanCaptureKey,
+  PRIVATE_CAPTURE_KEY, PRIVATE_CAPTURE_PREFIX, HEADER_BYTES };
