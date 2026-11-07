@@ -16,7 +16,6 @@ import NodeActionBar from './NodeActionBar';
 import NodeBadge from './NodeBadge';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import CaptureImage from '../ui/CaptureImage';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
@@ -144,14 +143,6 @@ const NodeCard = ({
         label: extension ? `${extension} file` : 'File link',
         text: 'No page preview',
         variant: 'file',
-      };
-    }
-    if (node?.authPreviewUnavailable || node?.authRequired) {
-      return {
-        icon: Lock,
-        label: 'Login-protected page',
-        text: 'Preview unavailable in beta',
-        variant: 'blocked',
       };
     }
     if (node?.thumbnailCaptureFailed) {
@@ -360,7 +351,7 @@ const NodeCard = ({
           )}
           {hasThumb && shouldLoadThumb && !thumbError ? (
             <>
-              <CaptureImage
+              <img
                 className="thumb-img"
                 src={thumb}
                 alt={node.title}
@@ -382,9 +373,6 @@ const NodeCard = ({
                 }}
                 style={{ opacity: thumbLoading ? 0 : 1 }}
               />
-              {node?.authPreviewUnavailable && !thumbLoading && (
-                <span className="thumb-stale-label">Not updated by this scan</span>
-              )}
               {!thumbLoading && (
                 <button
                   className="thumb-fullsize-btn"

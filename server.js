@@ -65,14 +65,6 @@ const {
   isCloudflareChallengeResponse,
 } = require('./utils/scanPageClassification');
 const {
-  isHostnameInAuthScope,
-  isScanAuthSessionExpired,
-  scopeScanAuthStorageState,
-} = require('./utils/scanAuthState');
-const { installScanAuthNetworkGuard, isAllowedScanAuthRequest } = require('./utils/scanAuthNetwork');
-const { createScanAuthProxy } = require('./utils/scanAuthProxy');
-const { hasSimplePasswordGate, submitSimpleScanPassword } = require('./utils/scanAuthPassword');
-const {
   getInvalidScanResultMessage,
   getInvalidScanResultReason,
   hardenCollapsedScanResult,
@@ -126,8 +118,6 @@ const {
   removeScreenshotWorkspace,
 } = require('./utils/screenshotWorkspace');
 const { dismissScreenshotObstructions } = require('./utils/screenshotPreparation');
-const { createPrivateScanCaptureStore, createPrivateScanCaptureHandler, isPrivateScanCaptureKey } = require('./utils/privateScanCapture');
-const { captureAuthenticatedScanResult } = require('./utils/authenticatedScanCapture');
 const {
   ACTIVITY_SCOPES,
   ACTIVITY_TYPES,
@@ -260,24 +250,13 @@ app.use((err, req, res, next) => {
 });
 
 const SCREENSHOT_DIR = SCREENSHOT_LOCAL_DIR;
-let privateScanCaptureStore = null;
-function getPrivateScanCaptureStore() {
-  if (!privateScanCaptureStore) {
-    privateScanCaptureStore = createPrivateScanCaptureStore({
-      encryptionKey: process.env.PRIVATE_SCAN_CAPTURE_KEY,
-      saveObject: saveScreenshotObject,
-      readObject: readScreenshotObject,
-    });
-  }
-  return privateScanCaptureStore;
-}
 if (!fs.existsSync(SCREENSHOT_DIR)) {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 }
 app.get(`${SCREENSHOT_PUBLIC_BASE}/:filename`, async (req, res) => {
   try {
     const key = extractScreenshotStorageKey(req.params.filename);
-    if (!key || isPrivateScanCaptureKey(key)) return res.status(404).send('Not found');
+    if (!key) return res.status(404).send('Not found');
 
     const object = await readScreenshotObject(key);
     if (!object?.buffer?.length) return res.status(404).send('Not found');
@@ -298,10 +277,6 @@ app.use('/auth', authRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api', apiRouter);
-app.get('/api/private-scan-captures/:filename', authMiddleware, requireAuth, createPrivateScanCaptureHandler({
-  getStore: getPrivateScanCaptureStore,
-  enabled: () => SCAN_AUTH_FEATURE_ENABLED,
-}));
 registerImageCaptureRoutes(app);
 app.use('/api', collaborationRouter);
 app.use('/api', realtimeRouter);
@@ -1171,8 +1146,8 @@ async function resizeScreenshotForCanvas(context, sourcePath, targetPath) {
   }
 }
 
-async function installScreenshotRequestFilters(page, guardAuthNetwork = false) {
-  await page.route('**/*', async (route) => {
+async function installScreenshotRequestFilters(page) {
+  await page.route('**/*', (route) => {
     const request = route.request();
     const resourceType = request.resourceType();
     const requestUrl = request.url();
@@ -1181,9 +1156,6 @@ async function installScreenshotRequestFilters(page, guardAuthNetwork = false) {
       || SCREENSHOT_BLOCKED_URL_PATTERN.test(requestUrl)
     ) {
       return route.abort().catch(() => {});
-    }
-    if (guardAuthNetwork && !(await isAllowedScanAuthRequest(requestUrl, assertSafeUrl))) {
-      return route.abort('blockedbyclient').catch(() => {});
     }
     return route.continue().catch(() => {});
   });
@@ -2375,13 +2347,6 @@ function isRenderableTextContentType(contentType) {
 }
 
 function getImageCaptureSkipReason(node) {
-  if (node?.authPreviewUnavailable) {
-    return {
-      status: 'not_eligible',
-      code: 'authenticated_page',
-      reason: 'Preview unavailable for pages requiring login',
-    };
-  }
   const eligibility = getImageCaptureEligibility(node);
   if (!eligibility.eligible) {
     return {
@@ -3196,7 +3161,7 @@ const SCAN_AUTH_SESSION_TTL_MS = Math.max(
 );
 const SCAN_AUTH_PRECHECK_MAX_PAGES = Math.max(
   1,
-  Math.min(25, Number(process.env.SCAN_AUTH_PRECHECK_MAX_PAGES || 25))
+  Math.min(25, Number(process.env.SCAN_AUTH_PRECHECK_MAX_PAGES || 8))
 );
 const SCAN_AUTH_PRECHECK_MAX_DEPTH = Math.max(
   1,
@@ -3207,20 +3172,6 @@ const SCAN_AUTH_FEATURE_ENABLED = parseEnvBool(process.env.SCAN_AUTH_FEATURE_ENA
 const SCAN_AUTH_INTERACTIVE_SUPPORTED = SCAN_AUTH_FEATURE_ENABLED;
 const SCAN_AUTH_VIEWPORT = { width: 1365, height: 900 };
 const scanAuthSessions = new Map();
-const scanAuthStateOwners = new WeakMap();
-const scanAuthContextOwners = new WeakMap();
-let scanAuthProxyPromise = null;
-
-function getScanAuthProxyOptions() {
-  if (!scanAuthProxyPromise) {
-    scanAuthProxyPromise = createScanAuthProxy({ allowPrivateNetworks: ALLOW_PRIVATE_NETWORKS }).start()
-      .catch((error) => {
-        scanAuthProxyPromise = null;
-        throw error;
-      });
-  }
-  return scanAuthProxyPromise;
-}
 
 function getScanAuthOwnerKey(req) {
   return req.user?.id
@@ -3236,45 +3187,28 @@ function normalizePlaywrightStorageState(value) {
   };
 }
 
-function createScanAuthSession({ safeUrl, req }) {
-  cleanupExpiredScanAuthSessions();
-  const ownerKey = getScanAuthOwnerKey(req);
-  const ownerSessions = Array.from(scanAuthSessions.values())
-    .filter((session) => session.ownerKey === ownerKey)
-    .sort((a, b) => a.createdAt - b.createdAt);
-  while (ownerSessions.length >= 2) {
-    const unused = ownerSessions.find((session) => !session.jobId);
-    if (!unused) throw new Error('Two authenticated scans are already running. Try again after one finishes.');
-    closeScanAuthSession(unused);
-    scanAuthSessions.delete(unused.id);
-    ownerSessions.splice(ownerSessions.indexOf(unused), 1);
-  }
+function createScanAuthSession({ safeUrl, req, storageState = null }) {
   const scope = createScanScope(safeUrl, false);
   const now = Date.now();
   const id = crypto.randomBytes(18).toString('hex');
+  const normalizedStorageState = normalizePlaywrightStorageState(storageState);
   const session = {
     id,
-    ownerKey,
+    ownerKey: getScanAuthOwnerKey(req),
     seedUrl: safeUrl,
     baseHost: scope.baseHost,
-    rootDomain: scope.rootDomain,
     origin: scope.origin,
     createdAt: now,
     expiresAt: now + SCAN_AUTH_SESSION_TTL_MS,
-    storageState: null,
-    password: null,
-    passwordAttempts: new Set(),
-    passwordQueue: Promise.resolve(),
-    scanContexts: new Set(),
-    status: 'pending',
+    storageState: normalizedStorageState,
+    status: normalizedStorageState ? 'ready' : 'pending',
     pageUrl: safeUrl,
-    sampleUrls: [],
   };
   scanAuthSessions.set(id, session);
   return session;
 }
 
-function closeScanAuthBrowser(session) {
+function closeScanAuthSession(session) {
   if (!session) return;
   const context = session.browserContext;
   session.page = null;
@@ -3286,29 +3220,22 @@ function closeScanAuthBrowser(session) {
   }
 }
 
-function closeScanAuthSession(session) {
-  if (!session) return;
-  session.password = null;
-  session.storageState = null;
-  session.passwordAttempts.clear();
-  closeScanAuthBrowser(session);
-  session.scanContexts.forEach((context) => context.close().catch(() => {}));
-  session.scanContexts.clear();
-}
-
 function cleanupExpiredScanAuthSessions() {
   const now = Date.now();
   scanAuthSessions.forEach((session, id) => {
-    if (isScanAuthSessionExpired(session, now)) {
+    if (!session || session.expiresAt <= now) {
       closeScanAuthSession(session);
       scanAuthSessions.delete(id);
     }
   });
 }
 
-if (SCAN_AUTH_FEATURE_ENABLED) {
-  const timer = setInterval(cleanupExpiredScanAuthSessions, 60 * 1000);
-  timer.unref?.();
+function isHostnameInAuthScope(hostname, session) {
+  const normalizedHost = normalizeHost(hostname);
+  const baseHost = normalizeHost(session?.baseHost || '');
+  return Boolean(normalizedHost && baseHost && (
+    normalizedHost === baseHost || normalizedHost.endsWith(`.${baseHost}`)
+  ));
 }
 
 function getScanAuthSessionForRequest(req, sessionId, safeUrl = null) {
@@ -3337,20 +3264,10 @@ function getReadyScanAuthStorageStateForJob({ sessionId, ownerKey, safeUrl }) {
   return session.storageState;
 }
 
-function getPublicScanOptions(options) {
-  const { authSessionStorageState, authSessionId, ...publicOptions } =
-    options && typeof options === 'object' && !Array.isArray(options) ? options : {};
-  return publicOptions;
-}
-
-async function createAuthenticatedBrowserContext(storageState, viewport = { width: 1365, height: 900 }, session = null) {
+async function createAuthenticatedBrowserContext(storageState, viewport = { width: 1365, height: 900 }) {
   const browserInstance = await getBrowser();
-  const proxy = await getScanAuthProxyOptions();
-  const context = await browserInstance.newContext({
+  return browserInstance.newContext({
     ...(storageState ? { storageState } : {}),
-    proxy,
-    acceptDownloads: false,
-    serviceWorkers: 'block',
     viewport,
     userAgent: SCREENSHOT_USER_AGENTS[0],
     extraHTTPHeaders: {
@@ -3358,41 +3275,26 @@ async function createAuthenticatedBrowserContext(storageState, viewport = { widt
       'Accept-Language': 'en-US,en;q=0.5',
     },
   });
-  try {
-    await installScanAuthNetworkGuard(context, assertSafeUrl);
-    if (session) {
-      scanAuthContextOwners.set(context, session);
-      session.scanContexts.add(context);
-      context.on('close', () => session.scanContexts.delete(context));
-    }
-    return context;
-  } catch (error) {
-    await context.close().catch(() => {});
-    throw error;
-  }
 }
 
 async function startInteractiveScanAuthSession(session) {
   if (!session || session.status === 'ready') return session;
-  const context = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT, session);
-  session.browserContext = context;
-  context.on('page', async (newPage) => {
-    const opener = await newPage.opener().catch(() => null);
-    if (!opener) return;
+  const context = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT);
+  context.on('page', (newPage) => {
     session.page = newPage;
     newPage.bringToFront().catch(() => {});
-    if (newPage.url() !== 'about:blank') session.pageUrl = newPage.url();
+    session.pageUrl = newPage.url() || session.pageUrl;
   });
   const page = await context.newPage();
+  session.browserContext = context;
   session.page = page;
   session.status = 'interactive';
   try {
-    await page.goto(session.sampleUrls[0] || session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    await page.goto(session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
   } catch (error) {
     session.lastError = error.message || 'Target-site login page did not finish loading';
   }
   session.pageUrl = page.url();
-  session.simplePasswordGate = await hasSimplePasswordGate(page, session.origin);
   return session;
 }
 
@@ -3402,13 +3304,12 @@ async function getInteractiveScanAuthPage(req, sessionId) {
   if (!session.browserContext || !session.page || session.page.isClosed()) {
     try {
       if (!session.browserContext) {
-        session.browserContext = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT, session);
+        session.browserContext = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT);
       }
       const page = await session.browserContext.newPage();
       session.page = page;
       await page.goto(session.pageUrl || session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
       session.pageUrl = page.url();
-      session.simplePasswordGate = await hasSimplePasswordGate(page, session.origin);
     } catch (error) {
       session.lastError = error.message || 'Target-site login browser closed';
       return null;
@@ -4309,49 +4210,23 @@ async function fetchPage(url, extraHeaders = {}, timeoutMs = 20000) {
   };
 }
 
-async function fetchPageWithBrowserContext(context, url, capturePage = null) {
+async function fetchPageWithBrowserContext(context, url) {
   const startedAt = Date.now();
   let page = null;
   try {
     page = await context.newPage();
     page.setDefaultTimeout(20000);
     page.setDefaultNavigationTimeout(20000);
-    let response = await page.goto(url, {
+    const response = await page.goto(url, {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
-    const session = scanAuthContextOwners.get(context);
-    if (session?.password && !isScanAuthSessionExpired(session)
-      && new URL(url).origin === session.origin
-      && !session.passwordAttempts.has(url)
-      && await hasSimplePasswordGate(page, session.origin)
-      && classifyScanResponse({ html: await page.content(), status: response?.status(), url, finalUrl: page.url() }).isAuthStatus) {
-      // Some sites replace one shared cookie with the full list of unlocked pages.
-      // Parallel submissions can overwrite each other's newly granted access.
-      const unlock = session.passwordQueue.then(async () => {
-        if (scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session) || !session.password) {
-          throw Object.assign(new Error('The temporary login expired. Log in again before scanning.'), { status: 410 });
-        }
-        if (session.passwordAttempts.has(url)) return;
-        session.passwordAttempts.add(url);
-        try {
-          response = await submitSimpleScanPassword(page, session.password, session.origin);
-          // A successful login may be reused again if the site later drops access.
-          session.passwordAttempts.delete(url);
-        } catch (error) {
-          if (error.code !== 'scan_auth_password_rejected' && error.code !== 'scan_auth_browser_required') throw error;
-        }
-      });
-      session.passwordQueue = unlock.catch(() => {});
-      await unlock;
-    }
     const html = await page.content();
     if (Buffer.byteLength(String(html || ''), 'utf8') > SCAN_HTML_RESPONSE_MAX_BYTES) {
       throw new Error('Scan page response too large');
     }
     const finalUrl = normalizeUrl(page.url() || response?.url?.() || url);
-    if (capturePage) await capturePage(page, { html, status: response?.status(), finalUrl });
     return {
       html,
       status: response?.status?.() || 0,
@@ -5038,11 +4913,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const normalizeUrl = (raw) => normalizeScanRedirectUrl(raw, transportUpgrade);
   const requestedSeedUrl = normalizeUrl(startUrl);
   const authStorageState = normalizePlaywrightStorageState(options.authSessionStorageState);
-  const authSession = options.authSessionStorageState && scanAuthStateOwners.get(options.authSessionStorageState);
   const authContext = authStorageState
-    ? await createAuthenticatedBrowserContext(authStorageState, SCAN_AUTH_VIEWPORT, authSession)
+    ? await createAuthenticatedBrowserContext(authStorageState)
     : null;
-  if (authSession && options._authenticatedCapture) authSession.captureContext = authContext;
   let prefetchedRoot = null;
   // Resolve HTTP transport before initializing any discovery queues or scope.
   // Reuse the response when crawling the root so it consumes one page allowance.
@@ -8694,8 +8567,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     : null;
   const blockedSections = Array.from(pageMap.values())
     .filter((meta) => (
-      meta?.authRequired
-      ||
       meta?.isBlocked
       || meta?.isChallengePage
       || meta?.scanStatus === 'scan_limited'
@@ -8703,17 +8574,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     .map((meta) => ({
       url: normalizeUrl(meta.url || meta.finalUrl),
       status: Number(meta.httpStatus || 0) || null,
-      reason: meta.authRequired ? 'auth_required' : (meta.blockedReason || meta.scanStatus || 'blocked'),
+      reason: meta.blockedReason || meta.scanStatus || 'blocked',
     }))
     .filter((entry) => entry.url);
   if (
     blockedSections.length > 0
     && !targetedGroupCapture
-    && !partialReason
+    && partialReason !== 'stopped_by_user'
+    && partialReason !== 'entitlement_cap'
+    && partialReason !== 'scan_discovery_cap'
+    && partialReason !== 'root_discovery_failed'
   ) {
-    partialReason = blockedSections.some((section) => section.reason === 'auth_required')
-      ? 'auth_required'
-      : 'blocked_sections';
+    partialReason = 'blocked_sections';
   }
 
   const result = {
@@ -8764,7 +8636,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     ...scanDiagnostics.phaseTimingsMs,
   });
 
-  if (authContext && !options._authenticatedCapture) {
+  if (authContext) {
     await authContext.close().catch(() => {});
   }
   await Promise.all(
@@ -9013,9 +8885,6 @@ async function captureScreenshotInWorkspace(
       : { width: SCREENSHOT_FULL_VIEWPORT_WIDTH, height: SCREENSHOT_FULL_VIEWPORT_HEIGHT };
     const context = await b.newContext({
       ...(options?.storageState ? { storageState: options.storageState } : {}),
-      ...(options?.storageState ? { proxy: await getScanAuthProxyOptions() } : {}),
-      ...(options?.storageState ? { serviceWorkers: 'block' } : {}),
-      ...(options?.storageState ? { acceptDownloads: false } : {}),
       userAgent: ua,
       viewport,
       deviceScaleFactor: normalizedType === SCREENSHOT_TYPES.full
@@ -9038,7 +8907,6 @@ async function captureScreenshotInWorkspace(
     };
 
     try {
-      if (options?.storageState) await installScanAuthNetworkGuard(context, assertSafeUrl);
       if (abortSignal) {
         abortSignal.addEventListener('abort', abortActiveCapture, { once: true });
       }
@@ -9047,7 +8915,7 @@ async function captureScreenshotInWorkspace(
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       });
       page = await context.newPage();
-      await installScreenshotRequestFilters(page, Boolean(options?.storageState));
+      await installScreenshotRequestFilters(page);
 
       let lastError = null;
       const defaultCaptureTimeoutMs = normalizedType === SCREENSHOT_TYPES.thumb
@@ -9428,13 +9296,11 @@ async function processJob(job) {
         })
         : null;
       if (payload.options?.authSessionId && !authSessionStorageState) {
-        throw new Error('The temporary login was lost. Log in again and retry this scan.');
+        throw new Error('Authenticated scan session expired before the scan started');
       }
       const progressCb = (progress) => {
-        const phaseChanged = progress.phase !== progressState.lastProgress?.phase;
         const nextProgress = {
           ...progress,
-          ...(payload.authenticatedCaptureType && progress.final ? { final: false } : {}),
           sequence: ++progressState.sequence,
         };
         progressState.lastProgress = nextProgress;
@@ -9442,7 +9308,7 @@ async function processJob(job) {
         const scanned = Math.max(0, Number(nextProgress.scanned || 0) || 0);
         const mapped = Math.max(0, Number(nextProgress.mapped || 0) || 0);
         const mappedChanged = mapped !== progressState.lastMapped;
-        const forceUpdate = nextProgress?.final === true || phaseChanged;
+        const forceUpdate = nextProgress?.final === true;
         if (!forceUpdate && scanned - progressState.lastScanned < 5 && !mappedChanged && now - progressState.lastUpdate < 500) {
           return;
         }
@@ -9463,7 +9329,6 @@ async function processJob(job) {
         {
           ...(payload.options || {}),
           ...(authSessionStorageState ? { authSessionStorageState } : {}),
-          _authenticatedCapture: Boolean(payload.authenticatedCaptureType && authSessionStorageState),
           _entitlementCappedScan: Boolean(payload.entitlement?.capped),
         },
         progressCb,
@@ -9471,14 +9336,6 @@ async function processJob(job) {
       );
 
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
-
-      if (payload.options?.authSessionId && !getReadyScanAuthStorageStateForJob({
-        sessionId: payload.options.authSessionId,
-        ownerKey: payload.authSessionOwnerKey,
-        safeUrl: payload.url,
-      })) {
-        throw new Error('The temporary login expired during this scan. Log in again and retry.');
-      }
 
       await progressState.writePromise;
       if (progressState.lastProgress) {
@@ -9501,60 +9358,6 @@ async function processJob(job) {
       if (failureError) {
         await markJobFailed(jobId, failureError);
         return;
-      }
-      if (payload.authenticatedCaptureType && authSessionStorageState) {
-        progressCb({ ...(progressState.lastProgress || {}), final: false, phase: 'authenticated_capture' });
-        const session = scanAuthSessions.get(payload.options.authSessionId);
-        const store = getPrivateScanCaptureStore();
-        const verifySession = async () => {
-          if (!session || scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session)) {
-            throw Object.assign(new Error('The temporary login expired before capture finished. Log in again.'), { code: 'scan_auth_expired' });
-          }
-          const status = await readJobStatus();
-          if (status === JOB_STATUS.canceled) throw Object.assign(new Error('Authenticated capture canceled.'), { code: 'scan_auth_canceled' });
-          return status === JOB_STATUS.stopping;
-        };
-        const summary = await captureAuthenticatedScanResult({
-          result, origin: session.origin, captureType: payload.authenticatedCaptureType,
-          limit: payload.authenticatedCaptureLimit, shouldStop: verifySession,
-          capture: async (url) => {
-            let asset;
-            let captureStage = 'navigation';
-            try {
-            await fetchPageWithBrowserContext(session.captureContext, await assertSafeUrl(url), async (page, response) => {
-              captureStage = 'access_verification';
-              await verifySession();
-              if (new URL(response.finalUrl).origin !== session.origin || response.status >= 400
-                || classifyScanResponse({ ...response, url }).isAuthStatus || await hasSimplePasswordGate(page, session.origin)) throw new Error('Page remains protected');
-              await page.setViewportSize({ width: SCREENSHOT_THUMB_VIEWPORT_WIDTH, height: SCREENSHOT_THUMB_VIEWPORT_HEIGHT });
-              captureStage = 'page_preparation';
-              await dismissScreenshotObstructions(page);
-              await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE });
-              await page.evaluate(() => Promise.race([
-                document.fonts?.ready || Promise.resolve(),
-                new Promise((resolve) => setTimeout(resolve, 1500)),
-              ]));
-              if (payload.authenticatedCaptureType === 'full' && await page.evaluate(() => document.documentElement.scrollHeight) > SCREENSHOT_FULL_MAX_HEIGHT) throw new Error('Full capture exceeds the height limit');
-              captureStage = 'screenshot';
-              const buffer = await page.screenshot({ type: 'jpeg', quality: SCREENSHOT_FULL_JPEG_QUALITY,
-                fullPage: payload.authenticatedCaptureType === 'full', animations: 'disabled', timeout: 15000 });
-              await verifySession();
-              captureStage = 'private_storage';
-              asset = await store.save({ ownerKey: session.ownerKey, buffer });
-            });
-            return asset;
-            } catch (error) {
-              error.captureStage = captureStage;
-              error.captureReason = String(error.message || '').match(/net::ERR_[A-Z_]+/)?.[0]
-                || (/Target.*closed|browser.*closed|context.*closed/i.test(error.message || '') ? 'browser_closed'
-                  : error.name === 'TimeoutError' ? 'timeout' : 'failed');
-              throw error;
-            }
-          },
-        });
-        await verifySession();
-        await debitImageCaptureCreditsForJobAsync({ jobId, jobUserId: job.user_id, result: summary });
-        await progressState.writePromise;
       }
       await debitScanPagesForJobAsync({
         jobId,
@@ -9612,10 +9415,8 @@ async function processJob(job) {
   } finally {
     if (payload.options?.authSessionId) {
       const session = scanAuthSessions.get(payload.options.authSessionId);
-      if (session?.jobId === jobId) {
-        closeScanAuthSession(session);
-        scanAuthSessions.delete(payload.options.authSessionId);
-      }
+      closeScanAuthSession(session);
+      scanAuthSessions.delete(payload.options.authSessionId);
     }
     activeJobIds.delete(jobId);
   }
@@ -9863,8 +9664,8 @@ app.post('/scan-auth/precheck', authMiddleware, requireAuth, scanLimiter, requir
   }
 });
 
-app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requireApiKey, async (req, res) => {
-  const { url, sampleUrls } = req.body || {};
+app.post('/scan-auth/sessions', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
+  const { url, storageState } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
   if (!SCAN_AUTH_FEATURE_ENABLED) {
     return res.status(503).json({
@@ -9873,15 +9674,9 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
     });
   }
 
-  let session = null;
   try {
     const safeUrl = await assertSafeUrl(url);
-    session = createScanAuthSession({ safeUrl, req });
-    const samples = Array.isArray(sampleUrls) ? sampleUrls.slice(0, 5) : [];
-    session.sampleUrls = (await Promise.all(samples.map(async (sampleUrl) => {
-      const safeSampleUrl = await assertSafeUrl(sampleUrl);
-      return isHostnameInAuthScope(new URL(safeSampleUrl).hostname, session) ? safeSampleUrl : null;
-    }))).filter(Boolean);
+    const session = createScanAuthSession({ safeUrl, req, storageState });
     if (session.status !== 'ready' && SCAN_AUTH_INTERACTIVE_SUPPORTED) {
       await startInteractiveScanAuthSession(session);
     }
@@ -9895,16 +9690,11 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
       origin: session.origin,
       interactiveSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
       loginUrl: session.pageUrl || safeUrl,
-      simplePasswordGate: Boolean(session.simplePasswordGate),
       message: session.status === 'ready'
         ? 'Authenticated scan session ready'
         : 'Log in inside the Vellic browser, then continue the scan',
     });
   } catch (error) {
-    if (session) {
-      closeScanAuthSession(session);
-      scanAuthSessions.delete(session.id);
-    }
     const message = error.message || 'Failed to create authenticated scan session';
     const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
       ? 400
@@ -9922,7 +9712,6 @@ app.get('/scan-auth/sessions/:id', authMiddleware, requireAuth, requireApiKey, (
     expiresAt: new Date(session.expiresAt).toISOString(),
     origin: session.origin,
     pageUrl: session.pageUrl || session.seedUrl,
-    simplePasswordGate: Boolean(session.simplePasswordGate),
     interactiveSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
     ready: session.status === 'ready' && !!session.storageState,
   });
@@ -9966,20 +9755,10 @@ app.get('/scan-auth/sessions/:id/screenshot', authMiddleware, requireAuth, requi
 
 app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const target = await getInteractiveScanAuthPage(req, req.params.id);
-  if (!target) return res.status(410).json({ error: 'This login session expired. Close this dialog and start the scan again.', code: 'scan_auth_expired' });
+  if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
   const { action, x, y, text, key } = req.body || {};
   try {
-    if (action === 'password') {
-      const password = String(text || '');
-      if (!password) return res.status(400).json({ error: 'Enter a site password.' });
-      if (password.length > 2048) return res.status(400).json({ error: 'This password is too long.' });
-      await submitSimpleScanPassword(target.page, password, target.session.origin);
-      if (scanAuthSessions.get(target.session.id) !== target.session || isScanAuthSessionExpired(target.session)) {
-        return res.status(410).json({ error: 'This login session expired. Start the scan again.', code: 'scan_auth_expired' });
-      }
-      target.session.password = password;
-      target.session.passwordAttempts.clear();
-    } else if (action === 'click') {
+    if (action === 'click') {
       await target.page.mouse.click(Number(x), Number(y));
     } else if (action === 'type') {
       await target.page.keyboard.type(String(text || ''), { delay: 10 });
@@ -9989,66 +9768,30 @@ app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireA
       return res.status(400).json({ error: 'Unsupported login action' });
     }
     target.session.pageUrl = target.page.url();
-    target.session.simplePasswordGate = await hasSimplePasswordGate(target.page, target.session.origin);
-    return res.json({
-      success: true,
-      pageUrl: target.session.pageUrl,
-      simplePasswordGate: Boolean(target.session.simplePasswordGate),
-    });
+    return res.json({ success: true, pageUrl: target.session.pageUrl });
   } catch (error) {
-    const status = error.code === 'scan_auth_login_timeout' ? 504 : error.code?.startsWith('scan_auth_') ? 409 : 500;
-    return res.status(status).json({
-      error: error.code?.startsWith('scan_auth_') ? error.message : 'Could not connect to this site. Try again or continue without login.',
-      code: error.code?.startsWith('scan_auth_') ? error.code : 'scan_auth_connection_failed',
-    });
+    return res.status(500).json({ error: error.message || 'Failed to control login browser' });
   }
 });
 
 app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const session = getScanAuthSessionForRequest(req, req.params.id);
   if (!session || !session.browserContext) {
-    return res.status(410).json({ error: 'This login session expired. Close this dialog and start the scan again.', code: 'scan_auth_expired' });
+    return res.status(404).json({ error: 'Interactive login session not found' });
   }
   try {
-    if (!session.sampleUrls.length) {
-      return res.status(400).json({ error: 'No protected page was selected to verify this login' });
-    }
-    let unlocked = 0;
-    for (const sampleUrl of session.sampleUrls) {
-      try {
-        const page = await fetchPageWithBrowserContext(session.browserContext, sampleUrl);
-        const classification = classifyScanResponse({
-          html: page.html,
-          status: page.status,
-          url: sampleUrl,
-          finalUrl: page.finalUrl || sampleUrl,
-          headers: page.headers || {},
-        });
-        if (page.status >= 200 && page.status < 400 && classification.scanStatus === 'active') unlocked += 1;
-      } catch {
-        // One unreachable sample must not hide other pages that did unlock.
-      }
-    }
-    if (!unlocked) {
-      return res.status(409).json({ error: 'Access could not be confirmed. Try again or continue without login.', code: 'scan_auth_unverified' });
-    }
-    if (scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session)) {
-      return res.status(410).json({ error: 'This login session expired. Start the scan again.', code: 'scan_auth_expired' });
-    }
-    session.storageState = scopeScanAuthStorageState(await session.browserContext.storageState(), session);
-    scanAuthStateOwners.set(session.storageState, session);
+    session.storageState = normalizePlaywrightStorageState(await session.browserContext.storageState());
     session.status = 'ready';
     session.pageUrl = session.page?.url?.() || session.pageUrl || session.seedUrl;
-    closeScanAuthBrowser(session);
+    closeScanAuthSession(session);
     return res.json({
       sessionId: session.id,
       status: session.status,
       ready: true,
-      verifiedPages: unlocked,
       pageUrl: session.pageUrl,
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Could not verify access to this site. Try again or continue without login.', code: 'scan_auth_connection_failed' });
+    return res.status(500).json({ error: error.message || 'Failed to finish target-site login' });
   }
 });
 
@@ -10076,11 +9819,7 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
     const safeUrl = await assertSafeUrl(url);
     const maxPagesSafe = getRequestedScanPageLimit(maxPages);
     const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
-    const requestedAuthSessionId = authSessionId || options?.authSessionId;
-    const authSessionStorageState = getReadyScanAuthStorageState(req, requestedAuthSessionId, safeUrl);
-    if (requestedAuthSessionId && !authSessionStorageState) {
-      return res.status(410).json({ error: 'The temporary login expired. Log in again before scanning.' });
-    }
+    const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId || options?.authSessionId, safeUrl);
     const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
     if (!scanEntitlement.allowed) {
       return sendEntitlementError(res, scanEntitlement.entitlement);
@@ -10099,7 +9838,7 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
       entitledMaxPages,
       maxDepthSafe,
       {
-        ...getPublicScanOptions(options),
+        ...(options || {}),
         ...(authSessionStorageState ? { authSessionStorageState } : {}),
         _entitlementCappedScan: Boolean(scanEntitlement.entitlementPayload.capped),
       }
@@ -10159,12 +9898,6 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
     parsedOptions = {};
   }
 
-  const requestedAuthSessionId = authSessionId || parsedOptions?.authSessionId;
-  const authSessionStorageState = getReadyScanAuthStorageState(req, requestedAuthSessionId, safeUrl);
-  if (requestedAuthSessionId && !authSessionStorageState) {
-    return res.status(410).json({ error: 'The temporary login expired. Log in again before scanning.' });
-  }
-
   const maxPagesSafe = getRequestedScanPageLimit(maxPages);
   const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
   let scanEntitlement;
@@ -10214,6 +9947,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
   }, 15000);
 
   try {
+    const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId || parsedOptions?.authSessionId, safeUrl);
     let lastScanProgress = null;
 
     recordUsage(req, 'scan_stream', 1, {
@@ -10228,7 +9962,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
       entitledMaxPages,
       maxDepthSafe,
       {
-        ...getPublicScanOptions(parsedOptions),
+        ...parsedOptions,
         ...(authSessionStorageState ? { authSessionStorageState } : {}),
         _entitlementCappedScan: Boolean(scanEntitlement.entitlementPayload.capped),
       },
@@ -10281,7 +10015,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
 
 // Background scan jobs
 app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan_job'), async (req, res) => {
-  const { url, maxPages, maxDepth, options, authSessionId, authenticatedCaptureType } = req.body || {};
+  const { url, maxPages, maxDepth, options, authSessionId } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   try {
@@ -10289,28 +10023,8 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
     const maxPagesSafe = getRequestedScanPageLimit(maxPages);
     const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
     const readyAuthSession = getScanAuthSessionForRequest(req, authSessionId || options?.authSessionId, safeUrl);
-    if ((authSessionId || options?.authSessionId) && !SCAN_AUTH_FEATURE_ENABLED) {
-      return res.status(503).json({ error: 'Authenticated scanning is not enabled', code: 'scan_auth_disabled' });
-    }
     if ((authSessionId || options?.authSessionId) && (!readyAuthSession || readyAuthSession.status !== 'ready')) {
       return res.status(400).json({ error: 'Authenticated scan session is missing or expired' });
-    }
-    if (readyAuthSession && !JOB_WORKER_TYPES.includes(JOB_TYPES.scan)) {
-      return res.status(503).json({ error: 'Authenticated scanning is unavailable on this server' });
-    }
-    let authenticatedCaptureLimit = 0;
-    if (authenticatedCaptureType) {
-      if (!readyAuthSession || !['thumb', 'full'].includes(authenticatedCaptureType)) {
-        return res.status(400).json({ error: 'A temporary login and valid capture type are required.' });
-      }
-      if (process.env.DISABLE_SCREENSHOTS === 'true') return res.status(503).json({ error: 'Screenshots are disabled.' });
-      try { getPrivateScanCaptureStore(); } catch {
-        return res.status(503).json({ error: 'Private screenshot storage is not configured.' });
-      }
-      const cost = getScreenshotCreditCost({ type: authenticatedCaptureType });
-      const budget = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.screenshotCapture, { credits: cost });
-      if (!budget) return;
-      authenticatedCaptureLimit = budget.entitlement.unlimited ? 100 : Math.min(100, Math.floor(budget.entitlement.remaining / cost));
     }
     const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
     if (!scanEntitlement.allowed) {
@@ -10337,9 +10051,6 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
         },
       });
     }
-    if (readyAuthSession?.jobId) {
-      return res.status(409).json({ error: 'This login is already in use by a scan. Log in again for another scan.' });
-    }
     const jobAccessToken = crypto.randomBytes(24).toString('hex');
 
     const jobId = await createJob({
@@ -10349,24 +10060,16 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
         maxPages: entitledMaxPages,
         maxDepth: maxDepthSafe,
         options: {
-          ...getPublicScanOptions(options),
+          ...(options || {}),
           ...(readyAuthSession ? { authSessionId: readyAuthSession.id } : {}),
         },
         authSessionOwnerKey: readyAuthSession?.ownerKey || null,
-        authenticatedCaptureType: authenticatedCaptureType || null,
-        authenticatedCaptureLimit,
         accessToken: jobAccessToken,
         entitlement: entitlementPayload,
         idempotencyKey,
       },
       req,
-      status: readyAuthSession ? JOB_STATUS.running : JOB_STATUS.queued,
     });
-    if (readyAuthSession) {
-      readyAuthSession.jobId = jobId;
-      readyAuthSession.expiresAt = Date.now() + SCAN_AUTH_SESSION_TTL_MS;
-      scheduleClaimedJob(jobId);
-    }
 
     recordUsage(req, 'scan_job', 1, {
       host: new URL(safeUrl).hostname,
@@ -10433,12 +10136,6 @@ app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res
     return res.status(403).json({ error: 'This scan is no longer available in this browser session' });
   }
   await markJobCanceled(id);
-  const payload = parseJsonSafe((await getJobRow(id))?.payload) || {};
-  const session = scanAuthSessions.get(payload.options?.authSessionId);
-  if (session?.jobId === id) {
-    closeScanAuthSession(session);
-    scanAuthSessions.delete(session.id);
-  }
   res.json({ success: true });
 });
 
@@ -10798,10 +10495,6 @@ app.get('/screenshot', authMiddleware, requireAuth, requireApiKey, enforceUsageL
   } catch (e) {
     return res.status(400).json({ error: e.message || 'Invalid url' });
   }
-  const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId, safeUrl);
-  if (authSessionId && !authSessionStorageState) {
-    return res.status(410).json({ error: 'The temporary login expired. Log in again before capturing this page.' });
-  }
   const screenshotCredits = getScreenshotCreditCost({ type: screenshotType });
   const screenshotEntitlement = await requireAccountActionAsync(
     req,
@@ -10829,6 +10522,7 @@ app.get('/screenshot', authMiddleware, requireAuth, requireApiKey, enforceUsageL
   });
 
   try {
+    const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId, safeUrl);
     const result = await captureScreenshot(safeUrl, screenshotType, {
       signal: abortController.signal,
       ...(authSessionStorageState ? { storageState: authSessionStorageState } : {}),

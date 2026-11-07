@@ -2,7 +2,6 @@ import React, { useEffect, useRef } from 'react';
 import { Loader2, X } from 'lucide-react';
 
 import IconButton from '../ui/IconButton';
-import CaptureImage from '../ui/CaptureImage';
 
 const ImageOverlay = ({ imageUrl, loading, onClose, onLoad, onError }) => {
   const containerRef = useRef(null);
@@ -47,7 +46,7 @@ const ImageOverlay = ({ imageUrl, loading, onClose, onLoad, onError }) => {
             <span>Loading screenshot...</span>
           </div>
         )}
-        <CaptureImage
+        <img
           key={imageUrl}
           src={imageUrl}
           alt="Full page view"

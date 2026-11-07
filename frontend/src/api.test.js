@@ -1,4 +1,4 @@
-import { getScanJob, fetchPrivateScanCapture } from './api';
+import { getScanJob } from './api';
 
 describe('scan job API timeouts', () => {
   const originalFetch = global.fetch;
@@ -22,13 +22,4 @@ describe('scan job API timeouts', () => {
     await vi.advanceTimersByTimeAsync(25);
     await expectation;
   });
-});
-
-test('private capture requests never send credentials to an arbitrary URL', async () => {
-  const original = global.fetch;
-  global.fetch = vi.fn();
-  try {
-    await expect(fetchPrivateScanCapture('https://other.example/private.png')).rejects.toThrow('Invalid private capture');
-    expect(global.fetch).not.toHaveBeenCalled();
-  } finally { global.fetch = original; }
 });
