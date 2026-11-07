@@ -106,6 +106,8 @@ const CanvasToolbar = ({
   legendMenuRef,
   legendPanel,
   onToggleImageMenu,
+  onRescanAuthenticated,
+  hasPublicCapturePages = true,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
   onUpdateCapturedThumbnails,
@@ -165,15 +167,15 @@ const CanvasToolbar = ({
   const selectionRequiredReason = imageCaptureDisabledReason || (!hasSelection ? 'Select pages first' : undefined);
   const canUseImageCaptureTools = !!canUseImageTools;
   const showVisibilitySection = hasAnyThumbnails && !!onToggleThumbnails;
-  const showVisibleAreaAllAction = canUseImageCaptureTools && !!onGetThumbnailsAll;
-  const showVisibleAreaSelectedAction = canUseImageCaptureTools && !!onGetThumbnailsSelected;
-  const showVisibleAreaUpdateAction = canUseImageCaptureTools && hasDownloadableThumbnails && !!onUpdateCapturedThumbnails;
+  const showVisibleAreaAllAction = canUseImageCaptureTools && hasPublicCapturePages && !!onGetThumbnailsAll;
+  const showVisibleAreaSelectedAction = canUseImageCaptureTools && hasPublicCapturePages && !!onGetThumbnailsSelected;
+  const showVisibleAreaUpdateAction = canUseImageCaptureTools && hasPublicCapturePages && hasDownloadableThumbnails && !!onUpdateCapturedThumbnails;
   const showVisibleAreaSection = showVisibleAreaAllAction
     || showVisibleAreaSelectedAction
     || showVisibleAreaUpdateAction;
-  const showFullPageAllAction = canUseImageCaptureTools && !!onGetFullScreenshotsAll;
-  const showFullPageSelectedAction = canUseImageCaptureTools && !!onGetFullScreenshotsSelected;
-  const showFullPageUpdateAction = canUseImageCaptureTools && hasFullScreenshotAssets && !!onUpdateCapturedFullScreenshots;
+  const showFullPageAllAction = canUseImageCaptureTools && hasPublicCapturePages && !!onGetFullScreenshotsAll;
+  const showFullPageSelectedAction = canUseImageCaptureTools && hasPublicCapturePages && !!onGetFullScreenshotsSelected;
+  const showFullPageUpdateAction = canUseImageCaptureTools && hasPublicCapturePages && hasFullScreenshotAssets && !!onUpdateCapturedFullScreenshots;
   const showFullPageSection = showFullPageAllAction
     || showFullPageSelectedAction
     || showFullPageUpdateAction;
@@ -182,6 +184,13 @@ const CanvasToolbar = ({
   const showDownloadSelectedAction = canUseImageCaptureTools && hasSelection && hasDownloadableSelectedImages && !!onDownloadImagesSelected;
   const showDownloadSection = showDownloadAllAction || showDownloadSelectedAction;
   const imageMenuSections = [
+    canUseImageCaptureTools && onRescanAuthenticated ? {
+      key: 'authenticated',
+      content: <MenuSection>
+        <MenuSectionHeader>Password-protected pages</MenuSectionHeader>
+        <MenuItem label="Rescan with password" onClick={onRescanAuthenticated} />
+      </MenuSection>,
+    } : null,
     showVisibilitySection ? {
       key: 'visibility',
       content: (

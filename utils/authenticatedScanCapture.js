@@ -11,6 +11,7 @@ async function captureAuthenticatedScanResult({ result, origin, captureType, lim
   summary.failures = [];
   let attempted = 0;
   for (const node of nodes) {
+    node.authCaptureRequired = true;
     let sameOrigin = false;
     try { sameOrigin = new URL(node.url).origin === origin; } catch {}
     if (!sameOrigin || node.authRequired || node.isError || attempted >= limit || await shouldStop()) {
@@ -23,8 +24,8 @@ async function captureAuthenticatedScanResult({ result, origin, captureType, lim
       const asset = await capture(node.url);
       node[captureType === 'full' ? 'fullScreenshotUrl' : 'thumbnailUrl'] = asset.url;
       node.privateCaptureExpiresAt = asset.expiresAt;
-      // Display the saved image, but never refresh it through a logged-out job.
-      node.authPreviewUnavailable = true;
+      // A fresh private image is current; future captures still require login.
+      node.authPreviewUnavailable = false;
       summary.captured += 1;
     } catch (error) {
       if (error.code === 'scan_auth_expired' || error.code === 'scan_auth_canceled') throw error;

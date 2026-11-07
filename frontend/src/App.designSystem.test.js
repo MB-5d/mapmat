@@ -596,6 +596,19 @@ describe('scan config and differential rescan behavior', () => {
     }), previous)).toBe(true);
   });
 
+  test('authenticated rescan keeps edits but replaces expired thumbnails with the new capture', () => {
+    const existingRoot = { id: 'old', url: 'https://example.com', title: 'My title', annotations: { note: 'Keep me' }, thumbnailUrl: '/api/private-scan-captures/old.bin', children: [] };
+    const nextRoot = { id: 'new', url: 'https://example.com', title: 'Website title', thumbnailUrl: '/api/private-scan-captures/new.bin', authCaptureRequired: true, authPreviewUnavailable: false, privateCaptureExpiresAt: 12345, children: [] };
+    const { root } = mergeRescanResults({ existingRoot, existingOrphans: [], nextRoot, nextOrphans: [] });
+    expect(root.id).toBe('old');
+    expect(root.title).toBe('My title');
+    expect(root.annotations.note).toBe('Keep me');
+    expect(root.thumbnailUrl).toBe(nextRoot.thumbnailUrl);
+    expect(root.authPreviewUnavailable).toBe(false);
+    expect(root.authCaptureRequired).toBe(true);
+    expect(root.privateCaptureExpiresAt).toBe(12345);
+  });
+
   test('differential rescan preserves edited nodes and manual connection endpoints', () => {
     const existingRoot = {
       id: 'home-old',

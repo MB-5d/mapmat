@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import App, { WELCOME_MODAL_STORAGE_KEY } from './App';
 import * as api from './api';
+import { AUTHENTICATED_SCAN_ENABLED } from './utils/constants';
 import { LocaleProvider } from './contexts/LocaleContext';
 import { ROUTE_SURFACES, createAppHomeRoute } from './utils/appRoutes';
 
@@ -376,7 +377,7 @@ describe('App blank home and welcome modal', () => {
     expect(container.textContent).toContain('Create map');
   });
 
-  test('simple protected pages show a direct password field instead of a screenshot', async () => {
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('simple protected pages show a direct password field instead of a screenshot', async () => {
     suppressWelcomeModal();
     api.getMe.mockResolvedValue({ user: defaultUser });
     api.precheckScanAuth.mockResolvedValue({
@@ -406,6 +407,7 @@ describe('App blank home and welcome modal', () => {
     await click(getButton('Enter password'));
 
     expect(container.querySelector('.scan-auth-password-form input[type="password"]')).not.toBeNull();
+    expect(document.activeElement.id).toBe('scan-site-password');
     expect(container.querySelector('.scan-auth-browser-frame')).toBeNull();
     expect(getButton('Use browser sign-in instead')).toBeUndefined();
     expect(api.getScanAuthScreenshot).not.toHaveBeenCalled();
@@ -428,7 +430,7 @@ describe('App blank home and welcome modal', () => {
     expect(container.querySelector('#scan-site-password').getAttribute('aria-invalid')).toBe('true');
   });
 
-  test('unsupported browser login gives a clear limit and cleans up without showing screenshot controls', async () => {
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('unsupported browser login gives a clear limit and cleans up without showing screenshot controls', async () => {
     suppressWelcomeModal();
     api.getMe.mockResolvedValue({ user: defaultUser });
     api.precheckScanAuth.mockResolvedValue({ authRequired: true, authCount: 2, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
@@ -448,7 +450,7 @@ describe('App blank home and welcome modal', () => {
     expect(api.getScanAuthScreenshot).not.toHaveBeenCalled();
   });
 
-  test.each(['password', 'without login'])('scan limit acknowledgement survives continuing %s', async (choice) => {
+  test.runIf(AUTHENTICATED_SCAN_ENABLED).each(['password', 'without login'])('scan limit acknowledgement survives continuing %s', async (choice) => {
     suppressWelcomeModal();
     api.getMe.mockResolvedValue({ user: defaultUser });
     api.getScanEntitlementPreview.mockResolvedValue({
@@ -466,7 +468,9 @@ describe('App blank home and welcome modal', () => {
     });
     await click(getButton('Scan'));
     expect(container.textContent).toContain('Scan limits');
+    expect(api.precheckScanAuth).not.toHaveBeenCalled();
     await click(getButton('Continue'));
+    expect(api.precheckScanAuth).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain('At least 10 pages');
     if (choice === 'password') {
       await click(getButton('Enter password'));
@@ -479,9 +483,11 @@ describe('App blank home and welcome modal', () => {
     expect(container.textContent).not.toContain('Scan limits');
     expect(api.createScanJob.mock.calls[0][0].options.authenticatedPages).toBe(true);
     if (choice === 'password') expect(api.createScanJob.mock.calls[0][0].authSessionId).toBe('limit-session');
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
+    expect(api.precheckScanAuth).toHaveBeenCalledTimes(1);
   });
 
-  test('closing during password submission prevents the delayed response from starting a scan', async () => {
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('closing during password submission prevents the delayed response from starting a scan', async () => {
     suppressWelcomeModal();
     api.getMe.mockResolvedValue({ user: defaultUser });
     api.precheckScanAuth.mockResolvedValue({ authRequired: true, authCount: 2, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
@@ -508,6 +514,69 @@ describe('App blank home and welcome modal', () => {
     expect(api.completeScanAuthSession).not.toHaveBeenCalled();
     expect(api.deleteScanAuthSession).toHaveBeenCalledWith('cancel-session');
     expect(container.querySelector('#scan-site-password')).toBeNull();
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED).each(['retry', 'without login'])('failed precheck waits for an explicit %s choice', async (choice) => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockRejectedValueOnce(new Error('Unavailable'));
+    api.precheckScanAuth.mockResolvedValue({ authRequired: false });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped'), { status: 400 }));
+    await renderApp();
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
+    await click(getButton('Scan'));
+    expect(container.textContent).toContain('Could not check protected pages');
+    expect(api.createScanJob).not.toHaveBeenCalled();
+    await click(getButton(choice === 'retry' ? 'Retry check' : 'Scan without login'));
+    expect(api.createScanJob).toHaveBeenCalledTimes(1);
+    expect(api.precheckScanAuth).toHaveBeenCalledTimes(choice === 'retry' ? 2 : 1);
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('private thumbnails are opt-in with cost and expiry disclosed', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'images', status: 'interactive', simplePasswordGate: true });
+    api.sendScanAuthAction.mockResolvedValue({ success: true });
+    api.completeScanAuthSession.mockResolvedValue({ ready: true });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped'), { status: 400 }));
+    await renderApp();
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
+    await click(getButton('Scan'));
+    await click(getButton('Enter password'));
+    const checkbox = container.querySelector('.scan-auth-modal-body input[type="checkbox"]');
+    expect(checkbox.checked).toBe(false);
+    expect(container.textContent).toContain('1 screenshot credit per captured page');
+    expect(container.textContent).toContain('expire after 24 hours');
+    await click(checkbox);
+    await act(async () => { changeValue(container.querySelector('#scan-site-password'), 'test-password'); });
+    await click(getButton('Unlock and scan'));
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBe('thumb');
+  });
+
+  test.runIf(!AUTHENTICATED_SCAN_ENABLED)('disabled beta scans normally without auth requests or controls', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped'), { status: 400 }));
+    await renderApp();
+    await click(getButton('Options'));
+    expect(container.textContent).not.toContain('Authenticated pages');
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
+    await click(getButton('Scan'));
+    expect(api.precheckScanAuth).not.toHaveBeenCalled();
+    expect(api.createScanAuthSession).not.toHaveBeenCalled();
+    expect(api.createScanJob.mock.calls[0][0].options.authenticatedPages).toBe(false);
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('guests see a disabled unchecked auth option and sign-in explanation', async () => {
+    suppressWelcomeModal();
+    await renderApp();
+    await click(getButton('Options'));
+    const label = [...container.querySelectorAll('label')].find((item) => item.textContent.includes('Authenticated pages'));
+    expect(label.querySelector('input').checked).toBe(false);
+    expect(label.querySelector('input').disabled).toBe(true);
+    expect(label.textContent).toContain('Log in to Vellic');
   });
 
   test('logged-in modify opens the projects panel', async () => {

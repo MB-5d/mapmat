@@ -19,7 +19,7 @@ import Button from '../ui/Button';
 import CaptureImage from '../ui/CaptureImage';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
-import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
+import { ANNOTATION_STATUS_LABELS, AUTHENTICATED_SCAN_ENABLED, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
 
 const NODE_STATUS_BADGE_STYLE = {
   new: 'info',
@@ -146,11 +146,11 @@ const NodeCard = ({
         variant: 'file',
       };
     }
-    if (node?.authPreviewUnavailable || node?.authRequired) {
+    if (node?.authCaptureRequired || node?.authPreviewUnavailable || node?.authRequired) {
       return {
         icon: Lock,
         label: 'Login-protected page',
-        text: 'Preview unavailable in beta',
+        text: AUTHENTICATED_SCAN_ENABLED ? 'Rescan with password for a preview' : 'Private preview unavailable',
         variant: 'blocked',
       };
     }

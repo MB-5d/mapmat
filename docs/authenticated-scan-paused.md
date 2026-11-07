@@ -4,7 +4,7 @@ Authenticated page scanning is intentionally disabled by default while the beta 
 
 ## Why
 
-The temporary Playwright login flow is useful, but it is not stable enough for staging while core scan behavior is still being hardened.
+The single-password flow is isolated on `codex/authenticated-scan-beta` for validation. Staging and production remain disabled until deployment is approved. See the current [beta checks](authenticated-scan-staging-beta.md).
 
 ## What is disabled
 
@@ -26,13 +26,13 @@ Re-enable both flags together when we are ready to test this feature again.
 - One interactive login is used for one scan or rescan. The session is held only in the web process, expires 30 minutes after creation unless a scan has started, and is removed on scan completion or cancellation.
 - An authenticated job is claimed by the process holding the login. If that process restarts, the job fails and the user must log in again; sessions are not persisted or transferred to another worker.
 - Before a login is accepted, Vellic checks the protected pages found by the pre-check. Pages still requiring login are reported as a partial scan, not a complete scan.
-- Target-site cookies and local storage are limited to the scan's site scope. Google and other SSO providers can be used in the interactive browser when they permit it, but provider-specific login flows need staging trials.
+- Target-site cookies and local storage are limited to the scan's site scope. Browser/Google/SSO sign-in is deferred and its legacy controls stay hidden; this beta covers single-password gates only.
 - Temporary login and authenticated browser contexts use a credentialed local proxy that resolves and pins public IPv4 destinations, plus request and WebSocket filtering. Service workers are disabled. This mitigates DNS rebinding for proxied browser traffic but is not an operating-system network sandbox.
 - Later bulk image-capture jobs do not reuse this temporary login. The Playwright integration below captures requested private previews during the scan before cleanup. Later refresh requires a fresh authenticated rescan.
 
 Local fixture checks cover first scans, fresh-login rescans, continuing without login, partial results, cancellation, restart failure, and cookie scoping. Expiry has a boundary test, but its full 30-minute lifecycle has not been exercised in staging.
 
-Do not turn on the flags for general users until real-site Google/SSO, long-running scans, expiry, and independent security review have been completed. See [the staging beta test steps](authenticated-scan-staging-beta.md). Authenticated screenshots are deliberately deferred for this beta.
+Before production enablement, complete authorized real-site password-gate trials, long-running scans, expiry, private-storage operations, and independent security review. Account/Google/SSO flows remain outside this beta. See [the staging beta test steps](authenticated-scan-staging-beta.md). Private thumbnails are an optional part of this beta; production sharing and durable retention remain deferred.
 
 ## Browserbase local integration foundation
 
@@ -54,11 +54,11 @@ No staging or production flag is changed by this work.
 
 ## Existing Playwright capture integration
 
-The Browserbase pilot is preserved and inactive. Authenticated `/scan-jobs` requests can now request `authenticatedCaptureType: "thumb"` (or `"full"` for backend validation). The frontend requests thumbnails after the standard single-password flow. The job retains its existing protected, locally proxied Playwright context through capture, then destroys the login in the existing job-finalization path. No target-site password or cookie is added to the job payload or saved map.
+The Browserbase pilot is preserved and inactive. Authenticated `/scan-jobs` requests can now request `authenticatedCaptureType: "thumb"` (or `"full"` for backend validation). The frontend requests thumbnails only when the user selects **Include private thumbnails** in the standard single-password flow. Mapping is independent of this choice. Missing storage or zero credits falls back to a map without images and an explanatory warning. The job retains its existing protected, locally proxied Playwright context through capture, then destroys the login in the existing job-finalization path. No target-site password or cookie is added to the job payload or saved map.
 
 Capture uses the existing password queue, safe-URL checks, obstruction handling, screenshot styles, and screenshot credit policy. The beta captures at most 100 eligible pages within the available credit allowance. Locked, failed, out-of-scope, stopped, and over-budget pages are counted explicitly in `authenticatedCaptureSummary`; they are not silently reported as successful images. Cancellation or expired login cannot produce a completed capture step. Login expiry retains the existing web-process policy; it has not been redesigned here.
 
-Private images are loaded with authenticated API requests into temporary frontend blob URLs, which are revoked when the image unmounts. The existing node cards, report images, node editor, and image overlay use this shared adapter without new layouts. Authenticated nodes remain excluded from ordinary logged-out image jobs; a fresh authenticated rescan is currently required to refresh them. The warning no longer claims these nodes have no URLs.
+Private images are loaded with authenticated API requests into temporary frontend blob URLs, which are revoked when the image unmounts. The existing node cards, report images, node editor, and image overlay use this shared adapter without new layouts. Authenticated nodes remain excluded from ordinary logged-out image jobs; the **Images → Rescan with password** action creates an updated draft with fresh access to refresh them. Fresh images are displayed immediately without a stale label; older retained images remain labeled as not updated. The warning no longer claims these nodes have no URLs.
 
 Local checks include protected fixtures with one password unlocking 13 pages and authenticated thumbnail delivery before login deletion, signed-out/public-route rejection, plus frontend API/image tests. The real-site Playwright check on mattbraun.design detected 10 protected pages, produced 16 private thumbnails with zero capture failures, and confirmed owner-only delivery and login deletion. Six ineligible/error entries were accounted for as skipped. Font preparation is bounded; the live harness permits up to 15 minutes instead of terminating a healthy scan after four minutes. Full-page real-site rendering, later standalone capture batches with fresh login, and production retention/sharing remain unfinished. Deployment must be verified separately from these local checks.
 
@@ -66,9 +66,9 @@ Local checks include protected fixtures with one password unlocking 13 pages and
 
 `utils/privateScanCapture.js` encrypts PNG/JPEG captures with Node's AES-256-GCM before passing ciphertext to the existing local/R2 adapter. A configured 32-byte hex `PRIVATE_SCAN_CAPTURE_KEY` is required and stored privately as a backend service variable, never in Git. Each asset has a random key, per-owner derived encryption key, and authenticated expiry header. Assets are not cached or deduplicated across users or URLs.
 
-The authenticated `/api/private-scan-captures/:filename` read route returns owner-only images with `private, no-store` headers. The public `/screenshots/:filename` route rejects the reserved private prefix before reading storage. Feature-disabled, missing-key, wrong-owner, tampered, and expired states fail closed. The scan and image jobs do not yet write to this store.
+The authenticated `/api/private-scan-captures/:filename` read route returns owner-only images with `private, no-store` headers. The public `/screenshots/:filename` route rejects the reserved private prefix before reading storage. Feature-disabled, missing-key, wrong-owner, tampered, and expired states fail closed. Authenticated scan jobs write to this private store; ordinary public image jobs do not.
 
-The pilot retention ceiling is 24 hours. Expiry blocks reading; physical removal of expired ciphertext, R2 bucket lifecycle rules, key backup/rotation, durable map previews, and access for collaborators/shared maps remain rollout decisions. Do not treat this as production retention or sharing support. Cross-origin frontend delivery and saved-map image hydration still need integration tests.
+The pilot retention ceiling is 24 hours. Expiry blocks reading; physical removal of expired ciphertext, R2 bucket lifecycle rules, key backup/rotation, durable map previews, and access for collaborators/shared maps remain rollout decisions. Do not treat this as production retention or sharing support. Local cross-origin browser checks cover private delivery, save/reopen, and refresh through a new authenticated draft. Live staging delivery and R2 lifecycle still need verification.
 
 `npm run check:private-scan-capture` covers encryption/access/expiry plus the real backend HTTP route and local persistence in an isolated disposable fixture. It also verifies ordinary public screenshot delivery remains unchanged. Live R2 persistence has not been tested.
 

@@ -2375,7 +2375,7 @@ function isRenderableTextContentType(contentType) {
 }
 
 function getImageCaptureSkipReason(node) {
-  if (node?.authPreviewUnavailable) {
+  if (node?.authCaptureRequired || node?.authPreviewUnavailable) {
     return {
       status: 'not_eligible',
       code: 'authenticated_page',
@@ -3386,13 +3386,22 @@ async function startInteractiveScanAuthSession(session) {
   const page = await context.newPage();
   session.page = page;
   session.status = 'interactive';
-  try {
-    await page.goto(session.sampleUrls[0] || session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
-  } catch (error) {
-    session.lastError = error.message || 'Target-site login page did not finish loading';
+  // Precheck samples can mix account forms and supported password gates. Inspect
+  // each bounded, validated sample without submitting credentials to any form.
+  const candidates = [...new Set(session.sampleUrls.length ? session.sampleUrls : [session.seedUrl])];
+  const deadline = Date.now() + 25000;
+  for (const [index, candidate] of candidates.entries()) {
+    const timeout = Math.max(1, Math.floor((deadline - Date.now()) / (candidates.length - index)));
+    try {
+      await page.goto(candidate, { waitUntil: 'domcontentloaded', timeout });
+    } catch (error) {
+      session.lastError = error.message || 'Target-site login page did not finish loading';
+    }
+    // A slow navigation can still have rendered a usable password form.
+    session.simplePasswordGate = await hasSimplePasswordGate(page, session.origin).catch(() => false);
+    if (session.simplePasswordGate) break;
   }
   session.pageUrl = page.url();
-  session.simplePasswordGate = await hasSimplePasswordGate(page, session.origin);
   return session;
 }
 
@@ -9502,6 +9511,7 @@ async function processJob(job) {
         await markJobFailed(jobId, failureError);
         return;
       }
+      if (payload.authenticatedCaptureWarning) result.authenticatedCaptureWarning = payload.authenticatedCaptureWarning;
       if (payload.authenticatedCaptureType && authSessionStorageState) {
         progressCb({ ...(progressState.lastProgress || {}), final: false, phase: 'authenticated_capture' });
         const session = scanAuthSessions.get(payload.options.authSessionId);
@@ -10299,18 +10309,26 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
       return res.status(503).json({ error: 'Authenticated scanning is unavailable on this server' });
     }
     let authenticatedCaptureLimit = 0;
+    let captureType = authenticatedCaptureType || null;
+    let authenticatedCaptureWarning = null;
     if (authenticatedCaptureType) {
       if (!readyAuthSession || !['thumb', 'full'].includes(authenticatedCaptureType)) {
         return res.status(400).json({ error: 'A temporary login and valid capture type are required.' });
       }
-      if (process.env.DISABLE_SCREENSHOTS === 'true') return res.status(503).json({ error: 'Screenshots are disabled.' });
+      if (process.env.DISABLE_SCREENSHOTS === 'true') authenticatedCaptureWarning = 'Screenshots are unavailable. The map was scanned without images.';
       try { getPrivateScanCaptureStore(); } catch {
-        return res.status(503).json({ error: 'Private screenshot storage is not configured.' });
+        authenticatedCaptureWarning = 'Private images are unavailable. The map was scanned without images.';
       }
-      const cost = getScreenshotCreditCost({ type: authenticatedCaptureType });
-      const budget = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.screenshotCapture, { credits: cost });
-      if (!budget) return;
-      authenticatedCaptureLimit = budget.entitlement.unlimited ? 100 : Math.min(100, Math.floor(budget.entitlement.remaining / cost));
+      if (!authenticatedCaptureWarning) {
+        const cost = getScreenshotCreditCost({ type: authenticatedCaptureType });
+        const budget = await checkAccountActionAsync(req.user, ENTITLEMENT_ACTIONS.screenshotCapture, { credits: cost });
+        if (!budget.allowed) {
+          authenticatedCaptureWarning = 'No screenshot credits are available. The map was scanned without images.';
+        } else {
+          authenticatedCaptureLimit = budget.entitlement.unlimited ? 100 : Math.min(100, Math.floor(budget.entitlement.remaining / cost));
+        }
+      }
+      if (authenticatedCaptureWarning) captureType = null;
     }
     const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
     if (!scanEntitlement.allowed) {
@@ -10353,7 +10371,8 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
           ...(readyAuthSession ? { authSessionId: readyAuthSession.id } : {}),
         },
         authSessionOwnerKey: readyAuthSession?.ownerKey || null,
-        authenticatedCaptureType: authenticatedCaptureType || null,
+        authenticatedCaptureType: captureType,
+        authenticatedCaptureWarning,
         authenticatedCaptureLimit,
         accessToken: jobAccessToken,
         entitlement: entitlementPayload,

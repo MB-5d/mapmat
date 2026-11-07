@@ -113,6 +113,10 @@ function createFixtureServer() {
           '<a href="/still-locked">Still locked</a>',
         ].join(''),
       });
+    } else if (url.pathname === '/public-check') {
+      response = html({ title: 'Public check', body: '<h1>Public check</h1><a href="/public-check/about">About</a><a href="/public-check/team">Team</a>' });
+    } else if (url.pathname === '/public-check/about' || url.pathname === '/public-check/team') {
+      response = html({ title: url.pathname.endsWith('/about') ? 'About' : 'Team', body: '<h1>Public content</h1><a href="/public-check">Home</a>' });
     } else if (url.pathname === '/external-form') {
       response = html({ status: 401, title: 'Secure', body: '<form action="https://example.org/login"><input type="password"><button>Unlock</button></form>' });
     } else if (url.pathname === '/get-form') {
@@ -241,7 +245,7 @@ async function pollScanJob(jobId, accessToken) {
   throw new Error('Timed out waiting for scan job');
 }
 
-function spawnBackend(tempDir) {
+function spawnBackend(tempDir, overrides = {}) {
   const backend = spawn(process.execPath, ['server.js'], {
     cwd: process.cwd(),
     env: {
@@ -255,8 +259,18 @@ function spawnBackend(tempDir) {
       SCREENSHOT_STORAGE_PROVIDER: 'local',
       SCREENSHOT_STORAGE_DIR: path.join(tempDir, 'captures'),
       PRIVATE_SCAN_CAPTURE_KEY: crypto.randomBytes(32).toString('hex'),
+      ...overrides,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  backend.testAccountReady = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Test account did not finish seeding')), 30000);
+    backend.stdout.on('data', (chunk) => {
+      if (/\[auth\] (Seeded test account|Refreshed test account credentials)/.test(String(chunk))) {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
   });
   backend.stdout.on('data', (chunk) => process.stdout.write(chunk));
   backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
@@ -300,6 +314,7 @@ async function main() {
     fixture = await createFixtureServer();
     const fixtureBase = getServerUrl(fixture);
     await waitForHealth();
+    if (backend) await backend.testAccountReady;
     const login = await fetchJson(`${API_BASE}/auth/login`, {
       method: 'POST',
       body: JSON.stringify({ email: 'admin@vellic.io', password: 'Admin123' }),
@@ -324,8 +339,10 @@ async function main() {
 
     const pageGateSession = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
       method: 'POST', headers: authHeaders,
-      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, sampleUrls: [`${fixtureBase}/page-gates/page1`] }),
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, sampleUrls: [`${fixtureBase}/page-gates/account`, `${fixtureBase}/page-gates/page1`] }),
     });
+    assert.strictEqual(pageGateSession.simplePasswordGate, true, 'mixed gates must find the supported password form after an account form');
+    assert.strictEqual(pageGateSession.loginUrl, `${fixtureBase}/page-gates/page1`);
     await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}/action`, {
       method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'incorrect' }),
     }), /failed 409: This site did not accept the password/);
@@ -346,6 +363,8 @@ async function main() {
     assert.ok(pageGateResult.authenticatedCaptureSummary.captured >= 13, 'authenticated thumbnails must be captured before the login is deleted');
     const privateNode = pageGateNodes.find((node) => node.url === `${fixtureBase}/page-gates/page2`);
     assert.ok(privateNode.thumbnailUrl?.startsWith('/api/private-scan-captures/'));
+    assert.strictEqual(privateNode.authPreviewUnavailable, false, 'fresh capture must not be stale');
+    assert.strictEqual(privateNode.authCaptureRequired, true, 'fresh capture still requires login to refresh');
     const privateImage = await fetchRaw(`${API_BASE}${privateNode.thumbnailUrl}`, { headers: authHeaders });
     assert.strictEqual(privateImage.headers.get('content-type'), 'image/jpeg');
     assert.strictEqual(privateImage.headers.get('cache-control'), 'private, no-store');
@@ -586,9 +605,63 @@ async function main() {
       assert.ok(/interrupted/i.test(interruptedStatus.job.error || ''));
     }
 
+    if (backend) {
+      const checkMapFallback = async (warning) => {
+        const url = `${fixtureBase}/page-gates/page1`;
+        const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+          method: 'POST', headers: authHeaders, body: JSON.stringify({ url, sampleUrls: [url] }),
+        });
+        await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/action`, {
+          method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'fixture-password' }),
+        });
+        await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/complete`, { method: 'POST', headers: authHeaders });
+        const job = await fetchJson(`${API_BASE}/scan-jobs`, {
+          method: 'POST', headers: authHeaders,
+          body: JSON.stringify({ url, maxPages: 6, options: { authenticatedPages: true }, authSessionId: session.sessionId, authenticatedCaptureType: 'thumb' }),
+        });
+        const result = await pollScanJob(job.jobId, job.jobAccessToken);
+        assert.match(result.authenticatedCaptureWarning, warning);
+        assert.strictEqual(result.authenticatedCaptureSummary, undefined, 'fallback must not charge for or create images');
+        assert.ok(flattenTree(result.root).some((node) => node.url === url && !node.authRequired), 'fallback must still unlock and map the page');
+      };
+      const restartWith = async (overrides) => {
+        const exited = new Promise((resolve) => backend.once('exit', resolve));
+        backend.kill('SIGKILL');
+        await exited;
+        backend = spawnBackend(tempDir, overrides);
+        await waitForHealth();
+        await backend.testAccountReady;
+      };
+      // Only the disposable fixture database is changed here.
+      const fixtureDb = new (require('better-sqlite3'))(path.join(tempDir, 'vellic.db'));
+      const fixtureUser = fixtureDb.prepare('SELECT id, account_id FROM users WHERE email = ?').get('admin@vellic.io');
+      fixtureDb.prepare(`INSERT INTO usage_ledger_entries (id, account_id, user_id, meter, entry_type, quantity, source)
+        VALUES (?, ?, ?, 'screenshot_credits', 'debit', 10000, 'included')`)
+        .run(crypto.randomUUID(), fixtureUser.account_id, fixtureUser.id);
+      fixtureDb.close();
+      await checkMapFallback(/No screenshot credits/);
+      await restartWith({ PRIVATE_SCAN_CAPTURE_KEY: '' });
+      await checkMapFallback(/Private images are unavailable/);
+      await restartWith({ SCAN_AUTH_FEATURE_ENABLED: 'false' });
+      const disabled = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase }),
+      });
+      assert.strictEqual(disabled.featureDisabled, true);
+      await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions`, {
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase }),
+      }), /failed 503/);
+      const publicJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+        method: 'POST', headers: authHeaders,
+        body: JSON.stringify({ url: `${fixtureBase}/public-check`, maxPages: 10, options: { authenticatedPages: false } }),
+      });
+      const publicResult = await pollScanJob(publicJob.jobId, publicJob.jobAccessToken);
+      assert.ok(flattenTree(publicResult.root).some((node) => node.title === 'About'), 'regular scanning must discover public children with the backend beta disabled');
+      console.log('[scan-auth-session] Missing storage, zero credits, and backend-disabled regular scan passed.');
+    }
+
     console.log('[scan-auth-session] Passed.');
   } finally {
-    if (backend) backend.kill('SIGTERM');
+    if (backend) backend.kill('SIGKILL');
     if (fixture) {
       fixture.closeAllConnections();
       await Promise.race([
