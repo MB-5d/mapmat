@@ -594,4 +594,51 @@ describe('NodeCard', () => {
     expect(container.querySelector('.thumb-placeholder-label')?.textContent).toBe('Capture failed');
     expect(container.querySelector('.node-badge')?.textContent).toBe('Crawl restricted');
   });
+
+  test('labels unavailable authenticated previews without showing a capture error', async () => {
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={{ id: 'private', title: 'Private', url: 'https://example.com/private', authPreviewUnavailable: true }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onDuplicate={vi.fn()}
+          onViewImage={vi.fn()}
+        />
+      );
+    });
+    expect(container.textContent).toContain('Preview unavailable in beta');
+    expect(container.querySelector('.thumb-placeholder-blocked')).not.toBeNull();
+  });
+
+  test('preserves but labels an older preview after an authenticated rescan', async () => {
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'private',
+            title: 'Private',
+            url: 'https://example.com/private',
+            authPreviewUnavailable: true,
+            thumbnailUrl: '/screenshots/old_thumb_small_v8.jpg',
+          }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onDuplicate={vi.fn()}
+          onViewImage={vi.fn()}
+        />
+      );
+    });
+    await act(async () => {
+      container.querySelector('.thumb-img')?.dispatchEvent(new Event('load'));
+    });
+    expect(container.querySelector('.thumb-img')?.getAttribute('src')).toBe('/screenshots/old_thumb_small_v8.jpg');
+    expect(container.querySelector('.thumb-stale-label')?.textContent).toBe('Not updated by this scan');
+  });
 });

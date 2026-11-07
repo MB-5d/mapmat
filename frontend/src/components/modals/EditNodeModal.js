@@ -3,6 +3,7 @@ import { Maximize2, Replace, Trash2, Upload, X } from 'lucide-react';
 
 import Accordion from '../ui/Accordion';
 import Button from '../ui/Button';
+import CaptureImage from '../ui/CaptureImage';
 import Field from '../ui/Field';
 import IconButton from '../ui/IconButton';
 import Modal from '../ui/Modal';
@@ -566,7 +567,7 @@ const EditNodeModal = ({
           />
           {previewImageUrl ? (
             <div className={`thumbnail-preview${imageOverlayMode ? ` thumbnail-preview--${imageOverlayMode}` : ''}`}>
-              <img src={previewImageUrl} alt="Thumbnail preview" />
+              <CaptureImage src={previewImageUrl} alt="Thumbnail preview" />
               <div className="thumbnail-preview-hover-actions">
                 <IconButton
                   htmlType="button"
