@@ -3962,6 +3962,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scanAuthRequestRef = useRef(0);
   // Preserve the remote browser implementation while its interaction is deferred from beta.
   const scanAuthBrowserBetaEnabled = false;
+  const scanAuthHelperEnabled = process.env.REACT_APP_SCAN_AUTH_BROWSER_HELPER === 'true'
+    && ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const [screenshotDownloadUpsell, setScreenshotDownloadUpsell] = useState(null);
   const [entitlementLockModal, setEntitlementLockModal] = useState(null);
   const [plansModal, setPlansModal] = useState(null);
@@ -13734,7 +13736,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (effectiveIsLoggedIn && AUTHENTICATED_SCAN_ENABLED && activeScanOptions.authenticatedPages && !authFlow.skipAuthPrecheck) {
       try {
         const precheck = await api.precheckScanAuth({ url, options: activeScanOptions });
-        if (precheck?.authRequired) {
+        if (precheck?.authRequired || scanAuthHelperEnabled) {
           resetScanUi();
           setScanAuthPrompt({
             url, preserveName,
@@ -14487,9 +14489,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowScanPassword(false);
     setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
     try {
-      const session = await api.createScanAuthSession({ url: prompt.url, sampleUrls: prompt.sampleUrls });
+      const session = await api.createScanAuthSession({ url: prompt.url, sampleUrls: prompt.sampleUrls,
+        ...(scanAuthHelperEnabled ? { browserHelper: true } : {}),
+      });
       if (requestId !== scanAuthRequestRef.current) {
         if (session?.sessionId) api.deleteScanAuthSession(session.sessionId).catch(() => {});
+        return;
+      }
+      if (scanAuthHelperEnabled && /^[a-f0-9]{64}$/.test(session.helperPairingCode || '')) {
+        setScanAuthPrompt((current) => current ? { ...current, loading: false, error: '',
+          authBrowser: { sessionId: session.sessionId, helperPairingCode: session.helperPairingCode,
+            helperExpiresAt: session.helperExpiresAt, simplePasswordGate: false },
+        } : current);
         return;
       }
       if (process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE === 'true'
@@ -14624,9 +14635,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     const prompt = scanAuthPrompt;
     const sessionId = prompt?.authBrowser?.sessionId;
     if (!prompt?.url || !sessionId || prompt.loading) return;
+    const requestId = ++scanAuthRequestRef.current;
     setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
     try {
       const session = await api.completeScanAuthSession(sessionId);
+      if (requestId !== scanAuthRequestRef.current) return;
       if (!session?.ready) throw new Error('Login session was not ready');
       setScanAuthPrompt(null);
       scan(prompt.url, prompt.preserveName, {
@@ -14636,6 +14649,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         captureThumbnails: prompt.captureThumbnails,
       });
     } catch (err) {
+      if (requestId !== scanAuthRequestRef.current) return;
       setScanAuthPrompt((current) => current ? {
         ...current,
         loading: false,
@@ -22235,7 +22249,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               >
                 Scan without login
               </Button>
-              {scanAuthPrompt.precheckFailed ? (
+              {scanAuthPrompt.precheckFailed && !scanAuthHelperEnabled ? (
                 <Button variant="primary" onClick={() => {
                   const prompt = scanAuthPrompt;
                   setScanAuthPrompt(null);
@@ -22258,16 +22272,16 @@ export default function App({ currentRoute, navigateToRoute }) {
                   variant="primary"
                   onClick={startTargetAuthLogin}
                   loading={scanAuthPrompt.loading}
-                  disabled={!scanAuthPrompt.interactiveLoginSupported || scanAuthPrompt.loading}
+                  disabled={(!scanAuthPrompt.interactiveLoginSupported && !scanAuthHelperEnabled) || scanAuthPrompt.loading}
                 >
-                  {scanAuthPrompt.interactiveLoginSupported ? (process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE === 'true' && scanAuthPrompt.url?.startsWith('http://localhost:4399') ? 'Sign in to test site' : 'Enter password') : 'Login unavailable'}
+                  {scanAuthHelperEnabled ? 'Connect browser helper' : scanAuthPrompt.interactiveLoginSupported ? (process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE === 'true' && scanAuthPrompt.url?.startsWith('http://localhost:4399') ? 'Sign in to test site' : 'Enter password') : 'Login unavailable'}
                 </Button>
               ) : null}
             </>
           )}
         >
           <div className="scan-auth-modal-body">
-            {!scanAuthPrompt.precheckFailed && <p>
+            {scanAuthHelperEnabled ? <p>Connect a signed-in browser session to test access to this site's protected pages. Vellic will verify access before scanning.</p> : !scanAuthPrompt.precheckFailed && <p>
               At least {scanAuthPrompt.authCount || 'one'} page{scanAuthPrompt.authCount === 1 ? '' : 's'} may require a password. The scan may find more.
             </p>}
             {scanAuthPrompt.authFlow?.refreshAuthenticatedMap && <p>This creates an updated draft copy to save as a new map. Your saved map stays unchanged.</p>}
@@ -22280,8 +22294,14 @@ export default function App({ currentRoute, navigateToRoute }) {
                   disabled={scanAuthPrompt.loading}
                   onChange={() => setScanAuthPrompt((current) => current ? { ...current, captureThumbnails: !current.captureThumbnails } : current)}
                 />
-                {scanAuthPrompt.authBrowser.externalLoginUrl ? <p>Sign in on the local test site in your browser. Complete any verification there, then return and choose Use this login.</p> : <p>Enter the password once. Vellic will try it on other protected pages on this site during this scan, then discard it.</p>}
-                {scanAuthPrompt.authBrowser.externalLoginUrl ? <a className="inline-link" href={scanAuthPrompt.authBrowser.externalLoginUrl} target="_blank" rel="noreferrer">Open test-site sign-in</a> : scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode ? (
+                {scanAuthPrompt.authBrowser.helperPairingCode ? (
+                  <div>
+                    <p>Sign in to this site in Chrome, including any Google or email verification. Open the Vellic Local Scan Helper on the protected page and paste this code. Pairing expires in five minutes.</p>
+                    <TextInput id="scan-helper-code" label="Local helper pairing code" type="text" readOnly value={scanAuthPrompt.authBrowser.helperPairingCode} onFocus={(event) => event.target.select()} />
+                    <p>Review and allow the connection in the helper, then choose Use this login here. Close this dialog to cancel.</p>
+                  </div>
+                ) : scanAuthPrompt.authBrowser.externalLoginUrl ? <p>Sign in on the local test site in your browser. Complete any verification there, then return and choose Use this login.</p> : <p>Enter the password once. Vellic will try it on other protected pages on this site during this scan, then discard it.</p>}
+                {scanAuthPrompt.authBrowser.helperPairingCode ? null : scanAuthPrompt.authBrowser.externalLoginUrl ? <a className="inline-link" href={scanAuthPrompt.authBrowser.externalLoginUrl} target="_blank" rel="noreferrer">Open test-site sign-in</a> : scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode ? (
                   <div className="scan-auth-password-form">
                     <TextInput
                       ref={scanAuthBrowserPasswordRef}

@@ -9929,6 +9929,10 @@ const localPrototypeBridge = require('./prototype/protected-site/bridge.cjs').cr
   app, sessions: scanAuthSessions, closeSession: closeScanAuthSession,
   createContext: createAuthenticatedBrowserContext, expired: isScanAuthSessionExpired,
 });
+const localBrowserHelper = require('./prototype/browser-helper/bridge.cjs').createBrowserHelper({
+  app, sessions: scanAuthSessions, createContext: createAuthenticatedBrowserContext,
+  expired: isScanAuthSessionExpired,
+});
 
 app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requireApiKey, async (req, res) => {
   const { url, sampleUrls } = req.body || {};
@@ -9949,6 +9953,10 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
       const safeSampleUrl = await assertSafeUrl(sampleUrl);
       return isHostnameInAuthScope(new URL(safeSampleUrl).hostname, session) ? safeSampleUrl : null;
     }))).filter(Boolean);
+    if (req.body.browserHelper === true) {
+      if (!localBrowserHelper) throw new Error('Browser helper is not enabled in this environment');
+      return res.json(localBrowserHelper.start(session));
+    }
     const localLogin = localPrototypeBridge?.start(session);
     if (localLogin) return res.json(localLogin);
     if (session.status !== 'ready' && SCAN_AUTH_INTERACTIVE_SUPPORTED) {
@@ -10075,6 +10083,7 @@ app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireA
 
 app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const session = getScanAuthSessionForRequest(req, req.params.id);
+  if (session?.helperPending) return res.status(409).json({ error: 'Connect the signed-in site using the browser helper first.' });
   if (session?.prototypePair && !isScanAuthSessionExpired(session)) return res.status(409).json({ error: 'Finish signing in on the test site, then return here.' });
   if (!session || !session.browserContext) {
     return res.status(410).json({ error: 'This login session expired. Close this dialog and start the scan again.', code: 'scan_auth_expired' });
@@ -10086,6 +10095,17 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
     let unlocked = 0;
     for (const sampleUrl of session.sampleUrls) {
       try {
+        if (session.helperImported) {
+          // A public page or a generic SPA shell is not evidence of a working
+          // imported login. Confirm the same page needs login while signed out.
+          const signedOutContext = await createAuthenticatedBrowserContext(null, SCAN_AUTH_VIEWPORT, session);
+          try {
+            const signedOut = await fetchPageWithBrowserContext(signedOutContext, sampleUrl);
+            const baseline = classifyScanResponse({ html: signedOut.html, status: signedOut.status,
+              url: sampleUrl, finalUrl: signedOut.finalUrl || sampleUrl, headers: signedOut.headers || {} });
+            if (!baseline.isAuthStatus) continue;
+          } finally { await signedOutContext.close(); }
+        }
         const page = await fetchPageWithBrowserContext(session.browserContext, sampleUrl);
         const classification = classifyScanResponse({
           html: page.html,
@@ -10100,7 +10120,9 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
       }
     }
     if (!unlocked) {
-      return res.status(409).json({ error: 'Access could not be confirmed. Try again or continue without login.', code: 'scan_auth_unverified' });
+      return res.status(409).json({ error: session.helperImported
+        ? 'Vellic could not confirm a protected page changed from signed out to signed in. Choose a private page URL and try again. This site may use a login method the helper cannot transfer.'
+        : 'Access could not be confirmed. Try again or continue without login.', code: 'scan_auth_unverified' });
     }
     if (scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session)) {
       return res.status(410).json({ error: 'This login session expired. Start the scan again.', code: 'scan_auth_expired' });

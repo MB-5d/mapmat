@@ -1,7 +1,7 @@
 const http=require('node:http'),crypto=require('node:crypto'),jwt=require('jsonwebtoken');
 const random=()=>crypto.randomBytes(24).toString('hex');
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},sendCode,now=Date.now,testInbox=null}={}) {
+async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},sendCode,now=Date.now,testInbox=null,standalone=false}={}) {
   if(!/^[a-f0-9]{64}$/.test(bridgeKey||''))throw Error('Bridge key required');
   if(backend!=='http://127.0.0.1:4349')throw Error('Loopback backend required');
   const base='http://localhost:4399',logins=new Map(),sessions=new Map(),grants=new Map();
@@ -27,12 +27,15 @@ async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},se
       const form=(action,content)=>`<form method="post" action="${action}"><input type="hidden" name="csrf" value="${login.csrf}">${content}</form>`;
       const finish=async method=>{
         if(!valid(login))return reply(410,'Sign-in expired','Start again from Vellic.');
-        const sid=random(),grant=random();sessions.set(sid,{expires:now()+15*60000,method});grants.set(grant,{sid,pair:login.pair,expires:now()+30000});
+        const sid=random(),grant=random();sessions.set(sid,{expires:now()+15*60000,method});
+        if(login.pair) {
+        grants.set(grant,{sid,pair:login.pair,expires:now()+30000});
         const r=await fetch(backend+'/scan-auth/local-prototype/complete',{method:'POST',headers:{authorization:'Bearer '+bridgeKey,'content-type':'application/json'},body:JSON.stringify({pair:login.pair,grant}),signal:AbortSignal.timeout(15000),redirect:'error'});
         if(!r.ok){sessions.delete(sid);grants.delete(grant);throw Error('connection');}
+        }
         logins.delete(cookie('test_login'));
         res.setHeader('Set-Cookie',[`protected_test_session=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=900`,'test_login=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0']);
-        return reply(200,'Sign-in connected to Vellic','<p>Return to Vellic and choose <strong>Use this login</strong>. Vellic will verify access and scan these four protected pages.</p><a href="/members">View the test site</a>');
+        return login.pair ? reply(200,'Sign-in connected to Vellic','<p>Return to Vellic and choose <strong>Use this login</strong>. Vellic will verify access and scan these four protected pages.</p><a href="/members">View the test site</a>') : reply(200,'Signed in to the test site','<p>No session was sent to Vellic. Open a protected page, then use the browser helper.</p><a href="/members">View the test site</a>');
       };
       if(url.pathname==='/bridge/redeem'&&req.method==='POST'){
         const auth=String(req.headers.authorization||'');if(auth!=='Bearer '+bridgeKey){res.writeHead(401);return res.end();}
@@ -41,7 +44,7 @@ async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},se
         res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({cookie:{name:'protected_test_session',value:g.sid,domain:'localhost',path:'/',httpOnly:true,secure:false,sameSite:'Lax',expires:Math.floor(s.expires/1000)}}));
       }
       if(url.pathname==='/login'){
-        if(!/^[a-f0-9]{48}$/.test(url.searchParams.get('pair')||''))return reply(400,'Start in Vellic','Scan http://localhost:4399/members in the local Vellic app and choose Enter password.');
+        if(!(standalone && url.searchParams.get('standalone')==='1') && !/^[a-f0-9]{48}$/.test(url.searchParams.get('pair')||''))return reply(400,'Start in Vellic','Scan http://localhost:4399/members in the local Vellic app and choose Enter password.');
         const id=random(),entry={pair:url.searchParams.get('pair'),csrf:random(),expires:now()+10*60000,attempts:0};logins.set(id,entry);res.setHeader('Set-Cookie',`test_login=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`);return redirect('/sign-in');
       }
       if(url.pathname==='/sign-in'){
