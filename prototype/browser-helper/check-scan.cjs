@@ -34,7 +34,7 @@ const { startLab } = require('../protected-site/run.cjs');
     assert.equal((await form('/email/verify', { csrf, code: inbox.get('helper@example.invalid') })).status, 200);
     assert.equal((await form('/members')).status, 200);
     assert.equal((await fetch(site + '/members')).status, 404);
-    const session = await api('/scan-auth/sessions', { url: site + '/', sampleUrls: [site + '/members'], browserHelper: true });
+    const session = await api('/scan-auth/sessions', { url: site + '/members', sampleUrls: [site + '/members'], browserHelper: true });
     assert(session.helperPairingCode);
     const readyBeforeImport = await fetch(apiBase + '/scan-auth/sessions/' + session.sessionId + '/complete', { method: 'POST', headers: { authorization: 'Bearer ' + lab.token } });
     assert.equal(readyBeforeImport.status, 409);
@@ -43,7 +43,7 @@ const { startLab } = require('../protected-site/run.cjs');
     assert.equal((await helper('import', session.helperPairingCode, payload)).status, 200);
     assert.equal((await helper('import', session.helperPairingCode, payload)).status, 410);
     assert.equal((await api('/scan-auth/sessions/' + session.sessionId + '/complete', {})).ready, true);
-    const job = await api('/scan-jobs', { url: site + '/', maxPages: 10, options: { authenticatedPages: true }, authSessionId: session.sessionId, authenticatedCaptureType: 'thumb' });
+    const job = await api('/scan-jobs', { url: site + '/members', maxPages: 10, options: { authenticatedPages: true }, authSessionId: session.sessionId, authenticatedCaptureType: 'thumb' });
     let result;
     for (let i = 0; i < 120; i++) {
       const response = await api('/scan-jobs/' + job.jobId + '?access_token=' + job.jobAccessToken);
@@ -53,6 +53,7 @@ const { startLab } = require('../protected-site/run.cjs');
     }
     assert(result, 'Scan timed out');
     const nodes = flatten(result.root);
+    assert(!nodes.some(node => node.httpStatus === 200 && !node.url.startsWith(site + '/members')), 'Do not scan parent or sibling pages with an imported session');
     for (const path of ['/members', '/members/about', '/members/projects', '/members/projects/sample']) {
       const node = nodes.find(item => item.url === site + path);
       assert.equal(node?.httpStatus, 200); assert(!node.authRequired);

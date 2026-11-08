@@ -6,9 +6,9 @@ function isLocalBrowserUrl(rawUrl) {
   }
 }
 
-async function installScanAuthNetworkGuard(context, assertSafeUrl) {
+async function installScanAuthNetworkGuard(context, assertSafeUrl, allowRequest = () => true) {
   await context.route('**/*', async (route) => {
-    if (await isAllowedScanAuthRequest(route.request().url(), assertSafeUrl)) return route.continue();
+    if (allowRequest(route.request()) && await isAllowedScanAuthRequest(route.request().url(), assertSafeUrl)) return route.continue();
     return route.abort('blockedbyclient');
   });
 

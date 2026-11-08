@@ -48,4 +48,12 @@ function isSignedOutRestricted(status, classification) {
   return classification.isAuthStatus === true || status === 404;
 }
 
-module.exports = { targetUrl, validateState, isSignedOutRestricted };
+function isHelperNavigationAllowed(raw, seed) {
+  try {
+    const url = new URL(raw), target = new URL(seed);
+    const prefix = target.pathname.replace(/\/+$/, '') || '/';
+    return url.origin === target.origin && (prefix === '/' || url.pathname === prefix || url.pathname.startsWith(prefix + '/'));
+  } catch { return false; }
+}
+
+module.exports = { targetUrl, validateState, isSignedOutRestricted, isHelperNavigationAllowed };

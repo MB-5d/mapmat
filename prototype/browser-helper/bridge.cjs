@@ -57,6 +57,7 @@ function createBrowserHelper({ app, sessions, createContext, expired, now = Date
       session.helperDigest = hash(token);
       session.helperExpiresAt = Math.min(session.expiresAt, now() + 5 * 60 * 1000);
       session.helperPending = true;
+      session.helperNavigationScope = session.seedUrl;
       session.status = 'interactive';
       if (!session.sampleUrls.length) session.sampleUrls = [session.seedUrl];
       return { sessionId: session.id, status: 'interactive', interactiveSupported: true,

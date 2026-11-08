@@ -3393,7 +3393,11 @@ async function createAuthenticatedBrowserContext(storageState, viewport = { widt
     },
   });
   try {
-    await installScanAuthNetworkGuard(context, assertSafeUrl);
+    await installScanAuthNetworkGuard(context, assertSafeUrl, (request) => {
+      if (!storageState || !session?.helperNavigationScope || !request.isNavigationRequest()
+        || request.frame().parentFrame()) return true;
+      return require('./prototype/browser-helper/policy.cjs').isHelperNavigationAllowed(request.url(), session.helperNavigationScope);
+    });
     if (session) {
       scanAuthContextOwners.set(context, session);
       session.scanContexts.add(context);
@@ -7227,7 +7231,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
   reportScanProgress({ phase: 'finalizing' });
 
-  if (scanScope.focused && !targetedGroupCapture && !stopRequested) {
+  if (scanScope.focused && !targetedGroupCapture && !stopRequested && !authSession?.helperImported) {
     const ancestorUrls = getFocusedAncestorUrls(seed)
       .map((url) => normalizeUrl(url))
       .filter((url) => url && url !== seed);

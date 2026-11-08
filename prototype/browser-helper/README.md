@@ -12,9 +12,11 @@ Isolated research on `codex/auth-login-compatibility-prototype`. Do not deploy t
 
 ## Real-site trial in progress
 
-The user does not have Notion, so the trial uses their existing GitHub account instead. A separate private repository with four dummy page folders was created at `https://github.com/MB-5d/vellic-auth-scan-test/tree/main/test-pages`. The project repository is not a test target. Anonymous access to that URL returned HTTP 404; Google sign-in for the existing GitHub account is awaiting user completion.
+The user does not have Notion, so the trial uses their existing GitHub account instead. A separate private repository with four dummy page folders was created at `https://github.com/MB-5d/vellic-auth-scan-test/tree/main/test-pages`. The project repository is not a test target. Anonymous access to that URL returned HTTP 404. Normal Chrome displayed the private About page and its dummy marker after user interaction. The login method and any second factor have not been confirmed; this is not yet evidence of Google or 2FA compatibility. Explicit approval to transfer the GitHub session is pending.
 
 Helper verification now recognizes signed-out 404 responses as a possible hidden private resource, while still requiring active content at the same URL after import. Public 200 responses, challenge/limit responses and server errors do not satisfy the signed-out baseline. This change is local to the helper verification path.
+
+Imported sessions restrict top-level document navigation to the selected URL path and its descendants, and skip focused-scan parent inspection. Policy tests, the four-page backend integration, and backend regression checks passed with this restriction. Assets and API requests still use the existing network guard; this is a navigation boundary, not page-level credential isolation.
 
 ## Install for an approved local trial
 
