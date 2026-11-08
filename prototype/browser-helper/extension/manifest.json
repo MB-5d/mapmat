@@ -13,7 +13,8 @@
   ],
   "optional_host_permissions": [
     "https://*/*",
-    "http://localhost:4399/*"
+    "http://localhost:4399/*",
+    "http://localhost:80/*"
   ],
   "action": {
     "default_title": "Connect this site to local Vellic"

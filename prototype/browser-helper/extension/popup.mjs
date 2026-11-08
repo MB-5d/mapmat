@@ -1,4 +1,4 @@
-import { assertTarget, normalizeCookies, readLocalStorage } from './capture.mjs';
+import { assertTarget, normalizeCookies, readLocalStorage, permissionOrigins, cookieQuery } from './capture.mjs';
 
 const api = 'http://127.0.0.1:4349/scan-auth/helper/';
 const $ = id => document.getElementById(id);
@@ -45,13 +45,13 @@ $('pair-form').addEventListener('submit', async event => {
 $('cancel').addEventListener('click', () => reset('Nothing was copied. Close the login dialog in Vellic to cancel the pairing.'));
 $('connect').addEventListener('click', async () => {
   if (!connection || !$('consent').checked) { status('Allow the selected site connection before continuing.'); return; }
-  const pattern = connection.origin + '/*';
+  const patterns = permissionOrigins(connection.origin);
   let granted = false;
   let connected = false;
   $('connect').disabled = true; $('cancel').disabled = true;
   try {
     // Must run directly from this user gesture, before any unrelated awaits.
-    granted = await chrome.permissions.request({ origins: [pattern] });
+    granted = await chrome.permissions.request({ origins: patterns });
     if (!granted) throw Error('Site access was declined. Nothing was copied.');
     if (Date.now() >= connection.expiresAt) throw Error('Pairing expired. Start again in Vellic.');
     const current = await chrome.tabs.get(activeTab.id);
@@ -60,7 +60,9 @@ $('connect').addEventListener('click', async () => {
     const store = stores.find(entry => entry.tabIds.includes(activeTab.id));
     if (!store) throw Error('The selected browser session is unavailable.');
     status('Connecting this site to the local scanner…');
-    const cookies = normalizeCookies(await chrome.cookies.getAll({ url: current.url, storeId: store.id }), current.url);
+    const rawCookies = await chrome.cookies.getAll(cookieQuery(current.url, store.id));
+    const cookies = normalizeCookies(rawCookies, current.url);
+    if (!cookies.length && !$('include-storage').checked) throw Error('No transferable login cookies were found. Sign in again, or this site may use an unsupported session method. Nothing was copied.');
     let origins = [];
     if ($('include-storage').checked) {
       const results = await chrome.scripting.executeScript({ target: { tabId: activeTab.id }, func: readLocalStorage, args: [connection.origin] });
@@ -74,9 +76,9 @@ $('connect').addEventListener('click', async () => {
   } catch (error) { reset(error.message || 'Connection failed. No credentials were saved by the helper.'); }
   finally {
     if (granted) {
-      await chrome.permissions.remove({ origins: [pattern] }).catch(() => {});
+      await chrome.permissions.remove({ origins: patterns }).catch(() => {});
       const remaining = await chrome.permissions.getAll();
-      if (remaining.origins?.includes(pattern)) {
+      if (patterns.some(pattern => remaining.origins?.includes(pattern))) {
         reset('Site access could not be removed. Remove this helper in Chrome before continuing.');
         connected = false;
       }

@@ -1,5 +1,18 @@
 const blocked = ['google.com', 'googleusercontent.com', 'gstatic.com', 'microsoftonline.com', 'live.com', 'appleid.apple.com'];
 
+export function permissionOrigins(origin) {
+  // Chrome checks non-secure cookies against the default HTTP port, even when
+  // the selected test page uses 4399. Do not grant access to every localhost port.
+  return origin === 'http://localhost:4399'
+    ? [origin + '/*', 'http://localhost:80/*'] : [origin + '/*'];
+}
+
+export function cookieQuery(raw, storeId) {
+  return { url: raw, storeId,
+    ...(new URL(raw).origin === 'http://localhost:4399' ? { name: 'protected_test_session' } : {}),
+  };
+}
+
 export function assertTarget(raw, origin) {
   const url = new URL(raw);
   if (url.origin !== origin || url.username || url.password

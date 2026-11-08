@@ -3,7 +3,11 @@ const { targetUrl, validateState, isSignedOutRestricted, isHelperNavigationAllow
 const { createBrowserHelper } = require('./bridge.cjs');
 
 (async () => {
-  const { assertTarget, normalizeCookies } = await import('./extension/capture.mjs');
+  const { assertTarget, normalizeCookies, permissionOrigins, cookieQuery } = await import('./extension/capture.mjs');
+  assert.deepEqual(permissionOrigins('http://localhost:4399'), ['http://localhost:4399/*', 'http://localhost:80/*']);
+  assert.deepEqual(permissionOrigins('https://github.com'), ['https://github.com/*']);
+  assert.deepEqual(cookieQuery('http://localhost:4399/members', '0'), { url: 'http://localhost:4399/members', storeId: '0', name: 'protected_test_session' });
+  assert.deepEqual(cookieQuery('https://github.com/test', '0'), { url: 'https://github.com/test', storeId: '0' });
   const origin = 'https://private.example.com';
   const cookie = { name: 'session', value: 'synthetic', domain: 'private.example.com', path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: -1 };
   const state = { cookies: [cookie], origins: [] };
