@@ -12,7 +12,7 @@ Isolated research on `codex/auth-login-compatibility-prototype`. Do not deploy t
 
 ## Real-site trial in progress
 
-The user does not have Notion, so the trial uses their existing GitHub account instead. A separate private repository with four dummy page folders was created at `https://github.com/MB-5d/vellic-auth-scan-test/tree/main/test-pages`. The project repository is not a test target. The first trial used the existing password. After explicit approval to sign out of MB-5d in Chrome, GitHub was signed out, its **Continue with Google** flow opened, and the user confirmed completing Google sign-in. The private repository was accessible afterward, and a new helper pairing and scan passed all four pages and image/session checks. Whether that login requested a second factor is awaiting the user's confirmation. Evidence is local at `/private/tmp/vellic-github-google-helper-evidence.json` and `/private/tmp/vellic-google-helper-map.png`; neither contains session credentials.
+The user does not have Notion, so the trial uses their existing GitHub account instead. A separate private repository with four dummy page folders was created at `https://github.com/MB-5d/vellic-auth-scan-test/tree/main/test-pages`. The project repository is not a test target. The first trial used the existing password. After explicit approval to sign out of MB-5d in Chrome, GitHub was signed out, its **Continue with Google** flow opened, and the user confirmed completing Google sign-in. The private repository was accessible afterward, and a new helper pairing and scan passed all four pages and image/session checks. The user confirmed that no additional verification was requested, so this is not 2FA evidence. Evidence is local at `/private/tmp/vellic-github-google-helper-evidence.json` and `/private/tmp/vellic-google-helper-map.png`; neither contains session credentials.
 
 Helper verification now recognizes signed-out 404 responses as a possible hidden private resource, while still requiring active content at the same URL after import. Public 200 responses, challenge/limit responses and server errors do not satisfy the signed-out baseline. This change is local to the helper verification path.
 
@@ -47,6 +47,12 @@ Optional site permissions are removed after each attempt; the real helper displa
 - Keep the separate local OAuth client from the earlier test unchanged. The generic helper does not use that client or request Google credentials.
 
 ## Checks
+
+### Standalone real-email trial
+
+After stopping the real-site launcher, use `NODE_USE_SYSTEM_CA=1 PROTOTYPE_CONFIG=/private/tmp/vellic-protected-site-config.json node prototype/browser-helper/run-email.cjs`. This reuses only the existing email delivery settings, not the Google OAuth client. It creates a separate local account/database under `/private/tmp/vellic-browser-helper-email-live/` and enables the controlled loopback fixture. Keep this launcher isolated; it is not the real-site launcher's private-network policy.
+
+Open `http://localhost:4399/login?standalone=1` in normal Chrome. The user enters their email and real emailed code with the displayed synthetic test password. The site only sets its own browser session; it does not complete a Vellic pairing. Then scan `http://localhost:4399/members` in local Vellic, connect the generic browser helper on the protected page, and complete the scan. Real email delivery through this controlled site is distinct from a third-party site's MFA compatibility. Live verification is pending.
 
 ```sh
 node prototype/browser-helper/check.cjs

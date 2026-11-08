@@ -49,7 +49,7 @@ async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},se
       }
       if(url.pathname==='/sign-in'){
         if(!valid(login))return reply(410,'Login expired','Start again from Vellic.');
-        return reply(200,'Sign in to the test site',`<p>Only four sample pages. This test site explicitly supplies its own temporary session to your local Vellic scan. No Google cookies are transferred.</p>${google.clientId?'<a href="/google/start">Continue with Google</a>':'<p>Google setup is pending.</p>'}<hr>${form('/email/start','<label>Email<input type="email" name="email" required autocomplete="email"></label><label>Test-site password<input type="password" name="password" required></label><small>Test-only password: '+escape(password)+'</small><button>Send verification code</button>')}<p>${testInbox?'Local test inbox mode: no real email will be sent.':'A one-time code will be sent to the email you enter.'}</p>`);
+        return reply(200,'Sign in to the test site',`<p>${login.pair?'Only four sample pages. This test site explicitly supplies its own temporary session to your local Vellic scan. No Google cookies are transferred.':'Sign in to four sample pages with the test password and an emailed code. After signing in, the browser helper will connect this site to local Vellic.'}</p>${google.clientId?'<a href="/google/start">Continue with Google</a>':login.pair?'<p>Google setup is pending.</p>':''}<hr>${form('/email/start','<label>Email<input type="email" name="email" required autocomplete="email"></label><label>Test-site password<input type="password" name="password" required></label><small>Test-only password: '+escape(password)+'</small><button>Send verification code</button>')}<p>${testInbox?'Local test inbox mode: no real email will be sent.':'A one-time code will be sent to the email you enter.'}</p>`);
       }
       if(url.pathname==='/email/start'&&req.method==='POST'){
         if(login.sentAt && now()-login.sentAt<30000)return reply(429,'Please wait','Wait 30 seconds before requesting another code.');
@@ -60,7 +60,7 @@ async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},se
       }
       if(url.pathname==='/email/verify'&&req.method==='GET'){
         if(!valid(login)||!login.codeHash)return reply(410,'Verification expired','Start again from Vellic.');
-        return reply(200,'Check your email',form('/email/verify','<label>Six-digit verification code<input name="code" inputmode="numeric" autocomplete="one-time-code" required></label><button>Verify and connect to Vellic</button>'));
+        return reply(200,'Check your email',form('/email/verify','<label>Six-digit verification code<input name="code" inputmode="numeric" autocomplete="one-time-code" required></label><button>'+(login.pair?'Verify and connect to Vellic':'Verify and sign in')+'</button>'));
       }
       if(url.pathname==='/email/verify'&&req.method==='POST'){
         if(!valid(login)||login.codeExpires<=now()||login.attempts>=5)return reply(410,'Verification expired','Start again from Vellic.');
