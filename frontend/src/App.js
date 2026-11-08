@@ -14492,6 +14492,14 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (session?.sessionId) api.deleteScanAuthSession(session.sessionId).catch(() => {});
         return;
       }
+      if (process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE === 'true'
+        && ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+        && /^http:\/\/localhost:4399\/login\?pair=[a-f0-9]{48}$/.test(session.externalLoginUrl || '')) {
+        setScanAuthPrompt((current) => current ? { ...current, loading: false, error: '',
+          authBrowser: { sessionId: session.sessionId, externalLoginUrl: session.externalLoginUrl, simplePasswordGate: false },
+        } : current);
+        return;
+      }
       if (!session.simplePasswordGate && !scanAuthBrowserBetaEnabled) {
         if (session?.sessionId) api.deleteScanAuthSession(session.sessionId).catch(() => {});
         setScanAuthPrompt((current) => current ? {
@@ -22252,7 +22260,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   loading={scanAuthPrompt.loading}
                   disabled={!scanAuthPrompt.interactiveLoginSupported || scanAuthPrompt.loading}
                 >
-                  {scanAuthPrompt.interactiveLoginSupported ? 'Enter password' : 'Login unavailable'}
+                  {scanAuthPrompt.interactiveLoginSupported ? (process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE === 'true' && scanAuthPrompt.url?.startsWith('http://localhost:4399') ? 'Sign in to test site' : 'Enter password') : 'Login unavailable'}
                 </Button>
               ) : null}
             </>
@@ -22272,8 +22280,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                   disabled={scanAuthPrompt.loading}
                   onChange={() => setScanAuthPrompt((current) => current ? { ...current, captureThumbnails: !current.captureThumbnails } : current)}
                 />
-                <p>Enter the password once. Vellic will try it on other protected pages on this site during this scan, then discard it.</p>
-                {scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode ? (
+                {scanAuthPrompt.authBrowser.externalLoginUrl ? <p>Sign in on the local test site in your browser. Complete any verification there, then return and choose Use this login.</p> : <p>Enter the password once. Vellic will try it on other protected pages on this site during this scan, then discard it.</p>}
+                {scanAuthPrompt.authBrowser.externalLoginUrl ? <a className="inline-link" href={scanAuthPrompt.authBrowser.externalLoginUrl} target="_blank" rel="noreferrer">Open test-site sign-in</a> : scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode ? (
                   <div className="scan-auth-password-form">
                     <TextInput
                       ref={scanAuthBrowserPasswordRef}

@@ -9925,6 +9925,11 @@ app.post('/scan-auth/precheck', authMiddleware, requireAuth, scanLimiter, requir
   }
 });
 
+const localPrototypeBridge = require('./prototype/protected-site/bridge.cjs').createLocalBridge({
+  app, sessions: scanAuthSessions, closeSession: closeScanAuthSession,
+  createContext: createAuthenticatedBrowserContext, expired: isScanAuthSessionExpired,
+});
+
 app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requireApiKey, async (req, res) => {
   const { url, sampleUrls } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
@@ -9944,6 +9949,8 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
       const safeSampleUrl = await assertSafeUrl(sampleUrl);
       return isHostnameInAuthScope(new URL(safeSampleUrl).hostname, session) ? safeSampleUrl : null;
     }))).filter(Boolean);
+    const localLogin = localPrototypeBridge?.start(session);
+    if (localLogin) return res.json(localLogin);
     if (session.status !== 'ready' && SCAN_AUTH_INTERACTIVE_SUPPORTED) {
       await startInteractiveScanAuthSession(session);
     }
@@ -10068,6 +10075,7 @@ app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireA
 
 app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const session = getScanAuthSessionForRequest(req, req.params.id);
+  if (session?.prototypePair && !isScanAuthSessionExpired(session)) return res.status(409).json({ error: 'Finish signing in on the test site, then return here.' });
   if (!session || !session.browserContext) {
     return res.status(410).json({ error: 'This login session expired. Close this dialog and start the scan again.', code: 'scan_auth_expired' });
   }

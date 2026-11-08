@@ -16,4 +16,20 @@ describe('sanitizeUrl', () => {
     expect(sanitizeUrl('http://192.168.1.10')).toBe('');
     expect(sanitizeUrl('name@example.com')).toBe('');
   });
+
+  test('limits the opt-in local prototype to its exact test origin', () => {
+    const previous = process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE;
+    try {
+      process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE = 'false';
+      expect(sanitizeUrl('http://localhost:4399/')).toBe('');
+      process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE = 'true';
+      expect(sanitizeUrl('http://localhost:4399/members')).toBe('http://localhost:4399/members');
+      expect(sanitizeUrl('http://localhost:4400/')).toBe('');
+      expect(sanitizeUrl('http://127.0.0.1:4399/')).toBe('');
+      expect(sanitizeUrl('http://user:password@localhost:4399/')).toBe('');
+    } finally {
+      if (previous === undefined) delete process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE;
+      else process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE = previous;
+    }
+  });
 });
