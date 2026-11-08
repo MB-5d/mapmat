@@ -8,15 +8,20 @@ Isolated research on `codex/auth-login-compatibility-prototype`. Do not deploy t
 - Backend integration passed with an independently signed-in fixture (no cooperative Vellic bridge): standalone password/email-code login, helper import, signed-out comparison, four protected pages, private captures, anonymous image denial, cancellation, replay rejection, and session removal after scanning.
 - Frontend build, 56 focused UI tests and full backend checks passed during implementation. A large-bundle warning remains.
 - Manual local UI check passed: the helper pairing code appears, attempting to continue before import shows a specific incomplete-login message, and closing the dialog cancels the pairing. This used a public example URL only and did not export a real session.
-- The user approved loading the helper into Chrome. Chrome confirmed **Extension loaded**, the expected extension ID, and the enabled state. Cookie export and real third-party login/scan remain unverified. **Not ready for staging.** Earlier Google/email results in `../protected-site/` used a cooperative site and are not helper evidence.
+- The user approved loading the helper into Chrome and transferring the GitHub session to local Vellic. The real Chrome helper imported that session, verified signed-out 404 versus signed-in access, and scanned exactly four private GitHub test pages with four private captures and no failures or skips after fixes. Anonymous image requests returned 401, owner requests returned 200, and the imported session returned 404 after scan completion. **Not ready for staging:** this used an existing GitHub password login, not Google or a confirmed second factor. Earlier Google/email results in `../protected-site/` used a cooperative site and are not generic-helper evidence.
 
 ## Real-site trial in progress
 
-The user does not have Notion, so the trial uses their existing GitHub account instead. A separate private repository with four dummy page folders was created at `https://github.com/MB-5d/vellic-auth-scan-test/tree/main/test-pages`. The project repository is not a test target. Anonymous access to that URL returned HTTP 404. Normal Chrome displayed the private About page and its dummy marker after user interaction. The login method and any second factor have not been confirmed; this is not yet evidence of Google or 2FA compatibility. Explicit approval to transfer the GitHub session is pending.
+The user does not have Notion, so the trial uses their existing GitHub account instead. A separate private repository with four dummy page folders was created at `https://github.com/MB-5d/vellic-auth-scan-test/tree/main/test-pages`. The project repository is not a test target. The user confirmed using their existing password; no second factor was reported. The private About marker was visible in Chrome and in the scanner's private image. Fresh Google testing is pending permission to sign out of the existing Chrome GitHub session; automatic approval review blocked that sign-out because it affects other GitHub tabs.
 
 Helper verification now recognizes signed-out 404 responses as a possible hidden private resource, while still requiring active content at the same URL after import. Public 200 responses, challenge/limit responses and server errors do not satisfy the signed-out baseline. This change is local to the helper verification path.
 
 Imported sessions restrict top-level document navigation to the selected URL path and its descendants, and skip focused-scan parent inspection. Policy tests, the four-page backend integration, and backend regression checks passed with this restriction. Assets and API requests still use the existing network guard; this is a navigation boundary, not page-level credential isolation.
+
+The real trial exposed and fixed three issues locally:
+- Chrome destroyed the toolbar popup during its permission prompt. The helper now opens a persistent connection window bound to the clicked tab. It no longer requests `activeTab`; it reads the source URL only after the exact-site optional grant and verifies that URL before reading cookies. Successful transfer is reported only after checking that the grant was removed.
+- Stylesheet `data-href` identifiers were incorrectly discovered as pages. Non-navigation style/script/metadata elements are excluded from data-attribute discovery.
+- Inferred structural ancestors were incorrectly queued for private screenshots. They are excluded from capture, retaining their children. The real scan then produced four captures, zero failures, and zero skips. The local integration fixture now covers stylesheet identifiers and structural ancestor capture, and the full backend checks passed again.
 
 ## Install for an approved local trial
 
@@ -29,7 +34,7 @@ Imported sessions restrict top-level document navigation to the selected URL pat
 
 The extension can only send requests to the fixed loopback backend. It has no general browsing-history permission, no automatic content scripts, no remotely loaded code, and no persistent cookie/token storage. It reads cookies applicable to the selected tab URL only; optional local storage reads the top frame at the exact selected origin. Cookies are narrowed to that host. The helper excludes Google and common identity-provider origins.
 
-Optional site permissions are removed after each attempt. A background alarm also revokes them after 30 seconds if the popup closes, and on browser startup. Pairing tokens are 256-bit, stored hashed server-side, single-use for import, owner-bound to the Vellic scan, and unusable after cancellation/expiry. Snapshots stay in memory. Closing the scan dialog or finishing the scan discards server state. The existing scan lifetime and network guards remain active; the real-site launcher blocks private-network targets.
+Optional site permissions are removed after each attempt; the real helper displayed the verified removal result. A background alarm also revokes them after 30 seconds if the connection window closes, and on browser startup. Pairing tokens are 256-bit, stored hashed server-side, single-use for import, owner-bound to the Vellic scan, and unusable after cancellation/expiry. Snapshots stay in memory. Closing the scan dialog or finishing the scan discards server state. The existing scan lifetime and network guards remain active; the real-site launcher blocks private-network targets.
 
 ## Limits and remaining gates
 
@@ -37,7 +42,7 @@ Optional site permissions are removed after each attempt. A background alarm als
 - Cookies and optional localStorage only. IndexedDB, tab/sessionStorage, partitioned cookies, device/IP binding, and nonportable credentials may prevent access. The helper does not bypass those restrictions.
 - Host/path-scoped cookies outside the selected page and cross-origin app authentication are excluded. The UI must not claim universal login compatibility.
 - Signed-out SPA shells may not be recognized by the current classifier; fail closed and record a compatibility blocker.
-- Real Google sign-in, real email/2FA, extension permission-denial/cleanup UI, and meaningful page/content verification on real sites remain release gates. A scanner running locally does not establish portability to a cloud scanner/IP.
+- Real Google sign-in, real email/2FA, and Chrome permission-denial/interrupted-window cleanup remain release gates. Successful transfer and immediate cleanup were verified on GitHub, along with protected content and image access controls. A scanner running locally does not establish portability to a cloud scanner/IP.
 - Production packaging, HTTPS pairing transport, published extension distribution, hosted origin/extension allowlisting and deployment review are intentionally pending. Local-only guards refuse hosted execution.
 - Keep the separate local OAuth client from the earlier test unchanged. The generic helper does not use that client or request Google credentials.
 

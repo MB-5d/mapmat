@@ -4748,6 +4748,8 @@ function extractLinks(html, baseUrl) {
   // Extract URLs from data attributes that might contain links
   $('[data-href], [data-url], [data-link]').each((_, el) => {
     const $el = $(el);
+    // Style/script loaders also use data-href as an asset identifier.
+    if ($el.is('style, script, link, meta, template') || $el.closest('template').length) return;
     const href = $el.attr('data-href') || $el.attr('data-url') || $el.attr('data-link');
     if (!href) return;
     try {

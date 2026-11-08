@@ -53,6 +53,9 @@ const { startLab } = require('../protected-site/run.cjs');
     }
     assert(result, 'Scan timed out');
     const nodes = flatten(result.root);
+    assert(!nodes.some(node => node.url?.includes('github-ui-cascade-layer-order')), 'Stylesheet identifiers are not page links');
+    assert.equal(result.authenticatedCaptureSummary.failed, 0, 'Structural ancestors must not be captured');
+    assert.equal(result.authenticatedCaptureSummary.captured, 4);
     assert(!nodes.some(node => node.httpStatus === 200 && !node.url.startsWith(site + '/members')), 'Do not scan parent or sibling pages with an imported session');
     for (const path of ['/members', '/members/about', '/members/projects', '/members/projects/sample']) {
       const node = nodes.find(item => item.url === site + path);

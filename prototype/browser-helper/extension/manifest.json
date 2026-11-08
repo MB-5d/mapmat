@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "description": "Explicitly connect one selected site's session to an isolated local Vellic scan.",
   "permissions": [
-    "activeTab",
     "cookies",
     "scripting",
     "alarms"
@@ -17,8 +16,7 @@
     "http://localhost:4399/*"
   ],
   "action": {
-    "default_title": "Connect this site to local Vellic",
-    "default_popup": "popup.html"
+    "default_title": "Connect this site to local Vellic"
   },
   "background": { "service_worker": "worker.js" },
   "minimum_chrome_version": "120",

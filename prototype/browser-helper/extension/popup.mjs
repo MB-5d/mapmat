@@ -29,9 +29,12 @@ $('pair-form').addEventListener('submit', async event => {
     pairing = $('pair').value.trim();
     if (!/^[a-f0-9]{64}$/.test(pairing)) throw Error('Copy the complete pairing code from local Vellic.');
     connection = await request('describe', {});
-    [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const targetTab = new URLSearchParams(location.search).get('targetTab');
+    if (!targetTab || !/^\d+$/.test(targetTab)) throw Error('Open the helper from the protected site tab.');
+    activeTab = await chrome.tabs.get(Number(targetTab));
     if (!activeTab || activeTab.incognito) throw Error('Use a regular Chrome tab for this local trial.');
-    assertTarget(activeTab.url, connection.origin);
+    // The selected tab's URL is available only after the exact-site grant.
+    // Avoid activeTab: its implicit grant cannot be removed by permissions.remove.
     $('site').textContent = connection.origin;
     $('destination').textContent = connection.destination;
     $('pair-form').hidden = true; $('connection').hidden = false;
@@ -44,6 +47,7 @@ $('connect').addEventListener('click', async () => {
   if (!connection || !$('consent').checked) { status('Allow the selected site connection before continuing.'); return; }
   const pattern = connection.origin + '/*';
   let granted = false;
+  let connected = false;
   $('connect').disabled = true; $('cancel').disabled = true;
   try {
     // Must run directly from this user gesture, before any unrelated awaits.
@@ -66,10 +70,18 @@ $('connect').addEventListener('click', async () => {
     // Detect redirects/navigation during collection before transferring anything.
     assertTarget((await chrome.tabs.get(activeTab.id)).url, connection.origin);
     await request('import', { origin: connection.origin, storageState: { cookies, origins } });
-    reset('Connected. Return to Vellic and choose Use this login. If access cannot be verified, this site may require a different session method.');
+    connected = true;
   } catch (error) { reset(error.message || 'Connection failed. No credentials were saved by the helper.'); }
   finally {
-    if (granted) await chrome.permissions.remove({ origins: [pattern] }).catch(() => {});
+    if (granted) {
+      await chrome.permissions.remove({ origins: [pattern] }).catch(() => {});
+      const remaining = await chrome.permissions.getAll();
+      if (remaining.origins?.includes(pattern)) {
+        reset('Site access could not be removed. Remove this helper in Chrome before continuing.');
+        connected = false;
+      }
+    }
+    if (connected) reset('Connected. Temporary site access removed. Return to Vellic and choose Use this login.');
     $('connect').disabled = false; $('cancel').disabled = false;
   }
 });

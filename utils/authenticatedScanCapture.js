@@ -2,7 +2,7 @@ async function captureAuthenticatedScanResult({ result, origin, captureType, lim
   const nodes = [];
   const visit = (node) => {
     if (!node) return;
-    if (node.url && !node.isVirtualMissing && !node.isStructural && !node.isFile) nodes.push(node);
+    if (node.url && !node.isVirtualMissing && !node.isStructural && !node.isStructuralContext && !node.isFile) nodes.push(node);
     (node.children || []).forEach(visit);
   };
   visit(result.root);
