@@ -5,7 +5,7 @@ const { startLab } = require('../protected-site/run.cjs');
 (async () => {
   const { normalizeCookies } = await import('./extension/capture.mjs');
   const inbox = new Map();
-  const lab = await startLab({ testInbox: inbox, helper: true });
+  const lab = await startLab({ testInbox: inbox, helper: true, hideProtected: true });
   const apiBase = 'http://127.0.0.1:4349', site = 'http://localhost:4399';
   const extension = 'chrome-extension://chfjcbfapoiglecheoijdnbclmepcobe';
   const api = async (path, body) => {
@@ -33,7 +33,7 @@ const { startLab } = require('../protected-site/run.cjs');
     assert.equal((await form('/email/start', { csrf, email: 'helper@example.invalid', password: 'Vellic-local-test-only' })).status, 303);
     assert.equal((await form('/email/verify', { csrf, code: inbox.get('helper@example.invalid') })).status, 200);
     assert.equal((await form('/members')).status, 200);
-    assert.equal((await fetch(site + '/members')).status, 401);
+    assert.equal((await fetch(site + '/members')).status, 404);
     const session = await api('/scan-auth/sessions', { url: site + '/', sampleUrls: [site + '/members'], browserHelper: true });
     assert(session.helperPairingCode);
     const readyBeforeImport = await fetch(apiBase + '/scan-auth/sessions/' + session.sessionId + '/complete', { method: 'POST', headers: { authorization: 'Bearer ' + lab.token } });

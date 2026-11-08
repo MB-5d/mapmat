@@ -42,4 +42,10 @@ function validateState(input, origin, now = Date.now()) {
   return { cookies, origins };
 }
 
-module.exports = { targetUrl, validateState };
+// Some sites conceal private resources with 404 while signed out. Acceptance
+// still requires the same URL to return active content after session import.
+function isSignedOutRestricted(status, classification) {
+  return classification.isAuthStatus === true || status === 404;
+}
+
+module.exports = { targetUrl, validateState, isSignedOutRestricted };

@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { targetUrl, validateState } = require('./policy.cjs');
+const { targetUrl, validateState, isSignedOutRestricted } = require('./policy.cjs');
 const { createBrowserHelper } = require('./bridge.cjs');
 
 (async () => {
@@ -7,6 +7,9 @@ const { createBrowserHelper } = require('./bridge.cjs');
   const origin = 'https://private.example.com';
   const cookie = { name: 'session', value: 'synthetic', domain: 'private.example.com', path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: -1 };
   const state = { cookies: [cookie], origins: [] };
+  assert.equal(isSignedOutRestricted(401, { isAuthStatus: true }), true);
+  assert.equal(isSignedOutRestricted(404, { isAuthStatus: false }), true);
+  for (const status of [200, 403, 429, 500]) assert.equal(isSignedOutRestricted(status, { isAuthStatus: false }), false);
   assert.equal(targetUrl(origin).origin, origin);
   for (const url of ['https://accounts.google.com/', 'http://example.com', 'https://user:pass@example.com', 'https://login.microsoftonline.com']) {
     assert.throws(() => targetUrl(url));

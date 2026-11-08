@@ -8,7 +8,13 @@ Isolated research on `codex/auth-login-compatibility-prototype`. Do not deploy t
 - Backend integration passed with an independently signed-in fixture (no cooperative Vellic bridge): standalone password/email-code login, helper import, signed-out comparison, four protected pages, private captures, anonymous image denial, cancellation, replay rejection, and session removal after scanning.
 - Frontend build, 56 focused UI tests and full backend checks passed during implementation. A large-bundle warning remains.
 - Manual local UI check passed: the helper pairing code appears, attempting to continue before import shows a specific incomplete-login message, and closing the dialog cancels the pairing. This used a public example URL only and did not export a real session.
-- **Real Chrome extension APIs/UI and real third-party providers are not yet verified. Not ready for staging.** Earlier Google/email results in `../protected-site/` used a cooperative site and are not helper evidence.
+- The user approved loading the helper into Chrome. Chrome confirmed **Extension loaded**, the expected extension ID, and the enabled state. Cookie export and real third-party login/scan remain unverified. **Not ready for staging.** Earlier Google/email results in `../protected-site/` used a cooperative site and are not helper evidence.
+
+## Real-site trial in progress
+
+The user does not have Notion, so the trial uses their existing GitHub account instead. A separate private repository with four dummy page folders was created at `https://github.com/MB-5d/vellic-auth-scan-test/tree/main/test-pages`. The project repository is not a test target. Anonymous access to that URL returned HTTP 404; Google sign-in for the existing GitHub account is awaiting user completion.
+
+Helper verification now recognizes signed-out 404 responses as a possible hidden private resource, while still requiring active content at the same URL after import. Public 200 responses, challenge/limit responses and server errors do not satisfy the signed-out baseline. This change is local to the helper verification path.
 
 ## Install for an approved local trial
 

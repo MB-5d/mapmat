@@ -10103,7 +10103,7 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
             const signedOut = await fetchPageWithBrowserContext(signedOutContext, sampleUrl);
             const baseline = classifyScanResponse({ html: signedOut.html, status: signedOut.status,
               url: sampleUrl, finalUrl: signedOut.finalUrl || sampleUrl, headers: signedOut.headers || {} });
-            if (!baseline.isAuthStatus) continue;
+            if (!require('./prototype/browser-helper/policy.cjs').isSignedOutRestricted(signedOut.status, baseline)) continue;
           } finally { await signedOutContext.close(); }
         }
         const page = await fetchPageWithBrowserContext(session.browserContext, sampleUrl);

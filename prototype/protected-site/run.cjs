@@ -1,10 +1,10 @@
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto'),{spawn}=require('node:child_process');
 const {startSite}=require('./site.cjs');
 const repo=path.resolve(__dirname,'../..');
-async function startLab({testInbox=null,config={},directory,helper=false,realSites=false}={}){
+async function startLab({testInbox=null,config={},directory,helper=false,realSites=false,hideProtected=false}={}){
   const dir=directory||fs.mkdtempSync(path.join(os.tmpdir(),'vellic-protected-lab-'));fs.mkdirSync(dir,{recursive:true,mode:0o700});
   const bridgeKey=crypto.randomBytes(32).toString('hex'),password=crypto.randomBytes(24).toString('hex');
-  const site=await startSite({bridgeKey,standalone:helper,google:config.google||{},testInbox,sendCode:config.resendKey?async(email,code)=>{
+  const site=await startSite({bridgeKey,standalone:helper,hideProtected,google:config.google||{},testInbox,sendCode:config.resendKey?async(email,code)=>{
     const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:'Bearer '+config.resendKey,'content-type':'application/json'},body:JSON.stringify({from:config.emailFrom,to:[email],subject:'Vellic local test — verification code',text:`Your code for the local protected test site is ${code}. It expires in five minutes. This test does not change your Vellic account.`}),signal:AbortSignal.timeout(15000),redirect:'error'});
     if(!response.ok)throw Error('Email delivery failed');
   }:null});

@@ -1,7 +1,7 @@
 const http=require('node:http'),crypto=require('node:crypto'),jwt=require('jsonwebtoken');
 const random=()=>crypto.randomBytes(24).toString('hex');
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},sendCode,now=Date.now,testInbox=null,standalone=false}={}) {
+async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},sendCode,now=Date.now,testInbox=null,standalone=false,hideProtected=false}={}) {
   if(!/^[a-f0-9]{64}$/.test(bridgeKey||''))throw Error('Bridge key required');
   if(backend!=='http://127.0.0.1:4349')throw Error('Loopback backend required');
   const base='http://localhost:4399',logins=new Map(),sessions=new Map(),grants=new Map();
@@ -87,7 +87,7 @@ async function startSite({bridgeKey,backend='http://127.0.0.1:4349',google={},se
       const paths=['/members','/members/about','/members/projects','/members/projects/sample'];
       if(url.pathname==='/')return reply(200,'Protected Site Test','<p>Public landing page for four protected sample pages.</p><nav>'+paths.map(p=>`<a href="${p}">${escape(p)}</a>`).join(' ')+'</nav>');
       if(paths.includes(url.pathname)){
-        if(!valid(session))return reply(401,'Login required','<p>This page requires sign-in. Start from Vellic to connect a test login.</p><form><label>Email<input type="email" name="email"></label><label>Password<input type="password" name="password"></label></form>');
+        if(!valid(session))return hideProtected ? reply(404,'Page not found','This resource is unavailable.') : reply(401,'Login required','<p>This page requires sign-in. Start from Vellic to connect a test login.</p><form><label>Email<input type="email" name="email"></label><label>Password<input type="password" name="password"></label></form>');
         const titles=['Test Home','About the Test','Test Projects','Sample Project'];return reply(200,titles[paths.indexOf(url.pathname)],'<nav>'+paths.map((p,i)=>`<a href="${p}">${titles[i]}</a>`).join('')+'</nav><p>Protected sample content. No customer or project data.</p>');
       }
       if(url.pathname==='/sitemap.xml'){res.writeHead(200,{'content-type':'application/xml'});return res.end('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+paths.map(p=>'<url><loc>'+base+p+'</loc></url>').join('')+'</urlset>');}
