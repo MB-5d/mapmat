@@ -58,7 +58,8 @@ const { buildExtension } = require('./build-extension.cjs');
     const manifest = buildExtension(origin, output);
     assert.deepEqual(manifest.host_permissions, [origin + '/*']);
     assert.deepEqual(manifest.optional_host_permissions, ['https://*/*']);
-    assert(!manifest.key, 'Cloud build must not replace installed local extension');
+    assert(manifest.key && manifest.key !== JSON.parse(fs.readFileSync(path.join(__dirname, 'extension/manifest.json'))).key,
+      'Cloud build must have a different public key from the installed local extension');
     assert(!JSON.stringify(manifest).includes('127.0.0.1'));
     assert.throws(() => buildExtension('https://attacker.example', path.join(dir, 'bad')));
     console.log('Passed: hosted isolation, exact origin/project/extension configuration, private pilot access, account/billing lockdown, deadline and cloud-only helper packaging.');

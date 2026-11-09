@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { hostedOrigin } = require('./config.cjs');
 
 function buildExtension(origin, output) {
@@ -8,8 +9,10 @@ function buildExtension(origin, output) {
   if (fs.existsSync(output)) throw Error('Use a new empty output path for the reviewed helper build.');
   fs.cpSync(source, output, { recursive: true, errorOnExist: true });
   const manifest = JSON.parse(fs.readFileSync(path.join(output, 'manifest.json')));
-  // A different fixed key keeps this build separate from the installed local helper.
-  delete manifest.key;
+  // Public key pins the pilot's separate Chrome ID before deployment. No private
+  // signing key is saved; this remains an explicitly approved unpacked test build.
+  const { publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  manifest.key = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
   manifest.name = 'Vellic Cloud Test Helper';
   manifest.description = 'Connect one chosen site to the explicitly named isolated Vellic cloud test.';
   manifest.host_permissions = [origin + '/*'];
@@ -25,5 +28,8 @@ if (require.main === module) {
   const [origin, output] = process.argv.slice(2);
   if (!origin || !output) throw Error('Usage: node build-extension.cjs HTTPS_ORIGIN NEW_OUTPUT_DIRECTORY');
   buildExtension(origin, path.resolve(output));
-  console.log('Prepared cloud-only helper. Load only after approval; set its exact Chrome ID on the pilot.');
+  const manifest = JSON.parse(fs.readFileSync(path.join(path.resolve(output), 'manifest.json')));
+  const id = crypto.createHash('sha256').update(Buffer.from(manifest.key, 'base64')).digest('hex')
+    .slice(0, 32).replace(/[0-9a-f]/g, digit => String.fromCharCode(97 + parseInt(digit, 16)));
+  console.log('Prepared cloud-only helper ID: ' + id + '. Load only after approval, then verify this ID in Chrome.');
 }
