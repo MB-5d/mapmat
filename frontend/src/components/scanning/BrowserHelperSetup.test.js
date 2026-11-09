@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 import BrowserHelperSetup, { checkInstalledHelper } from './BrowserHelperSetup';
 import * as api from '../../api';
 vi.mock('../../api', () => ({ getBrowserHelperConfig: vi.fn(), getScanAuthSession: vi.fn(), downloadBrowserHelper: vi.fn() }));
-const config={enabled:true,extensionId:'a'.repeat(32),version:'0.3.0',origin:'https://pilot.example',downloadAvailable:true};
+const config={enabled:true,extensionId:'a'.repeat(32),version:'0.3.0',origin:'https://pilot.example',downloadAvailable:true,temporaryAccessRemoved:true};
 describe('browser helper integration',()=>{
  let container,root;
  beforeEach(()=>{ vi.clearAllMocks(); container=document.createElement('div');document.body.appendChild(container);root=createRoot(container);api.getBrowserHelperConfig.mockResolvedValue(config); });
@@ -24,6 +24,12 @@ describe('browser helper integration',()=>{
   expect(onStatus).toHaveBeenLastCalledWith('connected');expect(container.textContent).toContain('Site connected');
   act(()=>root.unmount());root=createRoot(container);const count=api.getScanAuthSession.mock.calls.length;
   await act(async()=>vi.advanceTimersByTimeAsync(10000));expect(api.getScanAuthSession).toHaveBeenCalledTimes(count);
+ });
+ test('import alone cannot enable scanning while helper access remains',async()=>{
+  window.chrome={runtime:{sendMessage:(_id,_msg,cb)=>cb({...config,temporaryAccessRemoved:false})}};
+  api.getScanAuthSession.mockResolvedValue({helperImported:true});const onStatus=vi.fn();
+  await act(async()=>root.render(<BrowserHelperSetup session={{sessionId:'s',helperExpiresAt:Date.now()+60000}} onReady={vi.fn()} onStatus={onStatus}/>));
+  expect(onStatus).toHaveBeenLastCalledWith('cleanup');expect(container.textContent).toContain('Waiting for the helper to end');
  });
  test('a late installation check cannot re-enable a closed dialog',async()=>{
   let resolveConfig;api.getBrowserHelperConfig.mockReturnValue(new Promise(resolve=>{resolveConfig=resolve;}));

@@ -52,7 +52,11 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
       try {
         const result = await api.getScanAuthSession(session.sessionId);
         if (stopped) return;
-        if (result.helperImported) update('connected');
+        let permissionsOff = false;
+        const currentHelper = config && await checkInstalledHelper(config, undefined, value => { permissionsOff = value; });
+        if (stopped) return;
+        setAccessRemoved(permissionsOff);
+        if (result.helperImported) update(currentHelper && permissionsOff ? 'connected' : 'cleanup');
         else if (Date.now() >= session.helperExpiresAt) { update('expired'); return; }
         else update('waiting');
       } catch (error) {
@@ -64,7 +68,7 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
     };
     update('waiting'); poll();
     return () => { stopped = true; clearTimeout(timer); };
-  }, [session?.sessionId, session?.helperExpiresAt, onStatus]);
+  }, [session?.sessionId, session?.helperExpiresAt, config, onStatus]);
   const download = async () => {
     setDownloadError('');
     try {
@@ -73,7 +77,7 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
   };
   return <section aria-label="Browser helper setup">
     <p role="status">{message}</p>
-    {installed && accessRemoved && <p>Temporary site access is off.</p>}
+    {installed && accessRemoved && <p>Last permission check: temporary site access was off.</p>}
     {!installed && config && <details open>
       <summary>Install or update the staging helper</summary>
       <ol>
@@ -90,6 +94,7 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
     {downloadError && <p role="alert">{downloadError}</p>}
     {session?.sessionId && <>
       <p role="status">{connection === 'connected' ? 'Site connected. Choose Use this login to verify access and scan.'
+        : connection === 'cleanup' ? 'Site received. Waiting for the helper to end its temporary access. If cleanup fails, remove the helper and close this login dialog.'
         : connection === 'expired' ? 'This connection expired or the scanner restarted. Start a new connection.'
         : connection === 'offline' ? 'Connection interrupted. Retrying… Your login is not ready to use.'
         : 'Waiting for you to connect the signed-in site in Chrome.'}</p>

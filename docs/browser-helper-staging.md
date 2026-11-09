@@ -43,3 +43,7 @@ The app waits for the imported session before enabling Use this login. Connectio
 Run `npm run check:browser-helper`, `npm run check:scan-auth-session`, private capture checks, frontend tests/build and backend checks. The isolated cloud fixture contains disposable content only and is installed exclusively by the hosted pilot when explicitly enabled. Cloud lifecycle results and teardown are recorded in `prototype/browser-helper/HOSTED.md`; real Stripe evidence remains separate.
 
 Official browser contracts: [external messaging](https://developer.chrome.com/docs/extensions/develop/concepts/messaging) and [exact-origin connection allowlisting](https://developer.chrome.com/docs/extensions/reference/manifest/externally-connectable).
+
+### Read-only staging check, November 9
+
+The existing staging environment is `da475d9e-af16-4895-a572-db8b75f53573`. Its `mapmat` web service has one replica, `RUN_MODE=web`, scan jobs enabled, Postgres and R2 storage. The helper is not enabled. Before the scoped rollout, change the currently enabled `TEST_AUTH_ENABLED` and `ALLOW_VERCEL_PREVIEWS` to false, explicitly set the remaining required false flags, then add the reviewed artifact/extension settings and tester IDs. These are planned deployment changes only; none were applied during integration testing.

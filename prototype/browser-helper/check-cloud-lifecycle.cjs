@@ -57,7 +57,7 @@ const job=j=>json('/scan-jobs/'+j.jobId+'?access_token='+j.jobAccessToken);
   const {s,pending,j}=JSON.parse(fs.readFileSync(dir+'/restart-state.json'));
   for(const session of [s,pending]){assert.equal((await req('/scan-auth/sessions/'+session.sessionId)).status,404);assert.equal((await helper(session,'describe')).status,410);}
   assert.equal((await req('/scan-jobs','POST',{url:target,authSessionId:s.sessionId})).status,400);
-  const prior=await req('/scan-jobs/'+j.jobId+'?access_token='+j.jobAccessToken);let status=prior.status;if(prior.ok){const data=await prior.json();assert.notEqual(data.job.status,'complete');status=data.job.status;}
+  const prior=await req('/scan-jobs/'+j.jobId+'?access_token='+j.jobAccessToken);let status=prior.status;if(prior.ok){const data=await prior.json();assert(['failed','canceled'].includes(data.job.status),'Interrupted job must not resume');status=data.job.status;}else assert.equal(prior.status,404);
   const fresh=await connected();await req('/scan-auth/sessions/'+fresh.sessionId,'DELETE');
   fs.writeFileSync('/private/tmp/vellic-cloud-restart-integration.json',JSON.stringify({passed:true,actualCloud:true,priorSessionsRemoved:true,oldPairingRejected:true,oldScanNotResumed:true,oldJobStatus:status,newConnectionWorks:true},null,2));console.log('Cloud restart: prior sessions invalid, pairing rejected, no successful old result, fresh login works.');return;
  }

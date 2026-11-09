@@ -1,6 +1,6 @@
 # Local browser-helper trial
 
-Isolated research on `codex/auth-login-compatibility-prototype`. Do not enable the helper in staging/production. The separately authorized hosted trial is described in [HOSTED.md](HOSTED.md); its temporary Railway project was approved and deployed November 9, 2026.
+Isolated development on `codex/auth-login-compatibility-prototype`. No staging or production deployment has been performed. Current integration and rollout requirements are in [the staging guide](../../docs/browser-helper-staging.md); dated live results are in [HOSTED.md](HOSTED.md). The separately authorized hosted trial is described in [HOSTED.md](HOSTED.md); its temporary Railway project was approved and deployed November 9, 2026.
 
 ## Current evidence
 
@@ -10,7 +10,7 @@ Isolated research on `codex/auth-login-compatibility-prototype`. Do not enable t
 - Manual local UI check passed: the helper pairing code appears, attempting to continue before import shows a specific incomplete-login message, and closing the dialog cancels the pairing. This used a public example URL only and did not export a real session.
 - The user approved loading the helper into Chrome and transferring the GitHub session to local Vellic. Both an existing-password session and a fresh Google sign-in session passed through the real Chrome helper: signed-out 404 versus signed-in access, exactly four private GitHub test pages, four private captures, no failures or skips. Anonymous image requests returned 401, owner requests returned 200, and each imported session returned 404 after scan completion. The helper confirmed removal of temporary site access.
 - Password plus a real emailed code also passed through the actual Chrome helper on the controlled standalone test site, without the earlier cooperative session bridge. The user received and entered the code in Chrome; the helper imported the resulting site cookie. All four protected pages and private images passed the same access-control and post-scan session-deletion checks, with zero failures/skips. Permission denial, retry, fresh Chrome permission acceptance, and immediate removal were verified. This is real email-delivery evidence on a controlled site, not arbitrary third-party MFA compatibility.
-- **Not ready for staging:** hosted pairing/deployment and cloud-session portability gates below remain. Real authenticator, SMS, passkey and third-party email/MFA compatibility are not established. Google's tested login requested no additional verification.
+- The local-phase evidence below is historical. Later hosted tests established Google/GitHub session portability and a real Stripe Authenticator session scan; see HOSTED.md. SMS, passkey and arbitrary third-party login compatibility are not claimed.
 
 ## Real-site trial in progress
 
