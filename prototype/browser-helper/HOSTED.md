@@ -1,10 +1,10 @@
 # Isolated hosted helper trial
 
-Status: isolated cloud pilot deployed November 9, 2026; **not ready for staging**.
+Status: isolated cloud pilot tested and taken down November 9, 2026; **not ready for staging**. Real Stripe 2FA exposed a loading-screen false success.
 
-Pilot: https://scanner-pilot-auth-helper-pilot.up.railway.app/app
+Former pilot (offline): https://scanner-pilot-auth-helper-pilot.up.railway.app/app
 
-Project `5c1fef1f-dd9b-47fc-8673-be0e50b335c8`, environment `ece1df20-702c-44ef-bfc9-9ac3057352fc`, service `e4fae64d-88d4-44e5-868b-4b358c3edc5a`. Current deadline: November 10, 2026 at 9:33 AM America/New_York. This stops the process; remove the project after the trial. The user approved up to 48 hours, but the configured window is 24 hours.
+Project `5c1fef1f-dd9b-47fc-8673-be0e50b335c8`, environment `ece1df20-702c-44ef-bfc9-9ac3057352fc`, service `e4fae64d-88d4-44e5-868b-4b358c3edc5a`. Original deadline: November 10, 2026 at 9:33 AM America/New_York. Deployment was removed with `railway down`; the project was then placed in Railway’s Deleted list on November 9. Railway retains a 48-hour recovery window before permanent deletion. The user approved up to 48 hours, but the configured window is 24 hours.
 Keep the local helper installed separately. Do not change the existing MAP-MAT Railway project, staging, production, their secrets, databases, or storage.
 
 ## Deployment under review
@@ -67,8 +67,26 @@ Cloud evidence collected November 9:
 - A public scan of quotes.toscrape.com passed with a three-page cap. A one-page example.com scan with a two-page cap failed the existing root-only collapse safeguard because unvisited common-path guesses remained. Keep this edge case visible; do not present it as broad regular-scan validation.
 - Evidence files are local: `/private/tmp/vellic-cloud-pilot-evidence.json`, `/private/tmp/vellic-cloud-github-evidence.json`, `/private/tmp/vellic-cloud-storage-evidence.json`, `/private/tmp/vellic-cloud-github-map.png`. Credentials and the source job payload are kept separately in a private directory and must not be committed.
 
+- Scheduled cloud image cleanup passed against actual storage: a synthetic encrypted image expired and was removed after 63 seconds; active encrypted and public images were preserved. This verifies the scheduled cleanup process, not an elapsed 24-hour capture lifetime.
+- Actual elapsed ten-minute idle cloud session expiry passed: the imported synthetic session returned 404 and its pairing returned 410 after the deadline. This was an idle session; active-scan expiry remains locally verified only. Evidence: `/private/tmp/vellic-cloud-expiry-evidence.json`.
+- Cloud-only incognito support is prepared with Chrome split mode, same-context checks and the selected tab’s cookie store. Policy and packaging checks passed; actual browser enablement and Stripe transfer also passed; end-to-end content verification failed as described below. The local helper still rejects incognito.
+
+- The user completed a genuine Stripe Authenticator challenge in Chrome Incognito on November 9. The signed-in UI and existing Vellic sandbox were verified. Proposed one-page target: `/acct_1TeNpEBTeziwbBQm/test/products/prod_UluFy2Tz2UctfW` (Extra Editor). The user approved incognito helper access and transfer to the exact pilot. The actual split-mode helper connected successfully, the cloud verification endpoint returned ready, and a one-page job completed. However, visual inspection FAILED: the capture contains only Stripe’s loading screen, not the product. Do not count this as end-to-end MFA scanning success. Owner image access was 200, anonymous access 401, cache private/no-store, and the imported session returned 404 after completion. Incognito access was disabled and the cloud helper was uninstalled afterward.
+
 Still required:
+- Blocker: reject empty/loading SPA shells in authenticated access verification and capture. `fetchPageWithBrowserContext` currently tolerates a three-second network-idle timeout, then classifies/captures immediately; capture success does not establish meaningful content. The live Stripe result was marked active with title “Dashboard” while the image was only a loading screen. Investigate page readiness versus blocked/device-bound site behavior before declaring session portability. Add delayed-SPA and permanent-loading regressions, then repeat the approved one-page live test.
+- Verify Chrome permission revocation independently: the helper reported removal and its `getAll()` check passed, but Chrome’s extension settings still listed GitHub/Stripe grants. This discrepancy is unresolved; do not claim verified browser-wide revocation. Full cloud-helper uninstall removed the pilot extension and its access.
 - A genuine third-party second-factor challenge followed by the same helper transfer and cloud scan. GitHub's settings confirm 2FA is disabled. The user has 2FA on Coinbase, Stripe and GoDaddy. Prefer a Stripe sandbox with dummy data if suitable; existing owner sessions may access live finances even when viewing a sandbox. Do not transfer one without explicit approval of that scope. Do not enroll or alter MFA just to manufacture a passing test.
 - Real Chrome interrupted-window permission cleanup for the cloud build, and cloud cancellation/expiry/restart behavior.
 - Compatibility reporting for nonportable/device-bound sessions, signed-out SPA shells, cross-origin login storage and pages that cannot be scanned safely.
 - A reviewed extension distribution/update plan and hosted storage/session ownership design before staging integration. An unpacked pilot helper is not a published user feature.
+
+## Final live Stripe evidence and cleanup
+
+- User-entered Authenticator challenge: confirmed by the user; signed-in sandbox UI observed.
+- Approved one-page job `d118bd3a-263a-4904-93e3-6c8b51cdc086`: reported complete with one active page and one capture, but visual validation failed. Capture `/private/tmp/vellic-cloud-stripe-capture.png` is Stripe's loading screen. Evidence `/private/tmp/vellic-cloud-stripe-evidence.json` records this as failure, not success.
+- Imported session removed after completion (404); owner-only image retrieval 200, anonymous/private and public-path requests 401, private/no-store caching.
+- Cloud helper incognito permission disabled, then cloud helper uninstalled. Chrome search showed no matching installed extension. Earlier local helper remains separate.
+- Temporary Railway deployment removed and project moved to Deleted; normal 48-hour recovery window retained. Existing MAP-MAT project and staging/production deployments were not changed.
+- This trial used the real installed helper and the existing cloud scan API with an explicit one-page cap. It did not validate a complete Stripe scan initiated through the app's login dialog. Earlier GitHub app-flow evidence remains separate.
+- Follow-up: add meaningful content readiness/failure handling, resolve permission-revocation evidence, rerun live Stripe, finish cloud active-scan-expiry and interrupted-window checks, then prepare staging integration and extension distribution. Do not ship the isolated pilot configuration as staging architecture.

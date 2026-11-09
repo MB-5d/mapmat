@@ -45,3 +45,12 @@ export function readLocalStorage(expectedOrigin) {
   if (values.length > 300 || JSON.stringify(values).length > 256 * 1024) throw Error('Site storage is too large for this helper.');
   return { origin: location.origin, localStorage: values };
 }
+
+// Never cross between the normal and private browser sessions.
+export function assertBrowserContext(tab, window, allowIncognito) {
+  if (!tab || !Number.isInteger(tab.id) || !window
+    || Boolean(tab.incognito) !== Boolean(window.incognito)
+    || (tab.incognito && allowIncognito !== true)) {
+    throw Error('Open the helper from the protected site in the same browser window type.');
+  }
+}

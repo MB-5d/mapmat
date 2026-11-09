@@ -57,6 +57,8 @@ const { buildExtension } = require('./build-extension.cjs');
     assert.equal((await request('/scan-jobs', 'POST', { authorization: 'owner' })).status, 410);
     const output = path.join(dir, 'extension');
     const manifest = buildExtension(origin, output);
+    assert.equal(manifest.incognito, 'split');
+    assert(fs.readFileSync(path.join(output, 'config.js'), 'utf8').includes('"allowIncognito":true'));
     assert.deepEqual(manifest.host_permissions, [origin + '/*']);
     assert.deepEqual(manifest.optional_host_permissions, ['https://*/*']);
     assert(manifest.key && manifest.key !== JSON.parse(fs.readFileSync(path.join(__dirname, 'extension/manifest.json'))).key,

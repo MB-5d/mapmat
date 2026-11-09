@@ -1,4 +1,4 @@
-import { assertTarget, normalizeCookies, readLocalStorage, permissionOrigins, cookieQuery } from './capture.mjs';
+import { assertTarget, normalizeCookies, readLocalStorage, permissionOrigins, cookieQuery, assertBrowserContext } from './capture.mjs';
 
 const config = self.VELLIC_HELPER;
 const api = config.origin + '/scan-auth/helper/';
@@ -37,7 +37,7 @@ $('pair-form').addEventListener('submit', async event => {
     const targetTab = new URLSearchParams(location.search).get('targetTab');
     if (!targetTab || !/^\d+$/.test(targetTab)) throw Error('Open the helper from the protected site tab.');
     activeTab = await chrome.tabs.get(Number(targetTab));
-    if (!activeTab || activeTab.incognito) throw Error('Use a regular Chrome tab for this trial.');
+    assertBrowserContext(activeTab, await chrome.windows.getCurrent(), config.allowIncognito);
     // The selected tab's URL is available only after the exact-site grant.
     // Avoid activeTab: its implicit grant cannot be removed by permissions.remove.
     $('site').textContent = connection.origin;
@@ -60,6 +60,7 @@ $('connect').addEventListener('click', async () => {
     if (!granted) throw Error('Site access was declined. Nothing was copied.');
     if (Date.now() >= connection.expiresAt) throw Error('Pairing expired. Start again in Vellic.');
     const current = await chrome.tabs.get(activeTab.id);
+    assertBrowserContext(current, await chrome.windows.getCurrent(), config.allowIncognito);
     assertTarget(current.url, connection.origin);
     const stores = await chrome.cookies.getAllCookieStores();
     const store = stores.find(entry => entry.tabIds.includes(activeTab.id));
