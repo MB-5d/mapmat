@@ -20,7 +20,7 @@ function helperConfig(env = process.env, now = Date.now()) {
       || env.RAILWAY_ENVIRONMENT_ID || env.RAILWAY_PUBLIC_DOMAIN || env.VERCEL) {
       throw Error('Browser helper is restricted to the isolated local test backend.');
     }
-    return { mode, extensionId, origin: 'http://127.0.0.1:4349', destination: 'Local Vellic only — http://127.0.0.1:4349' };
+    return { mode, extensionId, appOrigin: 'http://127.0.0.1:5179', origin: 'http://127.0.0.1:4349', destination: 'Local Vellic only — http://127.0.0.1:4349' };
   }
   if (mode === 'staging') {
     // Explicitly limited rollout. Sessions are memory-only and must stay on one web instance.

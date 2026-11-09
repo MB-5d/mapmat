@@ -28,5 +28,10 @@
   "optional_permissions": [
     "cookies",
     "scripting"
-  ]
+  ],
+  "externally_connectable": {
+    "matches": [
+      "http://127.0.0.1:5179/*"
+    ]
+  }
 }

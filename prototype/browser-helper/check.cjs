@@ -56,6 +56,9 @@ const { createBrowserHelper } = require('./bridge.cjs');
     process.env.SCAN_AUTH_BROWSER_HELPER = 'true'; process.env.NODE_ENV = 'production';
     assert.throws(() => createBrowserHelper({}));
     Object.assign(process.env, { NODE_ENV: 'test', HOST: '127.0.0.1', RAILWAY_ENVIRONMENT_ID: '', RAILWAY_PUBLIC_DOMAIN: '', VERCEL: '', SCAN_AUTH_HELPER_EXTENSION_ID: 'a'.repeat(32) });
+    assert.equal(require('./config.cjs').helperConfig().appOrigin, 'http://127.0.0.1:5179');
+    const localManifest = require('./extension/manifest.json');
+    assert.deepEqual(localManifest.externally_connectable.matches, ['http://127.0.0.1:5179/*']);
     let clock = 1000, closed = 0, completeContext;
     const sessions = new Map(), routes = new Map();
     const helper = createBrowserHelper({ app: { post: (path, fn) => routes.set(path, fn) }, sessions,
