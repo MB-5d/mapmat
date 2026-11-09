@@ -94,7 +94,15 @@ async function checkHttpDelivery(png, encryptionKey) {
       TEST_AUTH_SEED_EMAIL: 'private-capture@test.vellic.local', TEST_AUTH_SEED_PASSWORD: seedPassword,
       SCAN_AUTH_FEATURE_ENABLED: 'true', PRIVATE_SCAN_CAPTURE_KEY: encryptionKey,
       SCREENSHOT_STORAGE_PROVIDER: 'local', SCREENSHOT_STORAGE_DIR: directory, EMAIL_PROVIDER: 'log' },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  // Health becomes available before asynchronous test-account seeding finishes.
+  // Logging in early races the fixture's auto-create path for the same email.
+  let accountReady = false;
+  let startupOutput = '';
+  backend.stdout.on('data', (chunk) => {
+    startupOutput = (startupOutput + chunk).slice(-4000);
+    accountReady ||= /Seeded test account|Refreshed test account/.test(startupOutput);
   });
   let exited = false;
   backend.on('exit', () => { exited = true; });
@@ -104,7 +112,7 @@ async function checkHttpDelivery(png, encryptionKey) {
     let ready = false;
     for (let attempt = 0; attempt < 50; attempt += 1) {
       if (exited) throw new Error('Fixture backend exited');
-      try { if ((await request('/health')).ok) { ready = true; break; } } catch {}
+      try { if ((await request('/health')).ok && accountReady) { ready = true; break; } } catch {}
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
     assert.equal(ready, true);

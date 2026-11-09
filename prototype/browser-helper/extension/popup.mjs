@@ -1,7 +1,10 @@
 import { assertTarget, normalizeCookies, readLocalStorage, permissionOrigins, cookieQuery } from './capture.mjs';
 
-const api = 'http://127.0.0.1:4349/scan-auth/helper/';
+const config = self.VELLIC_HELPER;
+const api = config.origin + '/scan-auth/helper/';
 const $ = id => document.getElementById(id);
+$('environment').textContent = config.mode === 'hosted' ? 'ISOLATED CLOUD TEST' : 'LOCAL TEST ONLY';
+$('fixed-destination').textContent = config.label + ' — ' + config.origin;
 let pairing = '';
 let connection = null;
 let activeTab = null;
@@ -24,22 +27,24 @@ async function request(path, body) {
   return result;
 }
 $('pair-form').addEventListener('submit', async event => {
-  event.preventDefault(); $('review').disabled = true; status('Checking the local pairing…');
+  event.preventDefault(); $('review').disabled = true; status('Checking the pairing…');
   try {
     pairing = $('pair').value.trim();
-    if (!/^[a-f0-9]{64}$/.test(pairing)) throw Error('Copy the complete pairing code from local Vellic.');
+    if (!/^[a-f0-9]{64}$/.test(pairing)) throw Error('Copy the complete pairing code from Vellic.');
     connection = await request('describe', {});
+    if (connection.helperOrigin !== config.origin) throw Error('The scanner address does not match this helper build.');
+    if (config.mode === 'hosted' && !connection.origin?.startsWith('https://')) throw Error('Cloud tests require a public HTTPS target.');
     const targetTab = new URLSearchParams(location.search).get('targetTab');
     if (!targetTab || !/^\d+$/.test(targetTab)) throw Error('Open the helper from the protected site tab.');
     activeTab = await chrome.tabs.get(Number(targetTab));
-    if (!activeTab || activeTab.incognito) throw Error('Use a regular Chrome tab for this local trial.');
+    if (!activeTab || activeTab.incognito) throw Error('Use a regular Chrome tab for this trial.');
     // The selected tab's URL is available only after the exact-site grant.
     // Avoid activeTab: its implicit grant cannot be removed by permissions.remove.
     $('site').textContent = connection.origin;
     $('destination').textContent = connection.destination;
     $('pair-form').hidden = true; $('connection').hidden = false;
     status('Review the selected site and allow the connection below. Pairing expires in five minutes.');
-  } catch (error) { reset(error.message || 'Could not reach local Vellic. Check that it is running.'); }
+  } catch (error) { reset(error.message || 'Could not reach the test scanner. Check its address and availability.'); }
   finally { $('review').disabled = false; }
 });
 $('cancel').addEventListener('click', () => reset('Nothing was copied. Close the login dialog in Vellic to cancel the pairing.'));
@@ -59,7 +64,7 @@ $('connect').addEventListener('click', async () => {
     const stores = await chrome.cookies.getAllCookieStores();
     const store = stores.find(entry => entry.tabIds.includes(activeTab.id));
     if (!store) throw Error('The selected browser session is unavailable.');
-    status('Connecting this site to the local scanner…');
+    status('Connecting this site to the selected scanner…');
     const rawCookies = await chrome.cookies.getAll(cookieQuery(current.url, store.id));
     const cookies = normalizeCookies(rawCookies, current.url);
     if (!cookies.length && !$('include-storage').checked) throw Error('No transferable login cookies were found. Sign in again, or this site may use an unsupported session method. Nothing was copied.');

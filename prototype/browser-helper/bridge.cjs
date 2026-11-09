@@ -1,16 +1,14 @@
 const crypto = require('node:crypto');
 const { targetUrl, validateState } = require('./policy.cjs');
+const { helperConfig } = require('./config.cjs');
 
 function createBrowserHelper({ app, sessions, createContext, expired, now = Date.now }) {
-  if (process.env.SCAN_AUTH_BROWSER_HELPER !== 'true') return null;
-  if (process.env.NODE_ENV !== 'test' || process.env.HOST !== '127.0.0.1'
-    || process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_PUBLIC_DOMAIN || process.env.VERCEL) {
-    throw Error('Browser helper is restricted to the isolated local test backend.');
-  }
-  const extensionId = process.env.SCAN_AUTH_HELPER_EXTENSION_ID;
-  if (!/^[a-p]{32}$/.test(extensionId || '')) throw Error('Set the exact browser helper extension ID.');
+  const config = helperConfig();
+  if (!config) return null;
+  const { extensionId } = config;
   const hash = value => crypto.createHash('sha256').update(value).digest('hex');
   const find = req => {
+    if (config.expiresAt && config.expiresAt <= now()) return null;
     if (req.headers.origin !== 'chrome-extension://' + extensionId) return null;
     const token = String(req.headers.authorization || '').replace(/^Bearer /, '');
     if (!/^[a-f0-9]{64}$/.test(token)) return null;
@@ -23,7 +21,7 @@ function createBrowserHelper({ app, sessions, createContext, expired, now = Date
     const session = find(req);
     if (!session) return res.status(410).json({ error: 'Pairing expired or was cancelled. Start again in Vellic.' });
     return res.json({ origin: session.origin, targetUrl: session.seedUrl, expiresAt: session.helperExpiresAt,
-      destination: 'Local Vellic only — http://127.0.0.1:4349' });
+      destination: config.destination, helperOrigin: config.origin });
   });
   app.post('/scan-auth/helper/import', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -52,6 +50,7 @@ function createBrowserHelper({ app, sessions, createContext, expired, now = Date
   });
   return {
     start(session) {
+      if (config.expiresAt && config.expiresAt <= now()) throw Error('This hosted pilot has expired.');
       targetUrl(session.seedUrl, process.env.SCAN_AUTH_HELPER_ALLOW_FIXTURE === 'true');
       const token = crypto.randomBytes(32).toString('hex');
       session.helperDigest = hash(token);

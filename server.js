@@ -8,6 +8,8 @@
  *   node server.js
  */
 
+const { helperConfig } = require('./prototype/browser-helper/config.cjs');
+const browserHelperConfig = helperConfig(); // Refuse unsafe hosted configuration before opening storage.
 const express = require('express');
 const { getScanRouteHash } = require('./utils/scanRoute');
 const { getScanHttpsUpgrade, normalizeScanRedirectUrl } = require('./utils/scanRedirect');
@@ -144,7 +146,7 @@ const {
 const db = require('./db');
 
 // Import routes
-const { router: authRouter, authMiddleware, requireAuth } = require('./routes/auth');
+const { router: authRouter, authMiddleware, requireAuth, authenticateRequestAsync } = require('./routes/auth');
 const apiRouter = require('./routes/api');
 const adminRouter = require('./routes/admin');
 const collaborationRouter = require('./routes/collaboration');
@@ -248,6 +250,9 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
+require('./prototype/browser-helper/pilot.cjs').installPilot({
+  app, express, config: browserHelperConfig, authenticate: authenticateRequestAsync,
+});
 app.use('/api/email/webhooks', emailWebhookRouter);
 app.use('/api/billing/webhooks/stripe', stripeWebhookRouter);
 app.use(express.json({ limit: REQUEST_JSON_LIMIT }));

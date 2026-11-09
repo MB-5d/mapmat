@@ -1,6 +1,6 @@
 # Local browser-helper trial
 
-Isolated research on `codex/auth-login-compatibility-prototype`. Do not deploy this branch or enable the helper in staging/production.
+Isolated research on `codex/auth-login-compatibility-prototype`. Do not enable the helper in staging/production. The separately authorized hosted trial is described in [HOSTED.md](HOSTED.md); creating its new Railway project still requires explicit hosting approval.
 
 ## Current evidence
 
@@ -45,7 +45,7 @@ Optional site permissions are removed after each attempt; the real helper displa
 - Host/path-scoped cookies outside the selected page and cross-origin app authentication are excluded. The UI must not claim universal login compatibility.
 - Signed-out SPA shells may not be recognized by the current classifier; fail closed and record a compatibility blocker.
 - Third-party email/MFA compatibility and Chrome interrupted-window cleanup remain release gates. Chrome permission denial was tested: the window stayed open, no import occurred, and Vellic rejected completion until a session was imported. Google sign-in on GitHub and real emailed codes on the controlled standalone fixture both passed, including successful transfer, immediate permission cleanup, protected content and image access controls. A scanner running locally does not establish portability to a cloud scanner/IP.
-- Production packaging, HTTPS pairing transport, published extension distribution, hosted origin/extension allowlisting and deployment review are intentionally pending. Local-only guards refuse hosted execution.
+- A fixed HTTPS pilot build and exact hosted origin/extension allowlisting are implemented and locally tested; see HOSTED.md. Cloud validation, published extension distribution and staging deployment review remain pending. The default local build still refuses hosted execution.
 - Keep the separate local OAuth client from the earlier test unchanged. The generic helper does not use that client or request Google credentials.
 
 ## Checks

@@ -3963,7 +3963,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   // Preserve the remote browser implementation while its interaction is deferred from beta.
   const scanAuthBrowserBetaEnabled = false;
   const scanAuthHelperEnabled = process.env.REACT_APP_SCAN_AUTH_BROWSER_HELPER === 'true'
-    && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    && (['localhost', '127.0.0.1'].includes(window.location.hostname)
+      || (window.location.protocol === 'https:' && window.location.origin === process.env.REACT_APP_SCAN_AUTH_HELPER_ORIGIN));
   const [screenshotDownloadUpsell, setScreenshotDownloadUpsell] = useState(null);
   const [entitlementLockModal, setEntitlementLockModal] = useState(null);
   const [plansModal, setPlansModal] = useState(null);
@@ -22296,9 +22297,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                 />
                 {scanAuthPrompt.authBrowser.helperPairingCode ? (
                   <div>
-                    <p>Sign in to this site in Chrome, including any Google or email verification. Open the Vellic Local Scan Helper on the protected page and paste this code. Pairing expires in five minutes.</p>
-                    <TextInput id="scan-helper-code" label="Local helper pairing code" type="text" readOnly value={scanAuthPrompt.authBrowser.helperPairingCode} onFocus={(event) => event.target.select()} />
-                    <p>Review and allow the connection in the helper, then choose Use this login here. Close this dialog to cancel.</p>
+                    <p>Sign in to this site in Chrome, including any Google or email verification. Open the Vellic Scan Helper for this test on the protected page and paste this code. Pairing expires in five minutes.</p>
+                    <TextInput id="scan-helper-code" label="Browser helper pairing code" type="text" readOnly value={scanAuthPrompt.authBrowser.helperPairingCode} onFocus={(event) => event.target.select()} />
+                    <p>Check that the helper shows the correct site and scanner address before allowing the connection. Then choose Use this login here. Close this dialog to cancel.</p>
                   </div>
                 ) : scanAuthPrompt.authBrowser.externalLoginUrl ? <p>Sign in on the local test site in your browser. Complete any verification there, then return and choose Use this login.</p> : <p>Enter the password once. Vellic will try it on other protected pages on this site during this scan, then discard it.</p>}
                 {scanAuthPrompt.authBrowser.helperPairingCode ? null : scanAuthPrompt.authBrowser.externalLoginUrl ? <a className="inline-link" href={scanAuthPrompt.authBrowser.externalLoginUrl} target="_blank" rel="noreferrer">Open test-site sign-in</a> : scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode ? (
