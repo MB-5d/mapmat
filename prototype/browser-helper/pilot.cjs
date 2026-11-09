@@ -15,7 +15,7 @@ function installPilot({ app, express, config, authenticate, now = Date.now, buil
   });
   app.get('/health', (_req, res) => res.json({ ok: true, pilot: true }));
   app.use(express.static(build, { index: false, dotfiles: 'deny' }));
-  app.get(['/', '/app'], (_req, res) => res.sendFile(path.join(build, 'index.html')));
+  app.get(['/', /^\/app(?:\/.*)?$/], (_req, res) => res.sendFile(path.join(build, 'index.html')));
   app.use(async (req, res, next) => {
     if ((req.method === 'POST' && ['/auth/login', '/auth/logout', '/scan-auth/helper/describe', '/scan-auth/helper/import'].includes(req.path))
       || (req.method === 'GET' && req.path === '/auth/config')) return next();

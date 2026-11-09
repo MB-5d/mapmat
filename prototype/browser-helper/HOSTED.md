@@ -1,6 +1,10 @@
 # Isolated hosted helper trial
 
-Status: implemented and locally checked; **not deployed, not ready for staging**.
+Status: isolated cloud pilot deployed November 9, 2026; **not ready for staging**.
+
+Pilot: https://scanner-pilot-auth-helper-pilot.up.railway.app/app
+
+Project `5c1fef1f-dd9b-47fc-8673-be0e50b335c8`, environment `ece1df20-702c-44ef-bfc9-9ac3057352fc`, service `e4fae64d-88d4-44e5-868b-4b358c3edc5a`. Current deadline: November 10, 2026 at 9:33 AM America/New_York. This stops the process; remove the project after the trial. The user approved up to 48 hours, but the configured window is 24 hours.
 Keep the local helper installed separately. Do not change the existing MAP-MAT Railway project, staging, production, their secrets, databases, or storage.
 
 ## Deployment under review
@@ -37,6 +41,7 @@ ALLOW_PRIVATE_NETWORKS=false
 ALLOW_VERCEL_PREVIEWS=false
 SCAN_AUTH_HELPER_PUBLIC_ORIGIN=<exact Railway HTTPS origin>
 PILOT_ORIGIN=<same origin>
+RAILWAY_DOCKERFILE_PATH=prototype/browser-helper/Dockerfile
 SCAN_AUTH_HELPER_PROJECT_ID=<new project UUID>
 SCAN_AUTH_HELPER_ENVIRONMENT_ID=<new environment UUID>
 SCAN_AUTH_HELPER_EXTENSION_ID=<cloud helper Chrome ID>
@@ -51,9 +56,18 @@ Railway supplies its own project/environment IDs, environment name and public do
 
 Local checks: `check.cjs`, `check-hosted.cjs`, `check-hosted-runtime.cjs`, existing backend checks, authenticated-session checks and hosted-config frontend build. The runtime check exercises the actual entry point with an isolated temporary database, secure cookie login, disabled auto-signup, pairing, cancellation and private-network denial. It simulates deployment metadata locally; it does not prove cloud behavior.
 
+Cloud evidence collected November 9:
+
+- The actual Linux Docker build, HTTPS frontend, normal cookie login, anonymous API denial, no test-auth shortcuts, exact extension origin, pairing replay/cancellation, private-network rejection and public scan passed.
+- The first deployment selected the regular backend Dockerfile despite the config path. The explicit `RAILWAY_DOCKERFILE_PATH` service variable corrected this; the second build included the frontend.
+- User explicitly approved loading the cloud helper and transferring their GitHub session to this exact pilot. Chrome verified helper ID `glacpmbbgcalclakbdjabpemhlehlmgb`; the installed local helper stayed separate.
+- Actual helper transfer of the user's previously Google-signed-in GitHub session passed. Four dummy private repository pages returned 200; four private captures succeeded, zero failed/skipped. Owner image requests returned 200, anonymous requests 401, and public image paths 404. The helper reported temporary site permission removal; the imported scan session returned 404 after completion.
+- Read-only inspection inside the cloud container confirmed four encrypted objects, correct owner decryption, wrong-owner rejection and rejection at image expiry using an injected test clock. This is not an elapsed 24-hour expiry test. Session deletion after scan completion is not a timed session-expiry test.
+- A saved-map deep link returned 404 in the pilot. The pilot SPA fallback was extended to `/app/...` and is covered by the isolated runtime checks.
+- A public scan of quotes.toscrape.com passed with a three-page cap. A one-page example.com scan with a two-page cap failed the existing root-only collapse safeguard because unvisited common-path guesses remained. Keep this edge case visible; do not present it as broad regular-scan validation.
+- Evidence files are local: `/private/tmp/vellic-cloud-pilot-evidence.json`, `/private/tmp/vellic-cloud-github-evidence.json`, `/private/tmp/vellic-cloud-storage-evidence.json`, `/private/tmp/vellic-cloud-github-map.png`. Credentials and the source job payload are kept separately in a private directory and must not be committed.
+
 Still required:
-- Actual Docker build and remote deployment; Docker is not installed in this local environment.
-- Google-session transfer and protected scan from the remote IP, with target-scoped permission and private-image access/expiry checks.
 - A genuine third-party second-factor challenge followed by the same helper transfer and cloud scan. GitHub's settings confirm 2FA is disabled. The user has 2FA on Coinbase, Stripe and GoDaddy. Prefer a Stripe sandbox with dummy data if suitable; existing owner sessions may access live finances even when viewing a sandbox. Do not transfer one without explicit approval of that scope. Do not enroll or alter MFA just to manufacture a passing test.
 - Real Chrome interrupted-window permission cleanup for the cloud build, and cloud cancellation/expiry/restart behavior.
 - Compatibility reporting for nonportable/device-bound sessions, signed-out SPA shells, cross-origin login storage and pages that cannot be scanned safely.

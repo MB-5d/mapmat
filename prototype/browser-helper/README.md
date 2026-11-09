@@ -1,6 +1,6 @@
 # Local browser-helper trial
 
-Isolated research on `codex/auth-login-compatibility-prototype`. Do not enable the helper in staging/production. The separately authorized hosted trial is described in [HOSTED.md](HOSTED.md); creating its new Railway project still requires explicit hosting approval.
+Isolated research on `codex/auth-login-compatibility-prototype`. Do not enable the helper in staging/production. The separately authorized hosted trial is described in [HOSTED.md](HOSTED.md); its temporary Railway project was approved and deployed November 9, 2026.
 
 ## Current evidence
 

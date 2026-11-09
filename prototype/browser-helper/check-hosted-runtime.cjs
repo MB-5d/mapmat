@@ -41,6 +41,7 @@ const { spawn } = require('node:child_process');
     }
     assert(ready, 'Hosted startup timed out');
     assert.equal((await request('/app')).status, 200);
+    assert.equal((await request('/app/maps/synthetic-map')).status, 200);
     assert.equal((await request('/scan-jobs', 'POST', {})).status, 401);
     assert.equal((await request('/auth/signup', 'POST', { email: 'new@example.invalid', password })).status, 401);
     assert.equal((await request('/auth/login', 'POST', { email: 'new@example.invalid', password })).status, 401);
