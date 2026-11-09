@@ -54,3 +54,10 @@ The existing staging environment is `da475d9e-af16-4895-a572-db8b75f53573`. Its 
 Ready for a limited internal staging rollout; not yet deployed there. The complete app-driven cloud scan produced 20 protected pages and 20 private captures. Real Chrome close-window recovery, same-ID manual updates, active cloud expiry, cancellation and service-restart credential invalidation passed. Detailed evidence and the removed pilot are recorded in `prototype/browser-helper/HOSTED.md`.
 
 During promotion, run the normal staging image build and Postgres runtime checks, confirm one web replica and scoped tester IDs, then smoke-test helper download/detection and one disposable protected scan at the real staging origins. The isolated cloud trial used SQLite and same-origin app/API hosting; it does not replace these staging deployment checks. Automatic Chrome Web Store updates and multi-instance routing remain outside this internal rollout.
+
+
+### Queued product correction — November 9, user testing
+
+User confirmed the password-protected site scan worked. The password dialog's optional thumbnail capture conflicts with the established scan-first, capture-later workflow. **Defer implementation until the current GitHub and Stripe tests finish**, as requested.
+
+Required follow-up: remove image-capture choices from password/helper login dialogs and keep authenticated scans map-only. Use the existing Images flow for an explicit later capture, requesting a fresh site login when needed rather than retaining credentials past session expiry. Preserve private image ownership, encryption, expiry and cleanup. Validate password and browser-helper scans with zero capture jobs during scanning, then separately validate the requested image operation. Do not treat this note as a completed fix.
