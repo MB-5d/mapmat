@@ -58,6 +58,8 @@ const { buildExtension } = require('./build-extension.cjs');
     const output = path.join(dir, 'extension');
     const manifest = buildExtension(origin, output);
     assert.equal(manifest.incognito, 'split');
+    assert.deepEqual(manifest.permissions, ['alarms']);
+    assert.deepEqual(manifest.optional_permissions, ['cookies','scripting']);
     assert(fs.readFileSync(path.join(output, 'config.js'), 'utf8').includes('"allowIncognito":true'));
     assert.deepEqual(manifest.host_permissions, [origin + '/*']);
     assert.deepEqual(manifest.optional_host_permissions, ['https://*/*']);

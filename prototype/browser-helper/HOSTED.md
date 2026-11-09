@@ -90,3 +90,11 @@ Still required:
 - Temporary Railway deployment removed and project moved to Deleted; normal 48-hour recovery window retained. Existing MAP-MAT project and staging/production deployments were not changed.
 - This trial used the real installed helper and the existing cloud scan API with an explicit one-page cap. It did not validate a complete Stripe scan initiated through the app's login dialog. Earlier GitHub app-flow evidence remains separate.
 - Follow-up: add meaningful content readiness/failure handling, resolve permission-revocation evidence, rerun live Stripe, finish cloud active-scan-expiry and interrupted-window checks, then prepare staging integration and extension distribution. Do not ship the isolated pilot configuration as staging architecture.
+
+## Loading/readiness and permission fix retest (November 9)
+
+- Authenticated verification, crawling and capture now wait for stable rendered content, reject empty/loading/busy shells, and check session expiry while waiting. Capture repeats this after viewport/preparation changes and rechecks access. A bounded failure reports `scan_auth_content_not_ready`; it does not create a successful blank capture.
+- Cookies and scripting are now optional, requested only during a connection and removed together with temporary hosts. Shared cleanup checks actual permissions, verifies page/cookie access is denied, and treats failures as errors. A separate worker cleans up on window close/startup/alarm and retries with a visible warning badge after failure.
+- Chrome remembers prior optional permission approvals even after active permission removal (official permissions API documentation, Step 5). The UI host list alone is not proof of active access. The new negative probes test the capability directly. Live proof is still required.
+- Local readiness cases, helper cleanup tests, authenticated scanning regression (including disabled-auth regular scanning), private image checks and the four-page synthetic helper flow passed. Updated live Stripe test is pending.
+- The same temporary project was restored for the authorized repeat within the original hosting window. Staging and production are excluded. Remove it after the repeat.

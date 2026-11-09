@@ -1,11 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Vellic Local Scan Helper",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Explicitly connect one selected site's session to an isolated local Vellic scan.",
   "permissions": [
-    "cookies",
-    "scripting",
     "alarms"
   ],
   "host_permissions": [
@@ -19,10 +17,16 @@
   "action": {
     "default_title": "Connect this site to local Vellic"
   },
-  "background": { "service_worker": "worker.js" },
+  "background": {
+    "service_worker": "worker.js"
+  },
   "minimum_chrome_version": "120",
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src http://127.0.0.1:4349;"
   },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApJ5Bryp1GkdAxWBn7iiYKfSXbwWAxbYCdppGI6l1sJmLVu4IKhAyhrt0dmpFf3HuHYTbFbV6xAoNoCQsh3Rc4FHY4uAszz0lOQG9Sj5cSkqc9UKYmPxMTac3eutfQ6wm8kDPCBoKCD7UcVMUJc088TPjuPnqHwctPWQaiAW0mTTPPfoGwG9xUoopnsU6UBgrltsbV5BwhIMmU+xVcro1OJI3mQoTMEkAvXS6N8M6lVYcKaWNziBbEFtmxrYe/BquTegREaMvBgfm76PzZtQyMde3+S+khPnaFtIwkzAGck80Lid5QFL1y1fT0ck7SvQyjv8TZTPG2ekNIvFEw3YLCQIDAQAB"
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApJ5Bryp1GkdAxWBn7iiYKfSXbwWAxbYCdppGI6l1sJmLVu4IKhAyhrt0dmpFf3HuHYTbFbV6xAoNoCQsh3Rc4FHY4uAszz0lOQG9Sj5cSkqc9UKYmPxMTac3eutfQ6wm8kDPCBoKCD7UcVMUJc088TPjuPnqHwctPWQaiAW0mTTPPfoGwG9xUoopnsU6UBgrltsbV5BwhIMmU+xVcro1OJI3mQoTMEkAvXS6N8M6lVYcKaWNziBbEFtmxrYe/BquTegREaMvBgfm76PzZtQyMde3+S+khPnaFtIwkzAGck80Lid5QFL1y1fT0ck7SvQyjv8TZTPG2ekNIvFEw3YLCQIDAQAB",
+  "optional_permissions": [
+    "cookies",
+    "scripting"
+  ]
 }

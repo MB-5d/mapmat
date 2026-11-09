@@ -53,10 +53,11 @@ $('connect').addEventListener('click', async () => {
   const patterns = permissionOrigins(connection.origin);
   let granted = false;
   let connected = false;
+  let capturedTab = null, storeId = null;
   $('connect').disabled = true; $('cancel').disabled = true;
   try {
     // Must run directly from this user gesture, before any unrelated awaits.
-    granted = await chrome.permissions.request({ origins: patterns });
+    granted = await chrome.permissions.request({ origins: patterns, permissions: ['cookies', 'scripting'] });
     if (!granted) throw Error('Site access was declined. Nothing was copied.');
     if (Date.now() >= connection.expiresAt) throw Error('Pairing expired. Start again in Vellic.');
     const current = await chrome.tabs.get(activeTab.id);
@@ -64,6 +65,7 @@ $('connect').addEventListener('click', async () => {
     assertTarget(current.url, connection.origin);
     const stores = await chrome.cookies.getAllCookieStores();
     const store = stores.find(entry => entry.tabIds.includes(activeTab.id));
+    capturedTab = current; storeId = store?.id;
     if (!store) throw Error('The selected browser session is unavailable.');
     status('Connecting this site to the selected scanner…');
     const rawCookies = await chrome.cookies.getAll(cookieQuery(current.url, store.id));
@@ -81,15 +83,14 @@ $('connect').addEventListener('click', async () => {
     connected = true;
   } catch (error) { reset(error.message || 'Connection failed. No credentials were saved by the helper.'); }
   finally {
-    if (granted) {
-      await chrome.permissions.remove({ origins: patterns }).catch(() => {});
-      const remaining = await chrome.permissions.getAll();
-      if (patterns.some(pattern => remaining.origins?.includes(pattern))) {
-        reset('Site access could not be removed. Remove this helper in Chrome before continuing.');
-        connected = false;
-      }
+    try {
+      await self.VELLIC_PERMISSIONS.revoke(chrome, config.origin + '/*');
+      if (granted && capturedTab) await self.VELLIC_PERMISSIONS.verifyDenied(chrome, capturedTab.id, capturedTab.url, storeId);
+      if (connected) reset('Connected. Temporary page and cookie access ended and was verified. Return to Vellic and choose Use this login.');
+    } catch {
+      connected = false;
+      reset('Could not verify that helper access ended. Remove this helper in Chrome before continuing, and cancel this login in Vellic.');
     }
-    if (connected) reset('Connected. Temporary site access removed. Return to Vellic and choose Use this login.');
     $('connect').disabled = false; $('cancel').disabled = false;
   }
 });

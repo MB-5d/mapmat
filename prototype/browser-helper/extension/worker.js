@@ -1,21 +1,33 @@
-importScripts('config.js');
+importScripts('config.js', 'permissions.js');
 const permanentOrigin = self.VELLIC_HELPER.origin + '/*';
 // Revoke temporary site grants even if the connection window closes. No login
 // state, pairing codes or site content is persisted by this worker.
 const cleanupAlarm = 'revoke-temporary-site-access';
 async function revoke() {
-  const permissions = await chrome.permissions.getAll();
-  const origins = (permissions.origins || []).filter(origin => origin !== permanentOrigin);
-  if (origins.length) await chrome.permissions.remove({ origins });
+  return self.VELLIC_PERMISSIONS.revoke(chrome, permanentOrigin);
 }
 chrome.permissions.onAdded.addListener(permissions => {
-  if (permissions.origins?.some(origin => origin !== permanentOrigin)) {
+  if (permissions.origins?.some(origin => origin !== permanentOrigin) || permissions.permissions?.some(name => ['cookies','scripting'].includes(name))) {
     chrome.alarms.create(cleanupAlarm, { when: Date.now() + 30000 });
   }
 });
-chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === cleanupAlarm) revoke().catch(() => {}); });
-chrome.runtime.onStartup.addListener(() => revoke().catch(() => {}));
-chrome.runtime.onInstalled.addListener(() => revoke().catch(() => {}));
+async function cleanup() {
+  try {
+    await revoke();
+    await chrome.alarms.clear(cleanupAlarm);
+    await chrome.action.setBadgeText({ text: '' });
+  } catch {
+    // A closed popup cannot report an error. Keep retrying independently and
+    // make a failed cleanup visible instead of silently abandoning the grant.
+    chrome.alarms.create(cleanupAlarm, { when: Date.now() + 30000 });
+    await chrome.action.setBadgeText({ text: '!' });
+    await chrome.action.setTitle({ title: 'Helper access could not be removed. Open Chrome extension settings.' });
+  }
+}
+chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === cleanupAlarm) cleanup(); });
+chrome.runtime.onStartup.addListener(cleanup);
+chrome.windows.onRemoved.addListener(cleanup);
+chrome.runtime.onInstalled.addListener(cleanup);
 
 // A toolbar popup is destroyed by Chrome's site-permission prompt. Keep the
 // explicit connection flow alive in its own window, bound to the clicked tab.

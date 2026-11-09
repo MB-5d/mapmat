@@ -133,6 +133,7 @@ const {
 const { dismissScreenshotObstructions } = require('./utils/screenshotPreparation');
 const { createPrivateScanCaptureStore, createPrivateScanCaptureHandler, isPrivateScanCaptureKey } = require('./utils/privateScanCapture');
 const { captureAuthenticatedScanResult } = require('./utils/authenticatedScanCapture');
+const { waitForAuthenticatedPageReady } = require('./utils/authenticatedPageReadiness');
 const { extractPageLinkOrder, getSiblingLinkRanks } = require('./utils/scanPageOrder');
 const { createPrivateScanCaptureCleanup } = require('./utils/privateScanCaptureCleanup');
 const {
@@ -4405,6 +4406,7 @@ async function fetchPageWithBrowserContext(context, url, capturePage = null) {
       session.passwordQueue = unlock.catch(() => {});
       await unlock;
     }
+    if ((response?.status() || 200) < 400) await waitForAuthenticatedPageReady(page, { verifyAccess });
     const html = await page.content();
     if (Buffer.byteLength(String(html || ''), 'utf8') > SCAN_HTML_RESPONSE_MAX_BYTES) {
       throw new Error('Scan page response too large');
@@ -9608,6 +9610,10 @@ async function processJob(job) {
                 new Promise((resolve) => setTimeout(resolve, 1500)),
               ]));
               if (payload.authenticatedCaptureType === 'full' && await page.evaluate(() => document.documentElement.scrollHeight) > SCREENSHOT_FULL_MAX_HEIGHT) throw new Error('Full capture exceeds the height limit');
+              captureStage = 'page_readiness';
+              await waitForAuthenticatedPageReady(page, { verifyAccess: verifySession });
+              const readyResponse = { ...response, html: await page.content(), finalUrl: page.url() };
+              if (new URL(readyResponse.finalUrl).origin !== session.origin || classifyScanResponse({ ...readyResponse, url }).scanStatus !== 'active') throw new Error('Page is not available after loading');
               captureStage = 'screenshot';
               const buffer = await page.screenshot({ type: 'jpeg', quality: SCREENSHOT_FULL_JPEG_QUALITY,
                 fullPage: payload.authenticatedCaptureType === 'full', animations: 'disabled', timeout: 15000 });
@@ -9617,8 +9623,8 @@ async function processJob(job) {
             });
             return asset;
             } catch (error) {
-              error.captureStage = captureStage;
-              error.captureReason = String(error.message || '').match(/net::ERR_[A-Z_]+/)?.[0]
+              error.captureStage = error.captureStage || captureStage;
+              error.captureReason = error.captureReason || String(error.message || '').match(/net::ERR_[A-Z_]+/)?.[0]
                 || (/Target.*closed|browser.*closed|context.*closed/i.test(error.message || '') ? 'browser_closed'
                   : error.name === 'TimeoutError' ? 'timeout' : 'failed');
               throw error;
@@ -10104,6 +10110,7 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
       return res.status(400).json({ error: 'No protected page was selected to verify this login' });
     }
     let unlocked = 0;
+    let contentNotReady = false;
     for (const sampleUrl of session.sampleUrls) {
       try {
         if (session.helperImported) {
@@ -10126,10 +10133,12 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
           headers: page.headers || {},
         });
         if (page.status >= 200 && page.status < 400 && classification.scanStatus === 'active') unlocked += 1;
-      } catch {
+      } catch (error) {
+        if (error.code === 'scan_auth_content_not_ready') contentNotReady = true;
         // One unreachable sample must not hide other pages that did unlock.
       }
     }
+    if (!unlocked && contentNotReady) return res.status(409).json({ error: 'The protected page is still loading or has no visible content. Wait for the site to finish loading and try again.', code: 'scan_auth_content_not_ready' });
     if (!unlocked) {
       return res.status(409).json({ error: session.helperImported
         ? 'Vellic could not confirm a protected page changed from signed out to signed in. Choose a private page URL and try again. This site may use a login method the helper cannot transfer.'
