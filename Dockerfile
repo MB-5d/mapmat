@@ -18,6 +18,13 @@ RUN node -e "const { chromium } = require('playwright'); const fs = require('fs'
 
 COPY . .
 
+# Opt-in staging artifact only; ordinary images keep their existing contents.
+ARG BUILD_SCAN_HELPER=false
+RUN if [ "$BUILD_SCAN_HELPER" = "true" ]; then \
+  apt-get update && apt-get install -y --no-install-recommends zip \
+  && node scripts/build-scan-helper.cjs /app/helper-release \
+  && apt-get purge -y --auto-remove zip && rm -rf /var/lib/apt/lists/*; fi
+
 EXPOSE 4002
 
 CMD ["node", "server.js"]

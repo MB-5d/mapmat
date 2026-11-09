@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from '../../api';
 import Button from '../ui/Button';
 
-export function checkInstalledHelper(config, runtime = window.chrome?.runtime) {
+export function checkInstalledHelper(config, runtime = window.chrome?.runtime, onAccess = () => {}) {
   return new Promise(resolve => {
     if (!runtime?.sendMessage) return resolve(false);
     let finished = false;
@@ -11,7 +11,9 @@ export function checkInstalledHelper(config, runtime = window.chrome?.runtime) {
     try {
       runtime.sendMessage(config.extensionId, { type: 'vellic-helper-status' }, response => {
         const error = runtime.lastError;
-        finish(!error && response?.origin === config.origin && response?.version === config.version);
+        const matches = !error && response?.origin === config.origin && response?.version === config.version;
+        if (matches) onAccess(response.temporaryAccessRemoved === true);
+        finish(matches);
       });
     } catch { finish(false); }
   });
@@ -20,6 +22,7 @@ export function checkInstalledHelper(config, runtime = window.chrome?.runtime) {
 export default function BrowserHelperSetup({ session, onReady, onStatus, onRestart, loading }) {
   const requestId = useRef(0);
   const [config, setConfig] = useState(null);
+  const [accessRemoved, setAccessRemoved] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [checking, setChecking] = useState(true);
   const [message, setMessage] = useState('Checking browser helper…');
@@ -33,7 +36,7 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
       if (currentRequest !== requestId.current) return;
       if (!next.enabled || !/^[a-p]{32}$/.test(next.extensionId)) throw Error('Browser helper is unavailable.');
       setConfig(next);
-      const found = await checkInstalledHelper(next);
+      const found = await checkInstalledHelper(next, undefined, value => { if (currentRequest === requestId.current) setAccessRemoved(value); });
       if (currentRequest !== requestId.current) return;
       setInstalled(found); onReady(found);
       setMessage(found ? `Browser helper ${next.version} is ready.` : `Install or update the Chrome helper to version ${next.version}, then check again.`);
@@ -73,6 +76,7 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
   };
   return <section aria-label="Browser helper setup">
     <p role="status">{message}</p>
+    {installed && accessRemoved && <p>Temporary site access is off.</p>}
     {!installed && config && <details open>
       <summary>Install or update the staging helper</summary>
       <ol>

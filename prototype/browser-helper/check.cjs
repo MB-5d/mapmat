@@ -85,6 +85,13 @@ const { createBrowserHelper } = require('./bridge.cjs');
     sessions.delete(racing.id); completeContext({ close: async () => { closed++; } });
     assert.equal((await importing).statusCode, 409);
     assert.equal(closed, 1, 'Cancelled import must close its browser context');
+    const interrupted = session(), interruptedCode = raceHelper.start(interrupted).helperPairingCode;
+    const response = new (require('node:events').EventEmitter)();
+    Object.assign(response, { setHeader() {}, status() { return this; }, json() { return this; }, writableEnded: false });
+    const pendingImport = routes.get('/scan-auth/helper/import')({ headers: { origin: 'chrome-extension://' + 'a'.repeat(32), authorization: 'Bearer ' + interruptedCode }, body: { origin, storageState: state } }, response);
+    response.emit('close'); completeContext({ close: async () => { closed++; } }); await pendingImport;
+    assert(!sessions.has(interrupted.id)); assert.equal(closed, 2, 'Disconnected import must close its context and invalidate pairing');
+
   } finally {
     for (const key of Object.keys(process.env)) if (!(key in env)) delete process.env[key];
     Object.assign(process.env, env);

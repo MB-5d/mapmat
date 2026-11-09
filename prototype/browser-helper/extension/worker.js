@@ -43,6 +43,10 @@ chrome.action.onClicked.addListener(tab => {
 chrome.runtime.onMessageExternal?.addListener((message, sender, reply) => {
   if (!self.VELLIC_HELPER.appOrigin || sender.origin !== self.VELLIC_HELPER.appOrigin
     || message?.type !== 'vellic-helper-status') return false;
-  reply({ version: chrome.runtime.getManifest().version, origin: self.VELLIC_HELPER.origin });
-  return false;
+  chrome.permissions.getAll().then(grants => reply({
+    version: chrome.runtime.getManifest().version, origin: self.VELLIC_HELPER.origin,
+    temporaryAccessRemoved: !grants.permissions.some(name => ['cookies', 'scripting'].includes(name))
+      && !grants.origins.some(origin => origin !== permanentOrigin),
+  })).catch(() => reply({ error: 'Permission status unavailable' }));
+  return true;
 });

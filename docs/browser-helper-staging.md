@@ -24,7 +24,9 @@ Production is rejected by staging mode. Disabling the helper flags restores the 
 
 ## Private installation and updates
 
-Use `node prototype/browser-helper/build-extension.cjs https://api-staging.vellic.io NEW_RELEASE_DIR PREVIOUS_REVIEWED_MANIFEST.json https://app-staging.vellic.io`.
+Use `node scripts/build-scan-helper.cjs NEW_RELEASE_DIR`. The reviewed, non-secret public key is stored in `extensions/scan-helper/staging-key.json`; preserve it for updates. The staging extension ID is `ggfnbddajhcphpacfojplhmcfgkfghok`.
+
+The normal backend Dockerfile accepts build argument `BUILD_SCAN_HELPER=true` to package this release at `/app/helper-release`. Use that path for `SCAN_AUTH_HELPER_ARTIFACT_DIR`. Default builds do not generate or enable the helper. No image build or environment change enables the feature unless the runtime flags and account scope are also set.
 
 A stable public manifest key is mandatory; retain that key for every update. Generate the first public key during release preparation, without saving a private signing key for unpacked testing. Archive the package and SHA-256 release metadata. The backend verifies version, destination, app origin, extension ID and archive integrity at startup; downloads require an authorized account. Never include a browser session or environment file.
 
@@ -39,3 +41,5 @@ The app waits for the imported session before enabling Use this login. Connectio
 ## Validation
 
 Run `npm run check:browser-helper`, `npm run check:scan-auth-session`, private capture checks, frontend tests/build and backend checks. The isolated cloud fixture contains disposable content only and is installed exclusively by the hosted pilot when explicitly enabled. Cloud lifecycle results and teardown are recorded in `prototype/browser-helper/HOSTED.md`; real Stripe evidence remains separate.
+
+Official browser contracts: [external messaging](https://developer.chrome.com/docs/extensions/develop/concepts/messaging) and [exact-origin connection allowlisting](https://developer.chrome.com/docs/extensions/reference/manifest/externally-connectable).

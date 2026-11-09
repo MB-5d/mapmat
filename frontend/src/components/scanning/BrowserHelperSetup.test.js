@@ -25,6 +25,13 @@ describe('browser helper integration',()=>{
   act(()=>root.unmount());root=createRoot(container);const count=api.getScanAuthSession.mock.calls.length;
   await act(async()=>vi.advanceTimersByTimeAsync(10000));expect(api.getScanAuthSession).toHaveBeenCalledTimes(count);
  });
+ test('a late installation check cannot re-enable a closed dialog',async()=>{
+  let resolveConfig;api.getBrowserHelperConfig.mockReturnValue(new Promise(resolve=>{resolveConfig=resolve;}));
+  window.chrome={runtime:{sendMessage:(_id,_msg,cb)=>cb(config)}};const onReady=vi.fn();
+  await act(async()=>root.render(<BrowserHelperSetup onReady={onReady} onStatus={vi.fn()}/>));
+  act(()=>root.unmount());root=createRoot(container);await act(async()=>resolveConfig(config));
+  expect(onReady.mock.calls.some(([value])=>value===true)).toBe(false);
+ });
  test('lost session offers a new connection instead of continuing',async()=>{
   window.chrome={runtime:{sendMessage:(_id,_msg,cb)=>cb(config)}};api.getScanAuthSession.mockRejectedValue(Object.assign(Error('gone'),{status:404}));
   const onStatus=vi.fn(),restart=vi.fn();await act(async()=>root.render(<BrowserHelperSetup session={{sessionId:'s',helperExpiresAt:Date.now()+60000}} onReady={vi.fn()} onStatus={onStatus} onRestart={restart}/>));

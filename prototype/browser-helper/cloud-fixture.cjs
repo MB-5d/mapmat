@@ -4,7 +4,7 @@ function installCloudFixture({ app, config, authenticate }) {
   if (config?.mode !== 'hosted' || process.env.SCAN_AUTH_HELPER_CLOUD_FIXTURE !== 'true') return;
   const token = crypto.randomBytes(32).toString('hex');
   const requests = [];
-  let slow = false;
+  let slow = false, importDelay = 0;
   const root = '/__helper-fixture';
   const cookieName = 'vellic_disposable_fixture';
   app.get(root + '/state', async (req, res) => {
@@ -13,11 +13,12 @@ function installCloudFixture({ app, config, authenticate }) {
     if (user?.email?.toLowerCase() !== config.ownerEmail) return res.status(401).end();
     res.json({ token, cookieName, requests, slow, origin: config.origin });
   });
-  app.post(root + '/slow', async (req, res) => {
+  app.post(root + '/slow', require('express').json({ limit: '1kb' }), async (req, res) => {
     const user = await authenticate(req);
     if (user?.email?.toLowerCase() !== config.ownerEmail) return res.status(401).end();
-    slow = req.body?.enabled === true; requests.length = 0; res.json({ slow });
+    slow = req.body?.enabled === true; importDelay = req.body?.delayImport === true ? 15000 : 0; requests.length = 0; res.json({ slow, importDelay });
   });
+  app.use('/scan-auth/helper/import', (_req, _res, next) => { if (importDelay) setTimeout(next, importDelay); else next(); });
   app.get(root + '/login', (_req, res) => res.type('html').send('<h1>Disposable helper test</h1><p>This contains no account or private information.</p><form method="post"><button>Sign in to test pages</button></form>'));
   app.post(root + '/login', (_req, res) => {
     res.cookie(cookieName, token, { secure: true, httpOnly: true, sameSite: 'lax', path: root, maxAge: 3600000 });

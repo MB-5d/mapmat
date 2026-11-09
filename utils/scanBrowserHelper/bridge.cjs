@@ -30,21 +30,35 @@ function createBrowserHelper({ app, sessions, createContext, expired, now = Date
       return res.status(410).json({ error: 'Pairing is expired, used, or cancelled.' });
     }
     let context;
+    let disconnected = Boolean(req.aborted || res.destroyed);
+    const disconnect = () => {
+      if (!res.writableEnded) {
+        disconnected = true;
+        session.helperDigest = null;
+        sessions.delete(session.id);
+        context?.close().catch(() => {});
+      }
+    };
+    res.once?.('close', disconnect);
+    if (disconnected) disconnect();
     try {
+      if (disconnected) throw Error('Connection interrupted.');
       if (req.body?.origin !== session.origin) throw Error('The selected site does not match this scan.');
       const state = validateState(req.body?.storageState, session.origin, now());
       session.helperImporting = true;
       session.helperDigest = null; // Consume before asynchronous work; retries need a new pairing.
       context = await createContext(state, undefined, session);
-      if (sessions.get(session.id) !== session || expired(session) || session.helperExpiresAt <= now()) throw Error('Login was cancelled or expired.');
+      if (disconnected || sessions.get(session.id) !== session || expired(session) || session.helperExpiresAt <= now()) throw Error('Login was cancelled or expired.');
       session.browserContext = context;
       session.helperPending = false;
       session.helperImported = true;
       return res.json({ imported: true, message: 'Return to Vellic and choose Use this login to verify access.' });
     } catch {
       await context?.close().catch(() => {});
+      if (disconnected) return;
       return res.status(409).json({ error: 'The session could not be imported. Close the login dialog and start again.' });
     } finally {
+      res.removeListener?.('close', disconnect);
       session.helperImporting = false;
     }
   });
