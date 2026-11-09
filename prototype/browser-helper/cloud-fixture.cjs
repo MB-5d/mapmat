@@ -21,7 +21,7 @@ function installCloudFixture({ app, config, authenticate }) {
   app.use('/scan-auth/helper/import', require('express').json({ limit: '1mb' }), (req, _res, next) => {
     if (importDelay && req.body?.origin === config.origin) setTimeout(next, importDelay); else next();
   });
-  app.get(root + '/login', (_req, res) => res.type('html').send('<h1>Disposable helper test</h1><p>This contains no account or private information.</p><form method="post"><button>Sign in to test pages</button></form>'));
+  app.get(root + '/login', (_req, res) => res.set('Referrer-Policy', 'same-origin').type('html').send('<h1>Disposable helper test</h1><p>This contains no account or private information.</p><form method="post"><button>Sign in to test pages</button></form>'));
   app.post(root + '/login', (_req, res) => {
     res.cookie(cookieName, token, { secure: true, httpOnly: true, sameSite: 'lax', path: root, maxAge: 3600000 });
     res.redirect(root + '/members');
