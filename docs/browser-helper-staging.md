@@ -36,7 +36,7 @@ This is a private staging distribution flow. Consumer installation/automatic upd
 
 ## Lifecycle and compatibility
 
-The app waits for the imported session before enabling Use this login. Connection loss retries; expired/deleted/restarted sessions offer Start new connection and cancel the previous session. Closing the dialog cancels pairing. Site password remains available separately. Account sessions may authorize more than the selected page; navigation is restricted, credentials are not page-scoped. Device-bound, IndexedDB and cross-origin sessions may be unsupported; never bypass provider protections.
+The app waits for the imported session and a fresh helper check confirming temporary cookie/page access is removed before enabling Use this login. Connection loss retries; expired/deleted/restarted sessions offer Start new connection and cancel the previous session. Closing the dialog cancels pairing. Site password remains available separately. Account sessions may authorize more than the selected page; navigation is restricted, credentials are not page-scoped. Device-bound, IndexedDB and cross-origin sessions may be unsupported; never bypass provider protections.
 
 ## Validation
 
@@ -47,3 +47,10 @@ Official browser contracts: [external messaging](https://developer.chrome.com/do
 ### Read-only staging check, November 9
 
 The existing staging environment is `da475d9e-af16-4895-a572-db8b75f53573`. Its `mapmat` web service has one replica, `RUN_MODE=web`, scan jobs enabled, Postgres and R2 storage. The helper is not enabled. Before the scoped rollout, change the currently enabled `TEST_AUTH_ENABLED` and `ALLOW_VERCEL_PREVIEWS` to false, explicitly set the remaining required false flags, then add the reviewed artifact/extension settings and tester IDs. These are planned deployment changes only; none were applied during integration testing.
+
+
+### Readiness decision, November 9
+
+Ready for a limited internal staging rollout; not yet deployed there. The complete app-driven cloud scan produced 20 protected pages and 20 private captures. Real Chrome close-window recovery, same-ID manual updates, active cloud expiry, cancellation and service-restart credential invalidation passed. Detailed evidence and the removed pilot are recorded in `prototype/browser-helper/HOSTED.md`.
+
+During promotion, run the normal staging image build and Postgres runtime checks, confirm one web replica and scoped tester IDs, then smoke-test helper download/detection and one disposable protected scan at the real staging origins. The isolated cloud trial used SQLite and same-origin app/API hosting; it does not replace these staging deployment checks. Automatic Chrome Web Store updates and multi-instance routing remain outside this internal rollout.
