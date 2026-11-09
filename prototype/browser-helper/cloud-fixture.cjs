@@ -18,7 +18,9 @@ function installCloudFixture({ app, config, authenticate }) {
     if (user?.email?.toLowerCase() !== config.ownerEmail) return res.status(401).end();
     slow = req.body?.enabled === true; importDelay = req.body?.delayImport === true ? 15000 : 0; requests.length = 0; res.json({ slow, importDelay });
   });
-  app.use('/scan-auth/helper/import', (_req, _res, next) => { if (importDelay) setTimeout(next, importDelay); else next(); });
+  app.use('/scan-auth/helper/import', require('express').json({ limit: '1mb' }), (req, _res, next) => {
+    if (importDelay && req.body?.origin === config.origin) setTimeout(next, importDelay); else next();
+  });
   app.get(root + '/login', (_req, res) => res.type('html').send('<h1>Disposable helper test</h1><p>This contains no account or private information.</p><form method="post"><button>Sign in to test pages</button></form>'));
   app.post(root + '/login', (_req, res) => {
     res.cookie(cookieName, token, { secure: true, httpOnly: true, sameSite: 'lax', path: root, maxAge: 3600000 });
