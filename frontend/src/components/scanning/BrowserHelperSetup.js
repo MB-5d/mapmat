@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from '../../api';
 import Button from '../ui/Button';
 
@@ -18,6 +18,7 @@ export function checkInstalledHelper(config, runtime = window.chrome?.runtime) {
 }
 
 export default function BrowserHelperSetup({ session, onReady, onStatus, onRestart, loading }) {
+  const requestId = useRef(0);
   const [config, setConfig] = useState(null);
   const [installed, setInstalled] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -25,18 +26,21 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
   const [connection, setConnection] = useState('waiting');
   const [downloadError, setDownloadError] = useState('');
   const check = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setChecking(true); onReady(false);
     try {
       const next = await api.getBrowserHelperConfig();
+      if (currentRequest !== requestId.current) return;
       if (!next.enabled || !/^[a-p]{32}$/.test(next.extensionId)) throw Error('Browser helper is unavailable.');
       setConfig(next);
       const found = await checkInstalledHelper(next);
+      if (currentRequest !== requestId.current) return;
       setInstalled(found); onReady(found);
       setMessage(found ? `Browser helper ${next.version} is ready.` : `Install or update the Chrome helper to version ${next.version}, then check again.`);
-    } catch (error) { setMessage(error.message || 'Could not check the helper. Try again.'); setInstalled(false); }
-    finally { setChecking(false); }
+    } catch (error) { if (currentRequest !== requestId.current) return; setMessage(error.message || 'Could not check the helper. Try again.'); setInstalled(false); }
+    finally { if (currentRequest === requestId.current) setChecking(false); }
   }, [onReady]);
-  useEffect(() => { check(); return () => onReady(false); }, [check, onReady]);
+  useEffect(() => { check(); return () => { requestId.current += 1; onReady(false); }; }, [check, onReady]);
   useEffect(() => {
     if (!session?.sessionId) { onStatus('waiting'); setConnection('waiting'); return undefined; }
     let stopped = false, timer;
