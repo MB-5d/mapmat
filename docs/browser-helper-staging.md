@@ -1,6 +1,6 @@
 # Browser helper staging integration
 
-Default off. No staging or production deployment is included in this change.
+Default off in code. Enabled on staging for the approved David B. account on November 9; production remains unchanged. See the rollout record below.
 
 ## Deployment contract
 
@@ -61,3 +61,13 @@ During promotion, run the normal staging image build and Postgres runtime checks
 User confirmed the password-protected site scan worked. The password dialog's optional thumbnail capture conflicts with the established scan-first, capture-later workflow. **Defer implementation until the current GitHub and Stripe tests finish**, as requested.
 
 Required follow-up: remove image-capture choices from password/helper login dialogs and keep authenticated scans map-only. Use the existing Images flow for an explicit later capture, requesting a fresh site login when needed rather than retaining credentials past session expiry. Preserve private image ownership, encryption, expiry and cleanup. Validate password and browser-helper scans with zero capture jobs during scanning, then separately validate the requested image operation. Do not treat this note as a completed fix.
+
+
+### Approved staging rollout — November 9
+
+- User approved deployment for David B. only. Frontend: https://app-staging.vellic.io/app; API: https://api-staging.vellic.io. Backend and screenshot-worker deployment of `f08dc49` succeeded; the frontend deployment is `mapmat-staging-3m664b5y3-mattbraundesign.vercel.app`.
+- Backend helper scope contains only user `8f9900d7-a576-4022-9d94-b449e2b9b3fd`. Actual running config rejects other users. The normal Linux Docker build generated the reviewed package; its version, exact destinations, stable identity and hash passed runtime verification. David's signed-in app successfully downloaded it.
+- Applied helper flags and exact extension origin. Staging test-auth shortcuts and preview-origin access are disabled. Frontend demo authentication is disabled. Existing realtime settings and all production settings/deployments are unchanged.
+- Actual staging Postgres health passed with no fallback or missing tables; realtime health was healthy with consistent instances. The existing realtime-change preflight returned 401 from its admin endpoint; no realtime rollout change was made. The staging readiness checker now accepts the exact validated staging helper origin and required preview restriction, while rejecting other extension origins and invalid helper configurations. Readiness passed with zero errors/warnings using the intended deployed settings; Postgres-mode backend checks and staging-config frontend build passed.
+- Browser installation and new staging-destination GitHub/Stripe session transfers require the pending explicit user approvals. Neither real session has been transferred to staging yet. The old temporary cloud-pilot approval does not authorize a new destination.
+- Thumbnail behavior remains queued above. For the upcoming real-site tests, leave private thumbnails unchecked and validate mapping without image capture.

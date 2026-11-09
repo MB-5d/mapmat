@@ -34,3 +34,12 @@ try {
  assert.throws(()=>buildExtension(origin,path.join(dir,'bad'),{appOrigin,staging:true}));
  console.log('Passed: scoped staging config, production rejection, stable update identity, exact app messaging origin and artifact integrity.');
 } finally {fs.rmSync(dir,{recursive:true,force:true});}
+
+// Readiness must accept only the exact validated staging helper exception.
+const { spawnSync } = require('node:child_process');
+const readinessEnv = { ...process.env, ...env, DATABASE_URL:'postgres://fixture', JWT_SECRET:'j'.repeat(40), ADMIN_API_KEY:'a'.repeat(32),
+ COLLABORATION_BACKEND_ENABLED:'true', REALTIME_BASELINE_ENABLED:'true', COEDITING_EXPERIMENT_ENABLED:'true', COEDITING_SYNC_ENGINE_ENABLED:'true', COEDITING_ROLLOUT_ENABLED:'true', AUTH_HEADER_FALLBACK:'true', SCREENSHOT_STORAGE_PROVIDER:'r2', EMAIL_PROVIDER:'resend', R2_BUCKET:'fixture', R2_ACCOUNT_ID:'fixture', R2_ACCESS_KEY_ID:'fixture', R2_SECRET_ACCESS_KEY:'fixture' };
+const readiness = changes => spawnSync(process.execPath,[path.join(__dirname,'check-staging-readiness.js'),'--target=backend'],{env:{...readinessEnv,...changes},encoding:'utf8'});
+const valid = readiness({}); assert.equal(valid.status,0,valid.stdout+valid.stderr);
+for (const changes of [{FRONTEND_URL:env.FRONTEND_URL+',chrome-extension://'+'b'.repeat(32)}, {TEST_AUTH_ENABLED:'true'}, {RAILWAY_ENVIRONMENT_NAME:'production'}, {ALLOW_VERCEL_PREVIEWS:'true'}]) assert.notEqual(readiness(changes).status,0);
+console.log('Passed: staging readiness accepts the reviewed helper and rejects other extension origins or weakened helper settings.');
