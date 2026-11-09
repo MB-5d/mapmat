@@ -18,15 +18,15 @@ self.VELLIC_PERMISSIONS = Object.freeze({
     // Negative probes return no page or session data. They must fail after cleanup.
     if (api.scripting?.executeScript) {
       try { await api.scripting.executeScript({ target: { tabId }, func: () => true }); }
-      catch (error) { if (/permission|cannot access|missing host/i.test(error.message || '')) return this.verifyCookiesDenied(api, url, storeId); throw error; }
+      catch (error) { if (/permission|cannot access|missing host|not available in this context/i.test(error.message || '')) return this.verifyCookiesDenied(api, url, storeId); throw error; }
       throw Error('Page access still works after cleanup.');
     }
     return this.verifyCookiesDenied(api, url, storeId);
   },
   async verifyCookiesDenied(api, url, storeId) {
-    if (!api.cookies?.getAll) return true;
-    try { await api.cookies.getAll({ url, storeId, name: '__vellic_cleanup_probe_never_set__' }); }
-    catch (error) { if (/permission|cannot access|missing host/i.test(error.message || '')) return true; throw error; }
+    if (!api.cookies?.get) return true;
+    try { await api.cookies.get({ url, storeId, name: '__vellic_cleanup_probe_never_set__' }); }
+    catch (error) { if (/permission|cannot access|missing host|not available in this context/i.test(error.message || '')) return true; throw error; }
     throw Error('Cookie access still works after cleanup.');
   },
 });

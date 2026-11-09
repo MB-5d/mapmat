@@ -16,10 +16,11 @@ function browser({ refuse = false, retained = false, broad = false } = {}) {
  const api=browser();assert(await cleanup.revoke(api,permanent));assert.deepEqual((await api.permissions.getAll()).origins,[permanent]);
  for(const options of [{refuse:true},{retained:true},{broad:true}])await assert.rejects(cleanup.revoke(browser(options),permanent));
  assert(await cleanup.verifyDenied({},1,'https://site.example','1'));
+ assert(await cleanup.verifyDenied({cookies:{get:async()=>{throw Error("'cookies.get' is not available in this context.");}}},1,'https://site.example','1'));
  const denied=async()=>{throw Error('Cannot access contents of the page. Extension manifest must request permission.');};
- assert(await cleanup.verifyDenied({scripting:{executeScript:denied},cookies:{getAll:denied}},1,'https://site.example','1'));
+ assert(await cleanup.verifyDenied({scripting:{executeScript:denied},cookies:{get:denied}},1,'https://site.example','1'));
  await assert.rejects(cleanup.verifyDenied({scripting:{executeScript:async()=>[]}},1,'https://site.example','1'));
- await assert.rejects(cleanup.verifyDenied({cookies:{getAll:async()=>[]}},1,'https://site.example','1'));
+ await assert.rejects(cleanup.verifyDenied({cookies:{get:async()=>[]}},1,'https://site.example','1'));
  await assert.rejects(cleanup.verifyDenied({scripting:{executeScript:async()=>{throw Error('Tab closed');}}},1,'https://site.example','1'));
  // Test cleanup after closing a connection window, independently of popup finally.
  const listeners={};const event=name=>({addListener:fn=>listeners[name]=fn});let revoked=0;

@@ -87,9 +87,9 @@ $('connect').addEventListener('click', async () => {
       await self.VELLIC_PERMISSIONS.revoke(chrome, config.origin + '/*');
       if (granted && capturedTab) await self.VELLIC_PERMISSIONS.verifyDenied(chrome, capturedTab.id, capturedTab.url, storeId);
       if (connected) reset('Connected. Temporary page and cookie access ended and was verified. Return to Vellic and choose Use this login.');
-    } catch {
+    } catch (error) {
       connected = false;
-      reset('Could not verify that helper access ended. Remove this helper in Chrome before continuing, and cancel this login in Vellic.');
+      reset('Could not verify that helper access ended. Remove this helper in Chrome before continuing, and cancel this login in Vellic. Check: ' + String(error.message || 'Unknown cleanup failure').slice(0, 240));
     }
     $('connect').disabled = false; $('cancel').disabled = false;
   }
