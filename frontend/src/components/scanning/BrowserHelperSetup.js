@@ -57,7 +57,7 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
         else update('waiting');
       } catch (error) {
         if (stopped) return;
-        if ([404, 410].includes(error.status)) { update('expired'); return; }
+        if ([401, 403, 404, 410].includes(error.status)) { update('expired'); return; }
         update('offline');
       }
       if (!stopped) timer = setTimeout(poll, 2500);
@@ -68,10 +68,7 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
   const download = async () => {
     setDownloadError('');
     try {
-      const blob = await api.downloadBrowserHelper();
-      const href = URL.createObjectURL(blob), link = document.createElement('a');
-      link.href = href; link.download = `vellic-scan-helper-${config.version}.zip`; link.click();
-      setTimeout(() => URL.revokeObjectURL(href), 1000);
+      await api.downloadBrowserHelper();
     } catch (error) { setDownloadError(error.message || 'Download failed. Try again.'); }
   };
   return <section aria-label="Browser helper setup">

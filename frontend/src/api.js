@@ -1204,4 +1204,7 @@ export async function deleteShare(id) {
 }
 
 export function getBrowserHelperConfig() { return fetchApi('/scan-auth/helper/config'); }
-export function downloadBrowserHelper() { return fetchBlob('/scan-auth/helper/download'); }
+export async function downloadBrowserHelper() {
+  const { blob, filename } = await fetchBlobResponse('/scan-auth/helper/download');
+  triggerBlobDownload(blob, filename || 'vellic-scan-helper.zip');
+}

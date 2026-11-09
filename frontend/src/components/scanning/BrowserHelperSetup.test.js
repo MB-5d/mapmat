@@ -32,8 +32,8 @@ describe('browser helper integration',()=>{
   act(()=>root.unmount());root=createRoot(container);await act(async()=>resolveConfig(config));
   expect(onReady.mock.calls.some(([value])=>value===true)).toBe(false);
  });
- test('lost session offers a new connection instead of continuing',async()=>{
-  window.chrome={runtime:{sendMessage:(_id,_msg,cb)=>cb(config)}};api.getScanAuthSession.mockRejectedValue(Object.assign(Error('gone'),{status:404}));
+ test.each([401,403,404,410])('lost session (%s) offers a new connection instead of continuing',async(status)=>{
+  window.chrome={runtime:{sendMessage:(_id,_msg,cb)=>cb(config)}};api.getScanAuthSession.mockRejectedValue(Object.assign(Error('gone'),{status}));
   const onStatus=vi.fn(),restart=vi.fn();await act(async()=>root.render(<BrowserHelperSetup session={{sessionId:'s',helperExpiresAt:Date.now()+60000}} onReady={vi.fn()} onStatus={onStatus} onRestart={restart}/>));
   expect(onStatus).toHaveBeenLastCalledWith('expired');const button=[...container.querySelectorAll('button')].find(b=>b.textContent==='Start new connection');act(()=>button.click());expect(restart).toHaveBeenCalledOnce();
  });

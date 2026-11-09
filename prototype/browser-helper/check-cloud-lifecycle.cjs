@@ -22,6 +22,15 @@ const job=j=>json('/scan-jobs/'+j.jobId+'?access_token='+j.jobAccessToken);
   const response=await req('/scan-auth/helper/download');assert(response.ok);const bytes=Buffer.from(await response.arrayBuffer());assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),config.sha256);
   fs.writeFileSync(dir+'/download.zip',bytes,{mode:0o600});console.log('Cloud package: authorized download, anonymous denial, stable identity and SHA-256 passed.');return;
  }
+ if(command==='abort'){
+  await json('/__helper-fixture/slow','POST',{enabled:false,delayImport:true});const s=await pairing(), state=await json('/__helper-fixture/state');
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),1000);
+  try { await fetch(c.origin+'/scan-auth/helper/import',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json',Origin:'chrome-extension://'+c.extension,Authorization:'Bearer '+s.helperPairingCode},body:JSON.stringify({origin:c.origin,storageState:{cookies:[{name:state.cookieName,value:state.token,domain:new URL(c.origin).hostname,path:'/__helper-fixture',secure:true,httpOnly:true,sameSite:'Lax',expires:-1}],origins:[]}})});throw Error('Import should be interrupted'); }
+  catch(error){assert.equal(error.name,'AbortError');}finally{clearTimeout(timer);}
+  await sleep(17000);assert.equal((await req('/scan-auth/sessions/'+s.sessionId)).status,404);assert.equal((await helper(s,'describe')).status,410);
+  await json('/__helper-fixture/slow','POST',{enabled:false});
+  fs.writeFileSync('/private/tmp/vellic-cloud-aborted-import.json',JSON.stringify({passed:true,actualCloud:true,disconnectedImportRemoved:true,pairingRejected:true},null,2));console.log('Cloud interrupted import discarded; pairing cannot be reused.');return;
+ }
  if(command==='cancel'){
   await json('/__helper-fixture/slow','POST',{enabled:false});const s=await connected();assert.equal((await json('/__helper-fixture/slow','POST',{enabled:true})).slow,true);const j=await start(s);await sleep(5000);
   assert.equal((await job(j)).job.status,'running');await json('/scan-jobs/'+j.jobId+'/cancel','POST',{});const canceledAt=Date.now();let final;
