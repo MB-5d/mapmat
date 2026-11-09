@@ -13,6 +13,7 @@ function installPilot({ app, express, config, authenticate, now = Date.now, buil
     }
     return next();
   });
+  require('./cloud-fixture.cjs').installCloudFixture({ app, config, authenticate });
   app.get('/health', (_req, res) => res.json({ ok: true, pilot: true }));
   app.use(express.static(build, { index: false, dotfiles: 'deny' }));
   app.get(['/', /^\/app(?:\/.*)?$/], (_req, res) => res.sendFile(path.join(build, 'index.html')));

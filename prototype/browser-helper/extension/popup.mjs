@@ -3,7 +3,7 @@ import { assertTarget, normalizeCookies, readLocalStorage, permissionOrigins, co
 const config = self.VELLIC_HELPER;
 const api = config.origin + '/scan-auth/helper/';
 const $ = id => document.getElementById(id);
-$('environment').textContent = config.mode === 'hosted' ? 'ISOLATED CLOUD TEST' : 'LOCAL TEST ONLY';
+$('environment').textContent = config.mode === 'staging' ? 'VELLIC STAGING' : config.mode === 'hosted' ? 'ISOLATED CLOUD TEST' : 'LOCAL TEST ONLY';
 $('fixed-destination').textContent = config.label + ' — ' + config.origin;
 let pairing = '';
 let connection = null;
@@ -33,7 +33,7 @@ $('pair-form').addEventListener('submit', async event => {
     if (!/^[a-f0-9]{64}$/.test(pairing)) throw Error('Copy the complete pairing code from Vellic.');
     connection = await request('describe', {});
     if (connection.helperOrigin !== config.origin) throw Error('The scanner address does not match this helper build.');
-    if (config.mode === 'hosted' && !connection.origin?.startsWith('https://')) throw Error('Cloud tests require a public HTTPS target.');
+    if (config.mode !== 'local' && !connection.origin?.startsWith('https://')) throw Error('Cloud tests require a public HTTPS target.');
     const targetTab = new URLSearchParams(location.search).get('targetTab');
     if (!targetTab || !/^\d+$/.test(targetTab)) throw Error('Open the helper from the protected site tab.');
     activeTab = await chrome.tabs.get(Number(targetTab));

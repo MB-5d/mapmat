@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vellic Local Scan Helper",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Explicitly connect one selected site's session to an isolated local Vellic scan.",
   "permissions": [
     "alarms"

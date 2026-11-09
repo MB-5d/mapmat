@@ -18,8 +18,8 @@ FROM node:24.18.0-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 COPY package*.json ./
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
-    && npm ci --omit=dev && apt-get purge -y --auto-remove python3 make g++ \
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ zip \
+    && npm ci --omit=dev && apt-get purge -y --auto-remove python3 make g++ zip \
     && rm -rf /var/lib/apt/lists/*
 RUN npx playwright install --with-deps chromium
 COPY . .

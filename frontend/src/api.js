@@ -1202,3 +1202,6 @@ export async function getMySharesPage({ limit = 50, offset = 0 } = {}) {
 export async function deleteShare(id) {
   return fetchApi(`/api/shares/${id}`, { method: 'DELETE' });
 }
+
+export function getBrowserHelperConfig() { return fetchApi('/scan-auth/helper/config'); }
+export function downloadBrowserHelper() { return fetchBlob('/scan-auth/helper/download'); }

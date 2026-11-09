@@ -8,7 +8,7 @@
  *   node server.js
  */
 
-const { helperConfig } = require('./prototype/browser-helper/config.cjs');
+const { helperConfig } = require('./utils/scanBrowserHelper/config.cjs');
 const browserHelperConfig = helperConfig(); // Refuse unsafe hosted configuration before opening storage.
 const express = require('express');
 const { getScanRouteHash } = require('./utils/scanRoute');
@@ -3402,7 +3402,7 @@ async function createAuthenticatedBrowserContext(storageState, viewport = { widt
     await installScanAuthNetworkGuard(context, assertSafeUrl, (request) => {
       if (!storageState || !session?.helperNavigationScope || !request.isNavigationRequest()
         || request.frame().parentFrame()) return true;
-      return require('./prototype/browser-helper/policy.cjs').isHelperNavigationAllowed(request.url(), session.helperNavigationScope);
+      return require('./utils/scanBrowserHelper/policy.cjs').isHelperNavigationAllowed(request.url(), session.helperNavigationScope);
     });
     if (session) {
       scanAuthContextOwners.set(context, session);
@@ -9946,7 +9946,9 @@ const localPrototypeBridge = require('./prototype/protected-site/bridge.cjs').cr
   app, sessions: scanAuthSessions, closeSession: closeScanAuthSession,
   createContext: createAuthenticatedBrowserContext, expired: isScanAuthSessionExpired,
 });
-const localBrowserHelper = require('./prototype/browser-helper/bridge.cjs').createBrowserHelper({
+require('./utils/scanBrowserHelper/distribution.cjs').installDistribution({ app, config: browserHelperConfig, authenticate: authMiddleware, requireAuth });
+
+const localBrowserHelper = require('./utils/scanBrowserHelper/bridge.cjs').createBrowserHelper({
   app, sessions: scanAuthSessions, createContext: createAuthenticatedBrowserContext,
   expired: isScanAuthSessionExpired,
 });
@@ -9971,7 +9973,7 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
       return isHostnameInAuthScope(new URL(safeSampleUrl).hostname, session) ? safeSampleUrl : null;
     }))).filter(Boolean);
     if (req.body.browserHelper === true) {
-      if (!localBrowserHelper) throw new Error('Browser helper is not enabled in this environment');
+      if (!localBrowserHelper || !require('./utils/scanBrowserHelper/distribution.cjs').allowed(browserHelperConfig, req.user)) throw new Error('Browser helper is not available for this account');
       return res.json(localBrowserHelper.start(session));
     }
     const localLogin = localPrototypeBridge?.start(session);
@@ -10018,6 +10020,8 @@ app.get('/scan-auth/sessions/:id', authMiddleware, requireAuth, requireApiKey, (
     pageUrl: session.pageUrl || session.seedUrl,
     simplePasswordGate: Boolean(session.simplePasswordGate),
     interactiveSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
+    helperImported: session.helperImported === true,
+    helperExpiresAt: session.helperExpiresAt || null,
     ready: session.status === 'ready' && !!session.storageState,
   });
 });
@@ -10121,7 +10125,7 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
             const signedOut = await fetchPageWithBrowserContext(signedOutContext, sampleUrl);
             const baseline = classifyScanResponse({ html: signedOut.html, status: signedOut.status,
               url: sampleUrl, finalUrl: signedOut.finalUrl || sampleUrl, headers: signedOut.headers || {} });
-            if (!require('./prototype/browser-helper/policy.cjs').isSignedOutRestricted(signedOut.status, baseline)) continue;
+            if (!require('./utils/scanBrowserHelper/policy.cjs').isSignedOutRestricted(signedOut.status, baseline)) continue;
           } finally { await signedOutContext.close(); }
         }
         const page = await fetchPageWithBrowserContext(session.browserContext, sampleUrl);

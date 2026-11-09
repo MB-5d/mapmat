@@ -18,8 +18,16 @@ async function main({ dataDirectory = '/tmp/vellic-auth-helper-pilot' } = {}) {
     RUN_MODE: 'web', HOST: '0.0.0.0', EMAIL_PROVIDER: 'log', AUTH_HEADER_FALLBACK: 'false',
     APP_BASE_URL: config.origin, REQUEST_JSON_LIMIT: '1mb',
     SCAN_PAGE_BATCH_SIZE: '20', SCAN_PAGE_SAFETY_CAP: '20', SCAN_JOB_MAX_PAGES_DEFAULT: '10',
-    SCAN_MAX_DEPTH_HARD: '3', SCAN_AUTH_SESSION_TTL_MS: '600000',
+    SCAN_MAX_DEPTH_HARD: '3', SCAN_AUTH_SESSION_TTL_MS: '300000', SCAN_PAGE_CONCURRENCY: '1',
   });
+  if (process.env.SCAN_AUTH_HELPER_PUBLIC_KEY) {
+    const output = require('node:path').join(dataDirectory, 'helper-release');
+    require('node:fs').rmSync(output, { recursive: true, force: true });
+    const manifest = require('./build-extension.cjs').buildExtension(config.origin, output,
+      { publicKey: process.env.SCAN_AUTH_HELPER_PUBLIC_KEY, packageRelease: true });
+    if (require('../../utils/scanBrowserHelper/distribution.cjs').extensionIdForKey(manifest.key) !== config.extensionId) throw Error('Helper identity mismatch.');
+    process.env.SCAN_AUTH_HELPER_ARTIFACT_DIR = output;
+  }
   const authStore = require('../../stores/authStore');
   const billingStore = require('../../stores/billingStore');
   const bcrypt = require('bcryptjs');

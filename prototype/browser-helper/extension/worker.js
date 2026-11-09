@@ -38,3 +38,11 @@ chrome.action.onClicked.addListener(tab => {
     type: 'popup', width: 440, height: 680, incognito: Boolean(tab.incognito),
   }).catch(() => {});
 });
+
+// Status only: app-origin messages cannot read a site or initiate a transfer.
+chrome.runtime.onMessageExternal?.addListener((message, sender, reply) => {
+  if (!self.VELLIC_HELPER.appOrigin || sender.origin !== self.VELLIC_HELPER.appOrigin
+    || message?.type !== 'vellic-helper-status') return false;
+  reply({ version: chrome.runtime.getManifest().version, origin: self.VELLIC_HELPER.origin });
+  return false;
+});

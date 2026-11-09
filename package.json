@@ -82,7 +82,8 @@
     "test:ia": "node scripts/ia-test.js",
     "verify:runtime:all:auto": "npm run verify:runtime:all",
     "check:scan-page-order": "node scripts/check-scan-page-order.js --http",
-    "check:scan-auth:active-expiry": "node scripts/check-scan-auth-active-expiry.js"
+    "check:scan-auth:active-expiry": "node scripts/check-scan-auth-active-expiry.js",
+    "check:browser-helper": "node scripts/check-browser-helper-integration.cjs && node prototype/browser-helper/check.cjs && node prototype/browser-helper/check-hosted.cjs && node prototype/browser-helper/check-permissions.cjs"
   },
   "engines": {
     "node": ">=24.18.0 <25"
