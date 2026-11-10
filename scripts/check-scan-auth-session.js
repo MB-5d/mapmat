@@ -321,6 +321,24 @@ async function main() {
     });
     const authHeaders = { authorization: `Bearer ${login.token}` };
 
+    if (backend) {
+      const db = new (require('better-sqlite3'))(path.join(tempDir, 'vellic.db'));
+      const user = db.prepare('SELECT account_id FROM users WHERE email = ?').get('admin@vellic.io');
+      db.prepare("UPDATE billing_accounts SET account_state = 'archived' WHERE id = ?").run(user.account_id);
+      try {
+        for (const endpoint of ['precheck', 'sessions']) {
+          await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/${endpoint}`, {
+            method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase }),
+          }), /failed 403/, 'inactive accounts cannot start login work');
+        }
+      } finally {
+        db.prepare("UPDATE billing_accounts SET account_state = 'active' WHERE id = ?").run(user.account_id); db.close();
+      }
+      await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions`, {
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase, browserHelper: true }),
+      }), /failed 403: Browser helper is not available/);
+    }
+
     const precheck = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
       method: 'POST',
       headers: authHeaders,
@@ -329,6 +347,14 @@ async function main() {
     assert.strictEqual(precheck.authRequired, true, 'precheck should find login-gated pages');
     assert.strictEqual(precheck.authCount, 3, 'precheck should find all protected pages');
     assert.strictEqual(precheck.interactiveLoginSupported, true, 'precheck should expose interactive login support');
+
+    const injected = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/`, options: { authSessionStorageState: {
+        cookies: [{ name: 'fixture_session', value: 'ok', domain: '127.0.0.1', path: '/' }], origins: []
+      }, _authenticatedCapture: true } }),
+    });
+    assert.strictEqual(injected.authCount, precheck.authCount, 'precheck must ignore client-supplied login state');
 
     const manyPrecheck = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
       method: 'POST',
@@ -356,20 +382,12 @@ async function main() {
     assert.ok(!JSON.stringify(pageGateReady).includes('fixture-password'), 'password must not be returned');
     const pageGateJob = await fetchJson(`${API_BASE}/scan-jobs`, {
       method: 'POST', headers: authHeaders,
-      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, maxPages: 100, options: { authenticatedPages: true }, authSessionId: pageGateSession.sessionId, authenticatedCaptureType: 'thumb' }),
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, maxPages: 100, options: { authenticatedPages: true }, authSessionId: pageGateSession.sessionId }),
     });
     const pageGateResult = await pollScanJob(pageGateJob.jobId, pageGateJob.jobAccessToken);
     const pageGateNodes = flattenTree(pageGateResult.root);
-    assert.ok(pageGateResult.authenticatedCaptureSummary.captured >= 13, 'authenticated thumbnails must be captured before the login is deleted');
-    const privateNode = pageGateNodes.find((node) => node.url === `${fixtureBase}/page-gates/page2`);
-    assert.ok(privateNode.thumbnailUrl?.startsWith('/api/private-scan-captures/'));
-    assert.strictEqual(privateNode.authPreviewUnavailable, false, 'fresh capture must not be stale');
-    assert.strictEqual(privateNode.authCaptureRequired, true, 'fresh capture still requires login to refresh');
-    const privateImage = await fetchRaw(`${API_BASE}${privateNode.thumbnailUrl}`, { headers: authHeaders });
-    assert.strictEqual(privateImage.headers.get('content-type'), 'image/jpeg');
-    assert.strictEqual(privateImage.headers.get('cache-control'), 'private, no-store');
-    assert.strictEqual((await fetch(`${API_BASE}${privateNode.thumbnailUrl}`)).status, 401);
-    assert.strictEqual((await fetch(`${API_BASE}/screenshots/${privateNode.thumbnailUrl.split('/').pop()}`)).status, 404);
+    assert.strictEqual(pageGateResult.authenticatedCaptureSummary, undefined, 'scans must not capture images');
+    assert.ok(pageGateNodes.every(node => !node.thumbnailUrl && !node.fullScreenshotUrl));
     for (const name of [...Array.from({ length: 12 }, (_, index) => `page${index + 1}`), 'deeper']) {
       const node = pageGateNodes.find((item) => item.url === `${fixtureBase}/page-gates/${name}`);
       assert.ok(node && !node.authRequired && node.title === `Unlocked ${name}`, `one password must unlock ${name}`);
@@ -484,11 +502,14 @@ async function main() {
     });
     assert.strictEqual(completedInteractive.ready, true, 'interactive login should capture a ready storage state');
 
-    const interactiveScreenshot = await fetchJson(
+    await assert.rejects(() => fetchJson(
       `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${interactive.sessionId}`,
       { headers: authHeaders }
-    );
-    assert.ok(interactiveScreenshot.thumbnailUrl, 'interactive auth session should capture protected pages');
+    ), /failed 400: Image capture for protected pages/);
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: fixtureBase, authSessionId: interactive.sessionId, authenticatedCaptureType: 'thumb' }),
+    }), /failed 400: Image capture is separate/);
     const created = await fetchJson(`${API_BASE}/scan-jobs`, {
       method: 'POST',
       headers: authHeaders,
@@ -524,16 +545,16 @@ async function main() {
     await assert.rejects(() => fetchJson(
       `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${interactive.sessionId}`,
       { headers: authHeaders }
-    ), /failed 410: The temporary login expired/);
+    ), /failed 400:/);
     await assert.rejects(() => fetchJson(`${API_BASE}/scan`, {
       method: 'POST',
       headers: authHeaders,
       body: JSON.stringify({ url: `${fixtureBase}/`, authSessionId: interactive.sessionId }),
-    }), /failed 410: The temporary login expired/);
+    }), /failed 400:/);
     await assert.rejects(() => fetchJson(
       `${API_BASE}/scan-stream?url=${encodeURIComponent(fixtureBase)}&authSessionId=${interactive.sessionId}`,
       { headers: authHeaders }
-    ), /failed 410: The temporary login expired/);
+    ), /failed 400:/);
 
     const rescanSession = await createReadyFixtureSession(fixtureBase, authHeaders, precheck.sampleUrls);
     const rescanJob = await fetchJson(`${API_BASE}/scan-jobs`, {
@@ -606,7 +627,7 @@ async function main() {
     }
 
     if (backend) {
-      const checkMapFallback = async (warning) => {
+      const checkMapFallback = async () => {
         const url = `${fixtureBase}/page-gates/page1`;
         const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
           method: 'POST', headers: authHeaders, body: JSON.stringify({ url, sampleUrls: [url] }),
@@ -617,10 +638,10 @@ async function main() {
         await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/complete`, { method: 'POST', headers: authHeaders });
         const job = await fetchJson(`${API_BASE}/scan-jobs`, {
           method: 'POST', headers: authHeaders,
-          body: JSON.stringify({ url, maxPages: 6, options: { authenticatedPages: true }, authSessionId: session.sessionId, authenticatedCaptureType: 'thumb' }),
+          body: JSON.stringify({ url, maxPages: 6, options: { authenticatedPages: true }, authSessionId: session.sessionId }),
         });
         const result = await pollScanJob(job.jobId, job.jobAccessToken);
-        assert.match(result.authenticatedCaptureWarning, warning);
+        assert.ok(!result.authenticatedCaptureWarning);
         assert.strictEqual(result.authenticatedCaptureSummary, undefined, 'fallback must not charge for or create images');
         assert.ok(flattenTree(result.root).some((node) => node.url === url && !node.authRequired), 'fallback must still unlock and map the page');
       };
@@ -639,9 +660,9 @@ async function main() {
         VALUES (?, ?, ?, 'screenshot_credits', 'debit', 10000, 'included')`)
         .run(crypto.randomUUID(), fixtureUser.account_id, fixtureUser.id);
       fixtureDb.close();
-      await checkMapFallback(/No screenshot credits/);
+      await checkMapFallback();
       await restartWith({ PRIVATE_SCAN_CAPTURE_KEY: '' });
-      await checkMapFallback(/Private images are unavailable/);
+      await checkMapFallback();
       await restartWith({ SCAN_AUTH_FEATURE_ENABLED: 'false' });
       const disabled = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
         method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase }),

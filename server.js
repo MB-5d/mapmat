@@ -3362,12 +3362,6 @@ function getScanAuthSessionForRequest(req, sessionId, safeUrl = null) {
   return session;
 }
 
-function getReadyScanAuthStorageState(req, sessionId, safeUrl) {
-  const session = getScanAuthSessionForRequest(req, sessionId, safeUrl);
-  if (!session || session.status !== 'ready' || !session.storageState) return null;
-  return session.storageState;
-}
-
 function getReadyScanAuthStorageStateForJob({ sessionId, ownerKey, safeUrl }) {
   cleanupExpiredScanAuthSessions();
   const session = scanAuthSessions.get(String(sessionId || '').trim());
@@ -3378,12 +3372,19 @@ function getReadyScanAuthStorageStateForJob({ sessionId, ownerKey, safeUrl }) {
 }
 
 function getPublicScanOptions(options) {
-  const { authSessionStorageState, authSessionId, ...publicOptions } =
+  const { authSessionStorageState, authSessionId, _authenticatedCapture, ...publicOptions } =
     options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   return publicOptions;
 }
 
+function assertScanAuthSessionActive(session) {
+  if (session && (scanAuthSessions.get(session.id) !== session || isScanAuthSessionExpired(session))) {
+    throw Object.assign(new Error('The temporary login expired. Log in again before scanning.'), { code: 'scan_auth_expired', status: 410 });
+  }
+}
+
 async function createAuthenticatedBrowserContext(storageState, viewport = { width: 1365, height: 900 }, session = null) {
+  assertScanAuthSessionActive(session);
   const browserInstance = await getBrowser();
   const proxy = await getScanAuthProxyOptions();
   const context = await browserInstance.newContext({
@@ -3399,11 +3400,13 @@ async function createAuthenticatedBrowserContext(storageState, viewport = { widt
     },
   });
   try {
+    assertScanAuthSessionActive(session);
     await installScanAuthNetworkGuard(context, assertSafeUrl, (request) => {
       if (!storageState || !session?.helperNavigationScope || !request.isNavigationRequest()
         || request.frame().parentFrame()) return true;
       return require('./utils/scanBrowserHelper/policy.cjs').isHelperNavigationAllowed(request.url(), session.helperNavigationScope);
     });
+    assertScanAuthSessionActive(session);
     if (session) {
       scanAuthContextOwners.set(context, session);
       session.scanContexts.add(context);
@@ -9005,6 +9008,7 @@ async function captureScreenshotInWorkspace(
   options = {},
   workspaceDirectory = SCREENSHOT_DIR
 ) {
+  if (options?.storageState) throw new Error('Private login state cannot use the public screenshot pipeline.');
   const normalizedType = normalizeScreenshotType(type);
   if (!normalizedType) {
     throw new Error('Invalid screenshot type. Use full or thumb.');
@@ -9872,13 +9876,15 @@ app.post('/scan-auth/precheck', authMiddleware, requireAuth, scanLimiter, requir
   }
 
   try {
+    const entitlement = await resolveScanEntitlementForRequestAsync(req, 1);
+    if (!entitlement.allowed) return sendEntitlementError(res, entitlement.entitlement);
     const safeUrl = await assertSafeUrl(url);
     const result = await crawlSite(
       safeUrl,
       SCAN_AUTH_PRECHECK_MAX_PAGES,
       SCAN_AUTH_PRECHECK_MAX_DEPTH,
       {
-        ...(options || {}),
+        ...getPublicScanOptions(options),
         thumbnails: false,
         authenticatedPages: true,
       }
@@ -9963,8 +9969,14 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
     });
   }
 
+  if (req.body.browserHelper === true && (!localBrowserHelper || !require('./utils/scanBrowserHelper/distribution.cjs').allowed(browserHelperConfig, req.user))) {
+    return res.status(403).json({ error: 'Browser helper is not available for this account.' });
+  }
+
   let session = null;
   try {
+    const entitlement = await resolveScanEntitlementForRequestAsync(req, 1);
+    if (!entitlement.allowed) return sendEntitlementError(res, entitlement.entitlement);
     const safeUrl = await assertSafeUrl(url);
     session = createScanAuthSession({ safeUrl, req });
     const samples = Array.isArray(sampleUrls) ? sampleUrls.slice(0, 5) : [];
@@ -9973,7 +9985,6 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
       return isHostnameInAuthScope(new URL(safeSampleUrl).hostname, session) ? safeSampleUrl : null;
     }))).filter(Boolean);
     if (req.body.browserHelper === true) {
-      if (!localBrowserHelper || !require('./utils/scanBrowserHelper/distribution.cjs').allowed(browserHelperConfig, req.user)) throw new Error('Browser helper is not available for this account');
       return res.json(localBrowserHelper.start(session));
     }
     const localLogin = localPrototypeBridge?.start(session);
@@ -10193,10 +10204,7 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
     const maxPagesSafe = getRequestedScanPageLimit(maxPages);
     const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
     const requestedAuthSessionId = authSessionId || options?.authSessionId;
-    const authSessionStorageState = getReadyScanAuthStorageState(req, requestedAuthSessionId, safeUrl);
-    if (requestedAuthSessionId && !authSessionStorageState) {
-      return res.status(410).json({ error: 'The temporary login expired. Log in again before scanning.' });
-    }
+    if (requestedAuthSessionId) return res.status(400).json({ error: 'Use scan jobs for authenticated scanning.', code: 'scan_auth_job_required' });
     const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
     if (!scanEntitlement.allowed) {
       return sendEntitlementError(res, scanEntitlement.entitlement);
@@ -10216,7 +10224,6 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
       maxDepthSafe,
       {
         ...getPublicScanOptions(options),
-        ...(authSessionStorageState ? { authSessionStorageState } : {}),
         _entitlementCappedScan: Boolean(scanEntitlement.entitlementPayload.capped),
       }
     );
@@ -10276,10 +10283,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
   }
 
   const requestedAuthSessionId = authSessionId || parsedOptions?.authSessionId;
-  const authSessionStorageState = getReadyScanAuthStorageState(req, requestedAuthSessionId, safeUrl);
-  if (requestedAuthSessionId && !authSessionStorageState) {
-    return res.status(410).json({ error: 'The temporary login expired. Log in again before scanning.' });
-  }
+  if (requestedAuthSessionId) return res.status(400).json({ error: 'Use scan jobs for authenticated scanning.', code: 'scan_auth_job_required' });
 
   const maxPagesSafe = getRequestedScanPageLimit(maxPages);
   const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
@@ -10345,7 +10349,6 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
       maxDepthSafe,
       {
         ...getPublicScanOptions(parsedOptions),
-        ...(authSessionStorageState ? { authSessionStorageState } : {}),
         _entitlementCappedScan: Boolean(scanEntitlement.entitlementPayload.capped),
       },
       (progress) => {
@@ -10399,6 +10402,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
 app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan_job'), async (req, res) => {
   const { url, maxPages, maxDepth, options, authSessionId, authenticatedCaptureType } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
+  if (authenticatedCaptureType) return res.status(400).json({ error: 'Image capture is separate from scanning. Protected-page images are not available yet.', code: 'scan_auth_capture_unavailable' });
 
   try {
     const safeUrl = await assertSafeUrl(url);
@@ -10413,28 +10417,6 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
     }
     if (readyAuthSession && !JOB_WORKER_TYPES.includes(JOB_TYPES.scan)) {
       return res.status(503).json({ error: 'Authenticated scanning is unavailable on this server' });
-    }
-    let authenticatedCaptureLimit = 0;
-    let captureType = authenticatedCaptureType || null;
-    let authenticatedCaptureWarning = null;
-    if (authenticatedCaptureType) {
-      if (!readyAuthSession || !['thumb', 'full'].includes(authenticatedCaptureType)) {
-        return res.status(400).json({ error: 'A temporary login and valid capture type are required.' });
-      }
-      if (process.env.DISABLE_SCREENSHOTS === 'true') authenticatedCaptureWarning = 'Screenshots are unavailable. The map was scanned without images.';
-      try { getPrivateScanCaptureStore(); } catch {
-        authenticatedCaptureWarning = 'Private images are unavailable. The map was scanned without images.';
-      }
-      if (!authenticatedCaptureWarning) {
-        const cost = getScreenshotCreditCost({ type: authenticatedCaptureType });
-        const budget = await checkAccountActionAsync(req.user, ENTITLEMENT_ACTIONS.screenshotCapture, { credits: cost });
-        if (!budget.allowed) {
-          authenticatedCaptureWarning = 'No screenshot credits are available. The map was scanned without images.';
-        } else {
-          authenticatedCaptureLimit = budget.entitlement.unlimited ? 100 : Math.min(100, Math.floor(budget.entitlement.remaining / cost));
-        }
-      }
-      if (authenticatedCaptureWarning) captureType = null;
     }
     const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
     if (!scanEntitlement.allowed) {
@@ -10461,32 +10443,44 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
         },
       });
     }
+    assertScanAuthSessionActive(readyAuthSession);
     if (readyAuthSession?.jobId) {
       return res.status(409).json({ error: 'This login is already in use by a scan. Log in again for another scan.' });
     }
     const jobAccessToken = crypto.randomBytes(24).toString('hex');
 
-    const jobId = await createJob({
-      type: JOB_TYPES.scan,
-      payload: {
-        url: safeUrl,
-        maxPages: entitledMaxPages,
-        maxDepth: maxDepthSafe,
-        options: {
-          ...getPublicScanOptions(options),
-          ...(readyAuthSession ? { authSessionId: readyAuthSession.id } : {}),
+    if (readyAuthSession) readyAuthSession.jobId = 'pending';
+    let jobId;
+    try {
+      jobId = await createJob({
+        type: JOB_TYPES.scan,
+        payload: {
+          url: safeUrl,
+          maxPages: entitledMaxPages,
+          maxDepth: maxDepthSafe,
+          options: {
+            ...getPublicScanOptions(options),
+            ...(readyAuthSession ? { authSessionId: readyAuthSession.id } : {}),
+          },
+          authSessionOwnerKey: readyAuthSession?.ownerKey || null,
+          authenticatedCaptureType: null,
+          authenticatedCaptureWarning: null,
+          authenticatedCaptureLimit: 0,
+          accessToken: jobAccessToken,
+          entitlement: entitlementPayload,
+          idempotencyKey,
         },
-        authSessionOwnerKey: readyAuthSession?.ownerKey || null,
-        authenticatedCaptureType: captureType,
-        authenticatedCaptureWarning,
-        authenticatedCaptureLimit,
-        accessToken: jobAccessToken,
-        entitlement: entitlementPayload,
-        idempotencyKey,
-      },
-      req,
-      status: readyAuthSession ? JOB_STATUS.running : JOB_STATUS.queued,
-    });
+        req,
+        status: readyAuthSession ? JOB_STATUS.running : JOB_STATUS.queued,
+      });
+    } catch (error) {
+      if (readyAuthSession?.jobId === 'pending') readyAuthSession.jobId = null;
+      throw error;
+    }
+    if (readyAuthSession && (scanAuthSessions.get(readyAuthSession.id) !== readyAuthSession || isScanAuthSessionExpired(readyAuthSession))) {
+      await markJobFailed(jobId, new Error('The temporary login expired before scanning started.'));
+      return res.status(410).json({ error: 'The temporary login expired. Log in again.', code: 'scan_auth_expired' });
+    }
     if (readyAuthSession) {
       readyAuthSession.jobId = jobId;
       readyAuthSession.expiresAt = Date.now() + SCAN_AUTH_SESSION_TTL_MS;
@@ -10913,6 +10907,7 @@ function registerImageCaptureRoutes(targetApp) {
 // Note: Playwright requires browser binaries which may not be available on all hosts
 app.get('/screenshot', authMiddleware, requireAuth, requireApiKey, enforceUsageLimit('screenshot'), async (req, res) => {
   const { url, authSessionId } = req.query;
+  if (authSessionId) return res.status(400).json({ error: 'Image capture for protected pages is not available yet.', code: 'scan_auth_capture_unavailable' });
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
   const screenshotType = normalizeScreenshotType(req.query?.type);
   if (!screenshotType) {
@@ -10923,10 +10918,6 @@ app.get('/screenshot', authMiddleware, requireAuth, requireApiKey, enforceUsageL
     safeUrl = await assertSafeUrl(url);
   } catch (e) {
     return res.status(400).json({ error: e.message || 'Invalid url' });
-  }
-  const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId, safeUrl);
-  if (authSessionId && !authSessionStorageState) {
-    return res.status(410).json({ error: 'The temporary login expired. Log in again before capturing this page.' });
   }
   const screenshotCredits = getScreenshotCreditCost({ type: screenshotType });
   const screenshotEntitlement = await requireAccountActionAsync(
@@ -10957,7 +10948,6 @@ app.get('/screenshot', authMiddleware, requireAuth, requireApiKey, enforceUsageL
   try {
     const result = await captureScreenshot(safeUrl, screenshotType, {
       signal: abortController.signal,
-      ...(authSessionStorageState ? { storageState: authSessionStorageState } : {}),
     });
     if (clientGone) return;
     if (!result.cached) {

@@ -119,6 +119,7 @@ describe('App blank home and welcome modal', () => {
   };
 
   beforeEach(() => {
+    vi.stubEnv('REACT_APP_SCAN_AUTH_BROWSER_HELPER', 'false');
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -553,6 +554,22 @@ describe('App blank home and welcome modal', () => {
     await act(async () => { changeValue(container.querySelector('#scan-site-password'), 'test-password'); });
     await click(getButton('Unlock and scan'));
     expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('helper-enabled users can choose a password without installing the helper', async () => {
+    vi.stubEnv('REACT_APP_SCAN_AUTH_BROWSER_HELPER', 'true');
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.getBrowserHelperConfig.mockRejectedValue(Object.assign(new Error('Not available for this account'), { status: 403 }));
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, interactiveLoginSupported: true, sampleUrls: ['https://example.com/private'] });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'password-fallback', status: 'interactive', simplePasswordGate: true });
+    await renderApp();
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
+    await click(getButton('Scan'));
+    expect(getButton('Connect browser helper').disabled).toBe(true);
+    await click(getButton('Use site password instead'));
+    expect(container.querySelector('#scan-site-password')).not.toBeNull();
+    expect(api.createScanAuthSession.mock.calls[0][1]?.browserHelper).not.toBe(true);
   });
 
   test.runIf(AUTHENTICATED_SCAN_ENABLED)('browser helper login starts a map-only scan without image options', async () => {
