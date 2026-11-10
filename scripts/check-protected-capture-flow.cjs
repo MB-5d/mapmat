@@ -8,7 +8,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   if(req.method==='POST'){req.resume();req.on('end',()=>{res.writeHead(303,{'set-cookie':'fixture_login=yes; Path=/; SameSite=Lax',location:'/private'});res.end();});return;}
   res.setHeader('Content-Type','text/html');
   if(!String(req.headers.cookie||'').includes('fixture_login=yes')){res.end('<title>Protected fixture</title><form method="post" action="/login"><input type="password" name="password"><button>Unlock</button></form>');return;}
-  res.end('<title>Private fixture</title><style>body{background:#a8d5f9;font-family:Arial;margin:32px}main{height:1300px}</style><main><h1>Private capture-later fixture</h1><p>This generated content must remain available after login expires, without exposing it publicly.</p></main>');
+  res.end('<title>Private fixture '+req.url+'</title><style>body{background:#a8d5f9;font-family:Arial;margin:32px}main{height:1300px}</style><main><h1>Private capture-later fixture</h1><p>This generated content must remain available after login expires, without exposing it publicly.</p><a href="'+req.url+'/next">Another protected page</a></main>');
  });
  await new Promise(r=>fixture.listen(0,'127.0.0.1',r));const site='http://127.0.0.1:'+fixture.address().port+'/private';
  const portServer=http.createServer();await new Promise(r=>portServer.listen(0,'127.0.0.1',r));const port=portServer.address().port;await new Promise(r=>portServer.close(r));
@@ -24,9 +24,9 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const login=await post('/scan-auth/sessions',{url:site,sampleUrls:[site]});assert(login.simplePasswordGate);
   await post('/scan-auth/sessions/'+login.sessionId+'/action',{action:'password',text:'fixture-only'});
   assert((await post('/scan-auth/sessions/'+login.sessionId+'/complete')).ready);
-  const scan=await post('/scan-jobs',{url:site,maxPages:1,authSessionId:login.sessionId,options:{authenticatedPages:true}});
+  const scan=await post('/scan-jobs',{url:site,maxPages:2,authSessionId:login.sessionId,options:{authenticatedPages:true}});
   async function wait(url){for(let i=0;i<180;i++){const data=await json(url);if(data.job.status==='complete')return data.job.result;if(['failed','canceled'].includes(data.job.status))throw Error('Job failed: '+JSON.stringify(data.job.error));await sleep(250);}throw Error('Job timed out');}
-  const result=await wait('/scan-jobs/'+scan.jobId+'?includeResult=true');assert.equal(result.authConnection.sessionId,login.sessionId);assert(!result.root.thumbnailUrl,'scanning cannot capture images');
+  const result=await wait('/scan-jobs/'+scan.jobId+'?includeResult=true');assert.equal(result.partial,true,'page-limited scan must exercise partial results');assert.equal(result.authConnection.sessionId,login.sessionId);assert(!result.root.thumbnailUrl,'scanning cannot capture images');
   const findPage=node=>node.url===site?node:(node.children||[]).map(findPage).find(Boolean);
   const scannedPage=findPage(result.root);assert(scannedPage);
   const root={...scannedPage,children:[],id:scannedPage.id||'root',authCaptureRequired:true,authPreviewUnavailable:true};

@@ -9721,7 +9721,9 @@ async function processJob(job) {
       if (PROTECTED_CAPTURE_LATER && payload.options?.authSessionId) {
         const connected = scanAuthSessions.get(payload.options.authSessionId);
         assertScanAuthSessionActive(connected);
-        if (connected && !result.partial) {
+        // Page limits and an early finish can still produce usable map nodes.
+        // Keep their live login for capture-later; expiry is enforced above.
+        if (connected && result.root) {
           connected.retainedForCapture = true;
           result.authConnection = { sessionId: connected.id, expiresAt: connected.expiresAt };
         }
