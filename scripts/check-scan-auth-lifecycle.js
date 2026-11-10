@@ -10,7 +10,7 @@ async function contextCancellation() {
   const sessions = new Map();
   const session = { id: 's', scanContexts: new Set(), expiresAt: Date.now() + 60000 };
   sessions.set('s', session);
-  const sandbox = { scanAuthSessions: sessions, isScanAuthSessionExpired: s => s.expiresAt <= Date.now(),
+  const sandbox = { scanBrowserIsolation:null, scanAuthSessions: sessions, isScanAuthSessionExpired: s => s.expiresAt <= Date.now(),
     getBrowser: async () => ({ newContext: () => pending.promise }), getScanAuthProxyOptions: async () => ({}),
     SCREENSHOT_USER_AGENTS: ['fixture'], installScanAuthNetworkGuard: async () => { guards++; },
     scanAuthContextOwners: new WeakMap(), assertSafeUrl: async u => u, require };

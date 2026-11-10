@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { helperConfig } = require('../utils/scanBrowserHelper/config.cjs');
-const { readArtifact, extensionIdForKey, allowed } = require('../utils/scanBrowserHelper/distribution.cjs');
+const { readArtifact, extensionIdForKey, allowed, storeUrlFor } = require('../utils/scanBrowserHelper/distribution.cjs');
 const { buildExtension } = require('../prototype/browser-helper/build-extension.cjs');
 const origin = 'https://api-staging.vellic.io', appOrigin = 'https://app-staging.vellic.io';
 const env = { SCAN_AUTH_BROWSER_HELPER:'true', SCAN_AUTH_HELPER_MODE:'staging', NODE_ENV:'production',
@@ -43,3 +43,6 @@ const readiness = changes => spawnSync(process.execPath,[path.join(__dirname,'ch
 const valid = readiness({}); assert.equal(valid.status,0,valid.stdout+valid.stderr);
 for (const changes of [{FRONTEND_URL:env.FRONTEND_URL+',chrome-extension://'+'b'.repeat(32)}, {TEST_AUTH_ENABLED:'true'}, {RAILWAY_ENVIRONMENT_NAME:'production'}, {ALLOW_VERCEL_PREVIEWS:'true'}]) assert.notEqual(readiness(changes).status,0);
 console.log('Passed: staging readiness accepts the reviewed helper and rejects other extension origins or weakened helper settings.');
+
+assert.equal(storeUrlFor(config,'https://chromewebstore.google.com/detail/vellic/'+config.extensionId),'https://chromewebstore.google.com/detail/vellic/'+config.extensionId);
+for(const bad of ['https://evil.example/detail/'+config.extensionId,'https://chromewebstore.google.com/detail/vellic/'+'b'.repeat(32),'https://chromewebstore.google.com/detail/vellic/'+config.extensionId+'?redirect=bad']) assert.throws(()=>storeUrlFor(config,bad));

@@ -24,10 +24,15 @@ function browser({ refuse = false, retained = false, broad = false } = {}) {
  await assert.rejects(cleanup.verifyDenied({scripting:{executeScript:async()=>{throw Error('Tab closed');}}},1,'https://site.example','1'));
  // Test cleanup after closing a connection window, independently of popup finally.
  const listeners={};const event=name=>({addListener:fn=>listeners[name]=fn});let revoked=0;
- const chrome={permissions:{onAdded:event('added'),getAll:async()=>({origins:['https://pilot.example/*'],permissions:['alarms']})},alarms:{create(){},clear:async()=>{},onAlarm:event('alarm')},runtime:{onStartup:event('startup'),onInstalled:event('install'),onMessageExternal:event('external'),getManifest:()=>({version:'0.3.0'})},windows:{onRemoved:event('closed')},action:{onClicked:event('clicked'),setBadgeText:async()=>{},setTitle:async()=>{}}};
+ const chrome={permissions:{onAdded:event('added'),getAll:async()=>({origins:['https://pilot.example/*'],permissions:['alarms']})},alarms:{create(){},clear:async()=>{},onAlarm:event('alarm')},runtime:{onStartup:event('startup'),onInstalled:event('install'),onMessageExternal:event('external'),getManifest:()=>({version:'0.4.0'})},windows:{onRemoved:event('closed')},action:{onClicked:event('clicked'),setBadgeText:async()=>{},setTitle:async()=>{}}};
  vm.runInNewContext(fs.readFileSync(__dirname+'/extension/worker.js','utf8'),{self:{VELLIC_HELPER:{origin:'https://pilot.example',appOrigin:'https://app.example'},VELLIC_PERMISSIONS:{revoke:async()=>revoked++}},chrome,importScripts(){}});
  listeners.closed(3);listeners.alarm({name:'revoke-temporary-site-access'});listeners.startup();listeners.install();await new Promise(resolve=>setImmediate(resolve));assert.equal(revoked,4);
  let reply;assert.equal(listeners.external({type:'vellic-helper-status'},{origin:'https://evil.example'},value=>{reply=value;}),false);assert.equal(reply,undefined);
  assert.equal(listeners.external({type:'vellic-helper-status'},{origin:'https://app.example'},value=>{reply=value;}),true);await new Promise(resolve=>setImmediate(resolve));assert.equal(reply.temporaryAccessRemoved,true);
+ let updateChecks=0;chrome.runtime.requestUpdateCheck=async()=>{updateChecks++;return{status:'no_update'};};
+ assert.equal(listeners.external({type:'vellic-helper-update'},{origin:'https://evil.example'},()=>{}),false);
+ listeners.external({type:'vellic-helper-update'},{origin:'https://app.example'},value=>{reply=value;});await new Promise(resolve=>setImmediate(resolve));assert.equal(reply.updateStatus,'no_update');assert.equal(updateChecks,1);
+ chrome.permissions.getAll=async()=>({origins:['https://pilot.example/*','https://site.example/*'],permissions:['alarms','cookies']});
+ listeners.external({type:'vellic-helper-update'},{origin:'https://app.example'},value=>{reply=value;});await new Promise(resolve=>setImmediate(resolve));assert.equal(reply.updateStatus,'busy');assert.equal(updateChecks,1);
  console.log('Passed: named/host permission revocation, failure reporting, broad-grant detection, denied page/cookie probes and cleanup after closed windows/startup/alarm.');
 })().catch(error=>{console.error(error);process.exitCode=1});

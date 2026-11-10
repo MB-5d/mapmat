@@ -21,10 +21,10 @@ function buildExtension(origin, output, { publicKey, appOrigin = origin, staging
   manifest.externally_connectable = { matches: [appOrigin + '/*'] };
   manifest.name = staging ? 'Vellic Staging Scan Helper' : 'Vellic Cloud Test Helper';
   manifest.incognito = 'split';
-  manifest.description = 'Connect one chosen site to the explicitly named isolated Vellic cloud test.';
+  manifest.description = 'Connect a site you choose to Vellic for protected-page scanning and image capture.';
   manifest.host_permissions = [origin + '/*'];
   manifest.optional_host_permissions = ['https://*/*'];
-  manifest.action.default_title = 'Connect this site to the Vellic cloud test';
+  manifest.action.default_title = 'Connect this site to Vellic';
   manifest.content_security_policy.extension_pages = "script-src 'self'; object-src 'none'; connect-src " + origin + ';';
   fs.writeFileSync(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   fs.writeFileSync(path.join(output, 'config.js'), 'self.VELLIC_HELPER = Object.freeze(' + JSON.stringify({ origin, mode: staging ? 'staging' : 'hosted', appOrigin, allowIncognito: true, label: staging ? 'Vellic staging' : 'Isolated Vellic cloud test' }) + ');\n');

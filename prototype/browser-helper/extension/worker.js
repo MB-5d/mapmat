@@ -39,14 +39,22 @@ chrome.action.onClicked.addListener(tab => {
   }).catch(() => {});
 });
 
-// Status only: app-origin messages cannot read a site or initiate a transfer.
+// Only the exact app can query status or request Chrome's own update check.
+// Neither message can read a site, expand permissions or initiate a transfer.
 chrome.runtime.onMessageExternal?.addListener((message, sender, reply) => {
   if (!self.VELLIC_HELPER.appOrigin || sender.origin !== self.VELLIC_HELPER.appOrigin
-    || message?.type !== 'vellic-helper-status') return false;
-  chrome.permissions.getAll().then(grants => reply({
-    version: chrome.runtime.getManifest().version, origin: self.VELLIC_HELPER.origin,
-    temporaryAccessRemoved: !grants.permissions.some(name => ['cookies', 'scripting'].includes(name))
-      && !grants.origins.some(origin => origin !== permanentOrigin),
-  })).catch(() => reply({ error: 'Permission status unavailable' }));
+    || !['vellic-helper-status', 'vellic-helper-update'].includes(message?.type)) return false;
+  chrome.permissions.getAll().then(async grants => {
+    const temporaryAccessRemoved = !grants.permissions.some(name => ['cookies', 'scripting'].includes(name))
+      && !grants.origins.some(origin => origin !== permanentOrigin);
+    const status = { version: chrome.runtime.getManifest().version, protocolVersion: 1,
+      origin: self.VELLIC_HELPER.origin, temporaryAccessRemoved };
+    if (message.type === 'vellic-helper-status') return reply(status);
+    if (!temporaryAccessRemoved) return reply({ ...status, updateStatus: 'busy' });
+    try {
+      const update = await chrome.runtime.requestUpdateCheck();
+      reply({ ...status, updateStatus: update.status });
+    } catch { reply({ ...status, updateStatus: 'unavailable' }); }
+  }).catch(() => reply({ error: 'Permission status unavailable' }));
   return true;
 });

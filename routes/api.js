@@ -1,3 +1,5 @@
+const { readPrivateImageForMap } = require('../utils/privateCaptureService.cjs');
+const { isPrivateScanCaptureKey } = require('../utils/privateScanCapture');
 /**
  * API routes for Vellic - Projects, Maps, History, Shares
  */
@@ -1159,7 +1161,7 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
         break;
       }
 
-      const object = await readScreenshotObject(storageKey);
+      const object = isPrivateScanCaptureKey(storageKey) ? await readPrivateImageForMap(storageKey, mapId) : await readScreenshotObject(storageKey);
       if (!object?.buffer || Number(object.size || object.buffer.length || 0) <= 0) {
         missingEntries.push({
           mapId,
@@ -1177,8 +1179,8 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
       }
 
       const extension = getAssetExtension({
-        storageKey,
-        contentType: row.content_type || object.contentType,
+        storageKey: isPrivateScanCaptureKey(storageKey) ? '' : storageKey,
+        contentType: object.contentType || row.content_type,
       });
       const filePath = buildImageDownloadPath({
         descriptor: entry.descriptor,
@@ -1192,7 +1194,7 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
       files.push({
         path: filePath,
         buffer: object.buffer,
-        contentType: row.content_type || object.contentType || getContentTypeForKey(storageKey),
+        contentType: object.contentType || row.content_type || getContentTypeForKey(storageKey),
         nodeId,
         assetField,
       });
@@ -2611,6 +2613,8 @@ router.get('/maps/:id/nodes/:nodeId', requireAuth, async (req, res) => {
         thumbnailFullUrl: node.thumbnailFullUrl || '',
         fullScreenshotUrl: node.fullScreenshotUrl || '',
         authRequired: !!node.authRequired,
+        authCaptureRequired: !!node.authCaptureRequired,
+        authPreviewUnavailable: !!node.authPreviewUnavailable,
         isBroken: !!node.isBroken,
         isInactive: !!node.isInactive,
         isFile: !!node.isFile,

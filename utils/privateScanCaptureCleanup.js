@@ -1,6 +1,6 @@
 const { PRIVATE_CAPTURE_KEY, PRIVATE_CAPTURE_PREFIX, HEADER_BYTES } = require('./privateScanCapture');
 
-function createPrivateScanCaptureCleanup({ listObjects, readHeader, removeObject, now = Date.now, batchSize = 200, concurrency = 5 }) {
+function createPrivateScanCaptureCleanup({ listObjects, readHeader, removeObject, isMapCaptureRetained = async () => true, now = Date.now, batchSize = 200, concurrency = 5 }) {
   let cursor = null;
   let running = null;
   async function sweep() {
@@ -15,7 +15,13 @@ function createPrivateScanCaptureCleanup({ listObjects, readHeader, removeObject
           const header = await readHeader(key, HEADER_BYTES);
           summary.checked++;
           if (!header) continue; // Another instance may already have removed it.
-          if (header.length !== HEADER_BYTES || header[0] !== 1) { summary.failed++; continue; }
+          if (header.length !== HEADER_BYTES || ![1, 2].includes(header[0])) { summary.failed++; continue; }
+          if (header[0] === 2) {
+            // Preserve durable map images and versions. Remove abandoned uploads
+            // and deleted-map objects after a grace period for in-flight saves.
+            if (header.readBigUInt64BE(1) + 86400000n <= BigInt(now()) && !await isMapCaptureRetained(key)) { await removeObject(key); summary.deleted++; }
+            continue;
+          }
           const expiresAt = header.readBigUInt64BE(1);
           if (expiresAt > 0n && expiresAt <= BigInt(now())) {
             await removeObject(key);

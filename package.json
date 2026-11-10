@@ -83,7 +83,9 @@
     "verify:runtime:all:auto": "npm run verify:runtime:all",
     "check:scan-page-order": "node scripts/check-scan-page-order.js --http",
     "check:scan-auth:active-expiry": "node scripts/check-scan-auth-active-expiry.js",
-    "check:browser-helper": "node scripts/check-browser-helper-integration.cjs && node prototype/browser-helper/check.cjs && node prototype/browser-helper/check-hosted.cjs && node prototype/browser-helper/check-permissions.cjs && node prototype/browser-helper/check-cloud-fixture.cjs"
+    "check:browser-helper": "node scripts/check-browser-helper-integration.cjs && node prototype/browser-helper/check.cjs && node prototype/browser-helper/check-hosted.cjs && node prototype/browser-helper/check-permissions.cjs && node prototype/browser-helper/check-cloud-fixture.cjs",
+    "check:scan-browser-isolation": "node scripts/check-isolated-browser-pool.cjs && node scripts/check-isolated-scan-browser.cjs",
+    "check:protected-capture": "node scripts/check-protected-capture.cjs && node scripts/check-protected-capture-flow.cjs"
   },
   "engines": {
     "node": ">=24.18.0 <25"
@@ -101,6 +103,8 @@
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.22.0",
     "playwright": "^1.62.0",
-    "stripe": "^22.3.2"
+    "railway": "3.16.0",
+    "stripe": "^22.3.2",
+    "ws": "8.22.2"
   }
 }

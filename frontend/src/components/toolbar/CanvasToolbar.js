@@ -108,6 +108,7 @@ const CanvasToolbar = ({
   onToggleImageMenu,
   hasAuthenticatedPages = false,
   hasPublicCapturePages = true,
+  protectedCaptureEnabled = false,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
   onUpdateCapturedThumbnails,
@@ -184,7 +185,7 @@ const CanvasToolbar = ({
   const showDownloadSelectedAction = canUseImageCaptureTools && hasSelection && hasDownloadableSelectedImages && !!onDownloadImagesSelected;
   const showDownloadSection = showDownloadAllAction || showDownloadSelectedAction;
   const imageMenuSections = [
-    canUseImageCaptureTools && hasAuthenticatedPages ? {
+    canUseImageCaptureTools && hasAuthenticatedPages && !protectedCaptureEnabled ? {
       key: 'authenticated',
       content: <MenuSection>
         <MenuSectionHeader>Protected pages</MenuSectionHeader>

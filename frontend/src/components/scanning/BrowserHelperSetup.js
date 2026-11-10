@@ -2,21 +2,30 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from '../../api';
 import Button from '../ui/Button';
 
-export function checkInstalledHelper(config, runtime = window.chrome?.runtime, onAccess = () => {}) {
+function versionAtLeast(actual, minimum) {
+  if (!/^\d+(?:\.\d+){2,3}$/.test(actual || '') || !/^\d+(?:\.\d+){2,3}$/.test(minimum || '')) return false;
+  const left = actual.split('.').map(Number), right = minimum.split('.').map(Number);
+  for (let i=0; i<4; i++) { if ((left[i] || 0) !== (right[i] || 0)) return (left[i] || 0) > (right[i] || 0); }
+  return true;
+}
+export function helperMessage(config, type, runtime = window.chrome?.runtime) {
   return new Promise(resolve => {
-    if (!runtime?.sendMessage) return resolve(false);
+    if (!runtime?.sendMessage) return resolve(null);
     let finished = false;
     const finish = value => { if (!finished) { finished = true; clearTimeout(timer); resolve(value); } };
-    const timer = setTimeout(() => finish(false), 2500);
+    const timer = setTimeout(() => finish(null), 5000);
     try {
-      runtime.sendMessage(config.extensionId, { type: 'vellic-helper-status' }, response => {
-        const error = runtime.lastError;
-        const matches = !error && response?.origin === config.origin && response?.version === config.version;
-        if (matches) onAccess(response.temporaryAccessRemoved === true);
-        finish(matches);
-      });
-    } catch { finish(false); }
+      runtime.sendMessage(config.extensionId, { type }, response => finish(runtime.lastError ? null : response));
+    } catch { finish(null); }
   });
+}
+export async function checkInstalledHelper(config, runtime = window.chrome?.runtime, onAccess = () => {}) {
+  const response = await helperMessage(config, 'vellic-helper-status', runtime);
+  const matches = response?.origin === config.origin && (config.protocolVersion
+    ? response.protocolVersion === config.protocolVersion && versionAtLeast(response.version, config.version)
+    : response?.version === config.version);
+  if (matches) onAccess(response.temporaryAccessRemoved === true);
+  return Boolean(matches);
 }
 
 export default function BrowserHelperSetup({ session, onReady, onStatus, onRestart, loading }) {
@@ -28,6 +37,10 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
   const [message, setMessage] = useState('Checking browser helper…');
   const [connection, setConnection] = useState('waiting');
   const [downloadError, setDownloadError] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const storeUrl = config?.distribution === 'webstore' && (() => {
+    try { const url=new URL(config.storeUrl); return url.origin==='https://chromewebstore.google.com' && !url.search && !url.hash && url.pathname.startsWith('/detail/') && url.pathname.split('/').at(-1)===config.extensionId ? url.href : null; } catch { return null; }
+  })();
   const check = useCallback(async () => {
     const currentRequest = ++requestId.current;
     setChecking(true); onReady(false);
@@ -75,10 +88,28 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
       await api.downloadBrowserHelper();
     } catch (error) { setDownloadError(error.message || 'Download failed. Try again.'); }
   };
+  const update = async () => {
+    setUpdating(true); setDownloadError('');
+    const response = await helperMessage(config, 'vellic-helper-update');
+    setUpdating(false);
+    const states = {
+      update_available: 'Chrome found an update. Close the helper window, then check installation again once Chrome finishes updating.',
+      no_update: 'Chrome has no newer version available yet. Try again shortly.',
+      throttled: 'Chrome checked recently. Wait a few minutes before trying again.',
+      busy: 'Finish or cancel your site connection before updating the helper.',
+    };
+    setDownloadError(states[response?.updateStatus] || 'Open the helper’s Chrome Web Store page to install or update it, then check installation again.');
+  };
   return <section aria-label="Browser helper setup">
     <p role="status">{message}</p>
     {installed && accessRemoved && <p>Last permission check: temporary site access was off.</p>}
-    {!installed && config && <details open>
+    {!installed && storeUrl && <div>
+      <p>Install the Vellic helper from the Chrome Web Store, then return here. Chrome handles future updates automatically.</p>
+      <a className="inline-link" href={storeUrl} target="_blank" rel="noreferrer">Open Chrome Web Store</a>
+      <Button variant="secondary" loading={updating} onClick={update}>Check for helper update</Button>
+    </div>}
+    {!installed && config?.distribution === 'webstore' && !storeUrl && <p role="alert">The helper installation link is unavailable. Please try again later.</p>}
+    {!installed && config && config.distribution !== 'webstore' && <details open>
       <summary>Install or update the staging helper</summary>
       <ol>
         <li>Download and unzip this reviewed helper package into a folder you will keep.</li>
@@ -93,7 +124,7 @@ export default function BrowserHelperSetup({ session, onReady, onStatus, onResta
     <Button variant="secondary" loading={checking} onClick={check}>Check installation</Button>
     {downloadError && <p role="alert">{downloadError}</p>}
     {session?.sessionId && <>
-      <p role="status">{connection === 'connected' ? 'Site connected. Choose Use this login to verify access and scan.'
+      <p role="status">{connection === 'connected' ? 'Site connected. Choose Use this login to continue.'
         : connection === 'cleanup' ? 'Site received. Waiting for the helper to end its temporary access. If cleanup fails, remove the helper and close this login dialog.'
         : connection === 'expired' ? 'This connection expired or the scanner restarted. Start a new connection.'
         : connection === 'offline' ? 'Connection interrupted. Retrying… Your login is not ready to use.'

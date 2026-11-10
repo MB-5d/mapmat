@@ -26,6 +26,7 @@ function parseEnvBool(value, fallback = false) {
 export const APP_ONLY_MODE = parseEnvBool(process.env.REACT_APP_APP_ONLY_MODE, false);
 export const GOOGLE_AUTH_ENABLED = parseEnvBool(process.env.REACT_APP_GOOGLE_AUTH_ENABLED, false);
 // Temporarily paused while primary scan stability work continues. See docs/authenticated-scan-paused.md.
+export const PROTECTED_CAPTURE_LATER_ENABLED = parseEnvBool(process.env.REACT_APP_PROTECTED_CAPTURE_LATER_ENABLED, false);
 export const AUTHENTICATED_SCAN_ENABLED = parseEnvBool(process.env.REACT_APP_AUTHENTICATED_SCAN_ENABLED, false);
 export const APP_BRAND_NAME = 'Vellic';
 export const MIN_PASSWORD_LENGTH = 8;

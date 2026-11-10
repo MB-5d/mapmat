@@ -50,6 +50,12 @@ async function ensureImageAssetSchemaAsync() {
       CREATE INDEX IF NOT EXISTS idx_map_image_assets_map
       ON map_image_assets (map_id, status)
     `);
+    // Immutable binding survives recapture and map versions; it carries no login state.
+    await adapter.executeAsync(`CREATE TABLE IF NOT EXISTS private_image_objects (
+      storage_key TEXT PRIMARY KEY, map_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_private_image_map ON private_image_objects (map_id)');
     await ensureColumnAsync('map_image_assets', 'retention_expires_at', 'TIMESTAMP');
     await ensureColumnAsync('map_image_assets', 'purge_after', 'TIMESTAMP');
   })();
@@ -236,7 +242,18 @@ async function markImageAssetsStaleByNodeIdsAsync({ mapId, nodeIds, error = 'Sta
   return result?.changes || 0;
 }
 
+async function registerPrivateImageAsync({ storageKey, mapId, ownerUserId }) {
+  await ensureImageAssetSchemaAsync();
+  await adapter.executeAsync('INSERT INTO private_image_objects (storage_key, map_id, owner_user_id) VALUES (?, ?, ?)', [storageKey, mapId, ownerUserId]);
+}
+async function getPrivateImageBindingAsync(storageKey) {
+  await ensureImageAssetSchemaAsync();
+  return adapter.queryOneAsync(`SELECT p.* FROM private_image_objects p JOIN maps m ON m.id = p.map_id WHERE p.storage_key = ?`, [storageKey]);
+}
+
 module.exports = {
+  registerPrivateImageAsync,
+  getPrivateImageBindingAsync,
   ensureImageAssetSchemaAsync,
   buildImageAssetId,
   upsertImageAssetAsync,

@@ -44,3 +44,26 @@ describe('browser helper integration',()=>{
   expect(onStatus).toHaveBeenLastCalledWith('expired');const button=[...container.querySelectorAll('button')].find(b=>b.textContent==='Start new connection');act(()=>button.click());expect(restart).toHaveBeenCalledOnce();
  });
 });
+
+describe('reviewed store installation and protocol-compatible updates',()=>{
+ test('accepts a newer compatible helper, rejects old and incompatible versions',async()=>{
+  const current={...config,version:'0.4.0',protocolVersion:1};
+  const response=(version,protocolVersion)=>({sendMessage:(_id,_msg,cb)=>cb({...current,version,protocolVersion})});
+  expect(await checkInstalledHelper(current,response('0.4.1',1))).toBe(true);
+  expect(await checkInstalledHelper(current,response('0.3.9',1))).toBe(false);
+  expect(await checkInstalledHelper(current,response('0.5.0',2))).toBe(false);
+ });
+ test.each(['busy','throttled','update_available','no_update'])('store update state %s remains explicit',async(updateStatus)=>{
+  const current={...config,version:'0.4.0',protocolVersion:1,distribution:'webstore',storeUrl:'https://chromewebstore.google.com/detail/vellic/'+config.extensionId};
+  api.getBrowserHelperConfig.mockResolvedValue(current);
+  window.chrome={runtime:{sendMessage:(_id,msg,cb)=>cb(msg.type==='vellic-helper-update'?{updateStatus}:null)}};
+  const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);
+  try {
+   await act(async()=>root.render(<BrowserHelperSetup onReady={()=>{}} onStatus={()=>{}}/>));
+   expect(container.querySelector('a').href).toBe(current.storeUrl);
+   expect(container.textContent).not.toContain('Load unpacked');
+   const button=[...container.querySelectorAll('button')].find(b=>b.textContent==='Check for helper update');
+   await act(async()=>button.click());expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  }finally{act(()=>root.unmount());container.remove();delete window.chrome;}
+ });
+});
