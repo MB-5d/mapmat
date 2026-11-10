@@ -5534,6 +5534,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
     if (isScopedDiscovery) {
       scopedDiscoveredUrls.add(normalized);
+      pendingCommonPathUrls.delete(normalized);
     }
     if (!(scanScope.focused && normalized === seed && numberingDiscoveryOrder.size === 0)) {
       recordNumberingDiscovery(normalized);
@@ -5657,6 +5658,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const queue = [];
   const queued = new Set();
   const pendingQueueUrls = new Set();
+  const pendingCommonPathUrls = new Set();
   let queueIndex = 0;
   const focusedParentReserve = (
     scanScope.focused
@@ -5669,7 +5671,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   let activePageLimit = pageLimit === null
     ? null
     : Math.max(1, pageLimit - focusedParentReserve);
-  const getPendingQueueCount = () => pendingQueueUrls.size;
+  const getPendingQueueCount = () => pendingQueueUrls.size - pendingCommonPathUrls.size;
   let lastReportedBatchNumber = 0;
   let lastReportedAccountedMilestone = 0;
   let groupedOutcomeCacheVersion = -1;
@@ -5829,6 +5831,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (queued.has(url)) return;
     queued.add(url);
     pendingQueueUrls.add(url);
+    if (source === 'common_path' && !scopedDiscoveredUrls.has(url)) pendingCommonPathUrls.add(url);
     queue.push({ url, depth, source });
     scanDiagnostics.queuedCount += 1;
     if (source === 'common_path') scanDiagnostics.commonPathQueued += 1;
@@ -6438,7 +6441,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         if (getMinimumActiveFocusedDepth() < nextDepth) return null;
       }
       const item = queue[queueIndex++];
-      if (item?.url) pendingQueueUrls.delete(item.url);
+      if (item?.url) {
+        pendingQueueUrls.delete(item.url);
+        pendingCommonPathUrls.delete(item.url);
+      }
       if (!item?.url || visited.has(item.url)) continue;
       if (deferredUrlToGroup.has(item.url)) continue;
       visited.add(item.url);
@@ -6450,6 +6456,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const processCrawlItem = async ({ url, depth, source = 'crawl' }) => {
     pendingQueueUrls.delete(url);
+    pendingCommonPathUrls.delete(url);
     visited.add(url);
     if (!focusedDiscoveryHelperUrls.has(url)) fetchedOutcomeUrls.add(url);
     const deferredGroupId = deferredUrlToGroup.get(url);
@@ -8448,7 +8455,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   scanDiagnostics.visitedCount = visited.size;
   scanDiagnostics.pageMapCount = pageMap.size;
   scanDiagnostics.queueRemaining = Math.max(0, queue.length - queueIndex);
-  scanDiagnostics.confirmedQueueRemaining = queue.slice(queueIndex).filter(item => item.source !== 'common_path').length;
+  scanDiagnostics.confirmedQueueRemaining = getPendingQueueCount();
   scanDiagnostics.rootChildCount = root?.children?.length || 0;
   scanDiagnostics.treeNodeCount = countScanTreeNodes(root);
   scanDiagnostics.capturedTreeNodeCount = capturedTreeNodeCount;
@@ -8471,6 +8478,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     let hiddenPageCount = 0;
     for (let index = queueIndex; index < queue.length; index += 1) {
       const item = queue[index];
+      if (item?.source === 'common_path' && !scopedDiscoveredUrls.has(item.url)) continue;
       const normalized = normalizeUrl(item?.url);
       if (!normalized || seenHiddenUrls.has(normalized) || pageMap.has(normalized)) continue;
       if (focusedDiscoveryHelperUrls.has(normalized)) continue;
@@ -8492,8 +8500,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       ? hiddenPageCount
       : Math.max(
         hiddenPageCount,
-        scanDiagnostics.queueRemaining,
-        Math.max(0, scanDiagnostics.queuedCount - scanDiagnostics.visitedCount)
+        scanDiagnostics.confirmedQueueRemaining
       );
     if (estimatedHiddenPageCount <= 0) return null;
     return {
@@ -8503,7 +8510,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       totalDiscoveredPageCount: scanScope.focused
         ? pageMap.size + estimatedHiddenPageCount
         : Math.max(
-          scanDiagnostics.queuedCount,
+          scopedDiscoveredUrls.size,
           scanDiagnostics.visitedCount + estimatedHiddenPageCount
         ),
       hiddenPageCount: estimatedHiddenPageCount,

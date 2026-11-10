@@ -372,6 +372,8 @@ async function runCheck() {
     assert.strictEqual(result.scanDiagnostics.confirmedQueueRemaining, 0);
     assert(result.scanDiagnostics.queueRemaining > 0, 'fixture must leave guessed paths unvisited');
     assert.notStrictEqual(result.partialReason, 'scan_collapsed');
+    assert.strictEqual(result.pageCountSummary.remainingPageCount, 0, 'guessed paths are not missing discovered pages');
+    assert(!result.discoveryManifest, 'guessed paths must not appear in the hidden-page manifest');
   });
 
   await withFixture('one-page', async (base) => {
