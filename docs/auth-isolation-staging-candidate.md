@@ -50,9 +50,9 @@ is unchanged. Do not promote this candidate yet.
 
 ## Outstanding production gates
 
-1. Complete the corrected cloud deny/bypass/expiry suite with approved test usage;
-   confirm a fresh checkpoint restore, no active/addressed namespace interfaces except loopback,
-   connection interruption, capacity, and verified VM destruction.
+1. Cloud deny/bypass/namespace/interruption/expiry and verified VM destruction
+   passed on the approved final continuation machine below. Repeat the complete
+   application flows in staging after configuring its scoped credentials.
 2. Configure a staging-scoped Railway project token, checkpoint and deployment
    capacity. Never deploy the local account token. Verify all services executing
    browser jobs use the boundary, and measure cost/startup latency/concurrency.
@@ -106,3 +106,27 @@ Final local HTTP checks also passed for authorized viewer access, outsider denia
   maximum 15 minutes). No new machine has been created in this continuation.
 - Chrome installation checks are blocked by the locked Mac. The helper remains
   prepared, not installed/published. Neither staging nor production was deployed.
+
+## Approved continuation cloud test and manual helper update
+
+- Machine `62e39497-6934-4975-9019-96c3164898cb` restored checkpoint
+  `vellic-browser-e21be52ee0b1c34e` in the staging environment (2 CPU / 2 GB).
+  Public page/screenshot, private/metadata/loopback/IPv6 denial, direct-egress
+  denial, separate-context cookies and namespace restrictions all passed.
+- Client interruption stopped its remote browser process. Hard expiry disconnected
+  Playwright and called real provider destruction. Final removal was verified.
+  This used the one newly approved machine; no further test VM was created.
+- Chrome's existing helper was manually updated from 0.3.0 to 0.4.0 under the same
+  identity. Manifest permission sets are unchanged, checksum verified, and
+  Incognito access is off. This is manual-upgrade evidence, not a store release.
+- The currently deployed staging app still expects exactly 0.3.0, so it rejects
+  the newer helper until the prepared compatibility code and artifact are deployed.
+- Staging web flags were checked: isolation/capture-later are unset (off), helper
+  remains David B. only, test-auth and private networks are false, one web replica.
+  No isolation token is configured. The worker's existing test-auth flag is true,
+  but worker mode exposes only health; review that setting before broader rollout.
+- Postgres-mode backend checks, helper checks, and a frontend build using the
+  actual mapmat-staging public build settings passed. The usual bundle-size
+  warning remains. These do not substitute for a live Postgres capture test.
+- Next code rollout targets staging only with isolation and protected capture
+  still disabled. No account-wide Railway token is to be deployed.
