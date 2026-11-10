@@ -106,7 +106,7 @@ const CanvasToolbar = ({
   legendMenuRef,
   legendPanel,
   onToggleImageMenu,
-  onRescanAuthenticated,
+  hasAuthenticatedPages = false,
   hasPublicCapturePages = true,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
@@ -184,11 +184,11 @@ const CanvasToolbar = ({
   const showDownloadSelectedAction = canUseImageCaptureTools && hasSelection && hasDownloadableSelectedImages && !!onDownloadImagesSelected;
   const showDownloadSection = showDownloadAllAction || showDownloadSelectedAction;
   const imageMenuSections = [
-    canUseImageCaptureTools && onRescanAuthenticated ? {
+    canUseImageCaptureTools && hasAuthenticatedPages ? {
       key: 'authenticated',
       content: <MenuSection>
-        <MenuSectionHeader>Password-protected pages</MenuSectionHeader>
-        <MenuItem label="Rescan with password" onClick={onRescanAuthenticated} />
+        <MenuSectionHeader>Protected pages</MenuSectionHeader>
+        <MenuItem label="Image capture not available yet" disabled />
       </MenuSection>,
     } : null,
     showVisibilitySection ? {

@@ -332,7 +332,7 @@ const ReportDrawer = ({
         { key: 'discovered', label: 'Discovered', value: discovered },
         { key: 'accounted', label: 'Accounted', value: accounted },
         { key: 'fetched', label: 'Fetched', value: fetched },
-        { key: 'captured', label: 'Captured', value: captured },
+        { key: 'captured', label: 'Scanned', value: captured },
         { key: 'visible', label: 'Visible on map', value: stats.total },
         { key: 'grouped', label: 'Grouped', value: grouped },
         { key: 'remaining', label: 'Remaining', value: remaining },
@@ -342,12 +342,12 @@ const ReportDrawer = ({
   const safetyCapNotice = scanMeta?.partialReason === 'scan_discovery_cap'
     ? {
       title: 'Scan reached the discovery safety limit.',
-      message: 'This map contains the valid results captured and grouped before the limit was reached.',
+      message: 'This map contains the valid results scanned and grouped before the limit was reached.',
     }
     : scanMeta?.partialReason === 'scan_safety_cap'
       ? {
         title: 'Scan reached the fetch safety limit.',
-        message: 'This map contains the valid results captured and grouped before the limit was reached.',
+        message: 'This map contains the valid results scanned and grouped before the limit was reached.',
       }
       : null;
 

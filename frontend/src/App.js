@@ -4433,7 +4433,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const { hasAuthenticatedPages, hasPublicCapturePages } = useMemo(() => {
     const nodes = collectNodesDeep(root, orphans);
     return {
-      hasAuthenticatedPages: AUTHENTICATED_SCAN_ENABLED && nodes.some((node) => node.authCaptureRequired || node.authPreviewUnavailable || node.authRequired),
+      hasAuthenticatedPages: nodes.some((node) => node.authCaptureRequired || node.authPreviewUnavailable || node.authRequired),
       hasPublicCapturePages: nodes.some((node) => isImageCaptureEligibleNode(node) && !node.authCaptureRequired && !node.authPreviewUnavailable),
     };
   }, [root, orphans]);
@@ -11076,7 +11076,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowThumbnails(true);
       setShowImageMenu(false);
       showToast(collectAllNodesWithOrphans(root, orphans).some((node) => node.authCaptureRequired || node.authPreviewUnavailable)
-        ? (AUTHENTICATED_SCAN_ENABLED ? 'Use Images → Rescan with password to refresh protected previews.' : 'Private previews are unavailable while authenticated scanning is disabled.') : 'No pages with URLs to capture', 'info');
+        ? 'Image capture for protected pages is not available yet.' : 'No pages with URLs to capture', 'info');
       return;
     }
     if (targetMode === 'captured' && candidates.length === 0) {
@@ -11556,7 +11556,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       ? collectAllNodesWithOrphans(root, orphans).find((node) => node.id === nodeId)
       : null;
     if (selectedPage?.authCaptureRequired || selectedPage?.authPreviewUnavailable) {
-      showToast((AUTHENTICATED_SCAN_ENABLED ? 'Use Images → Rescan with password to refresh protected previews.' : 'Private previews are unavailable while authenticated scanning is disabled.'), 'info');
+      showToast('Image capture for protected pages is not available yet.', 'info');
       return;
     }
     const normalizedCaptureType = captureType === 'thumb' ? 'thumb' : 'full';
@@ -11687,7 +11687,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (total === 0) {
       setShowImageMenu(false);
       showToast(collectAllNodesWithOrphans(root, orphans).some((node) => node.authCaptureRequired || node.authPreviewUnavailable)
-        ? (AUTHENTICATED_SCAN_ENABLED ? 'Use Images → Rescan with password to refresh protected previews.' : 'Private previews are unavailable while authenticated scanning is disabled.') : 'No pages with URLs to capture', 'info');
+        ? 'Image capture for protected pages is not available yet.' : 'No pages with URLs to capture', 'info');
       return;
     }
     if (targetMode === 'captured' && targets.length === 0) {
@@ -13674,7 +13674,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         isLoggedIn: effectiveIsLoggedIn,
         requestedPages: DEFAULT_SCAN_REQUESTED_PAGES,
       });
-    const shouldMergeScanResult = Boolean(authFlow.refreshAuthenticatedMap) || (isUnsavedScannedMap
+    const shouldMergeScanResult = (isUnsavedScannedMap
       && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig)
       && !shouldReplaceEntitlementLimitedMap);
     const requestedPages = DEFAULT_SCAN_REQUESTED_PAGES;
@@ -13748,7 +13748,6 @@ export default function App({ currentRoute, navigateToRoute }) {
             authCount: precheck.authCount || 0,
             sampleUrls: precheck.sampleUrls || [],
             interactiveLoginSupported: precheck.interactiveLoginSupported === true,
-            captureThumbnails: false,
             loading: false, error: '',
           });
           return;
@@ -13791,7 +13790,6 @@ export default function App({ currentRoute, navigateToRoute }) {
             maxPages: maxPagesForRequest,
             options: scanConfig,
             ...(authFlow.authSessionId ? { authSessionId: authFlow.authSessionId } : {}),
-            ...(authFlow.authSessionId && authFlow.captureThumbnails ? { authenticatedCaptureType: 'thumb' } : {}),
           });
           break;
         } catch (error) {
@@ -14531,7 +14529,6 @@ export default function App({ currentRoute, navigateToRoute }) {
           ...prompt.authFlow,
           skipAuthPrecheck: true,
           authSessionId: session.sessionId,
-          captureThumbnails: prompt.captureThumbnails,
         });
         return;
       }
@@ -14627,7 +14624,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (requestId !== scanAuthRequestRef.current) return;
       if (!session?.ready) throw new Error('That password did not unlock the protected page.');
       setScanAuthPrompt(null);
-      scan(prompt.url, prompt.preserveName, { ...prompt.authFlow, skipAuthPrecheck: true, authSessionId: sessionId, captureThumbnails: prompt.captureThumbnails });
+      scan(prompt.url, prompt.preserveName, { ...prompt.authFlow, skipAuthPrecheck: true, authSessionId: sessionId });
     } catch (err) {
       if (requestId !== scanAuthRequestRef.current) return;
       setScanAuthPrompt((current) => current ? {
@@ -14653,7 +14650,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         ...prompt.authFlow,
         skipAuthPrecheck: true,
         authSessionId: sessionId,
-        captureThumbnails: prompt.captureThumbnails,
       });
     } catch (err) {
       if (requestId !== scanAuthRequestRef.current) return;
@@ -21330,13 +21326,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     validateCurrentMapImageAssets();
                   }
                 },
-                onRescanAuthenticated: hasAuthenticatedPages && isLoggedIn && !isImportedMap ? () => {
-                  setShowImageMenu(false);
-                  scan(urlInput || root?.url, true, {
-                    refreshAuthenticatedMap: true,
-                    scanOptionsOverride: { authenticatedPages: true },
-                  });
-                } : null,
+                hasAuthenticatedPages,
                 hasPublicCapturePages,
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
                 onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),
@@ -22294,16 +22284,8 @@ export default function App({ currentRoute, navigateToRoute }) {
               At least {scanAuthPrompt.authCount || 'one'} page{scanAuthPrompt.authCount === 1 ? '' : 's'} may require a password. The scan may find more.
             </p>}
             {scanAuthHelperEnabled && scanAuthPrompt.interactiveLoginSupported && !scanAuthPrompt.authBrowser && <Button variant="secondary" disabled={scanAuthPrompt.loading} onClick={() => startTargetAuthLogin('password')}>Use site password instead</Button>}
-            {scanAuthPrompt.authFlow?.refreshAuthenticatedMap && <p>This creates an updated draft copy to save as a new map. Your saved map stays unchanged.</p>}
             {scanAuthPrompt.authBrowser?.sessionId ? (
               <div className="scan-auth-browser">
-                <CheckboxField
-                  label="Include private thumbnails"
-                  description="Optional: 1 screenshot credit per captured page, up to 100 pages, including public pages. Images are visible only to you and expire after 24 hours. If images are unavailable or credits run out, the map still scans."
-                  checked={Boolean(scanAuthPrompt.captureThumbnails)}
-                  disabled={scanAuthPrompt.loading}
-                  onChange={() => setScanAuthPrompt((current) => current ? { ...current, captureThumbnails: !current.captureThumbnails } : current)}
-                />
                 {scanAuthPrompt.authBrowser.helperPairingCode ? (
                   <div>
                     <p>Sign in to this site in Chrome, including any Google or email verification. Open the Vellic Scan Helper for this test on the protected page and paste this code. Pairing expires in five minutes.</p>

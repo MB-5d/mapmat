@@ -9,6 +9,8 @@ import { ROUTE_SURFACES, createAppHomeRoute } from './utils/appRoutes';
 
 vi.mock('./api', () => ({
   getMe: vi.fn(),
+  getBrowserHelperConfig: vi.fn(),
+  getScanAuthSession: vi.fn(),
   getShare: vi.fn(),
   getShareStatus: vi.fn(),
   getProjects: vi.fn(),
@@ -153,6 +155,8 @@ describe('App blank home and welcome modal', () => {
     container = null;
     root = null;
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    delete window.chrome;
     vi.clearAllMocks();
     window.localStorage.clear();
     Object.defineProperty(window, 'opener', {
@@ -532,7 +536,7 @@ describe('App blank home and welcome modal', () => {
     expect(api.precheckScanAuth).toHaveBeenCalledTimes(choice === 'retry' ? 2 : 1);
   });
 
-  test.runIf(AUTHENTICATED_SCAN_ENABLED)('private thumbnails are opt-in with cost and expiry disclosed', async () => {
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('password login starts a map-only scan without image options', async () => {
     suppressWelcomeModal();
     api.getMe.mockResolvedValue({ user: defaultUser });
     api.precheckScanAuth.mockResolvedValue({ authRequired: true, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
@@ -544,14 +548,36 @@ describe('App blank home and welcome modal', () => {
     await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
     await click(getButton('Scan'));
     await click(getButton('Enter password'));
-    const checkbox = container.querySelector('.scan-auth-modal-body input[type="checkbox"]');
-    expect(checkbox.checked).toBe(false);
-    expect(container.textContent).toContain('1 screenshot credit per captured page');
-    expect(container.textContent).toContain('expire after 24 hours');
-    await click(checkbox);
+    expect(container.querySelector('.scan-auth-modal-body input[type="checkbox"]')).toBeNull();
+    expect(container.textContent).not.toContain('Include private thumbnails');
     await act(async () => { changeValue(container.querySelector('#scan-site-password'), 'test-password'); });
     await click(getButton('Unlock and scan'));
-    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBe('thumb');
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('browser helper login starts a map-only scan without image options', async () => {
+    vi.stubEnv('REACT_APP_SCAN_AUTH_BROWSER_HELPER', 'true');
+    suppressWelcomeModal();
+    const config = { enabled: true, extensionId: 'a'.repeat(32), version: '0.3.0', origin: 'https://api-staging.vellic.io', temporaryAccessRemoved: true };
+    window.chrome = { runtime: { sendMessage: (_id, _message, reply) => reply(config) } };
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.getBrowserHelperConfig.mockResolvedValue(config);
+    api.getScanAuthSession.mockResolvedValue({ helperImported: true });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'helper-session', helperPairingCode: 'a'.repeat(64), helperExpiresAt: Date.now() + 60000 });
+    api.completeScanAuthSession.mockResolvedValue({ ready: true });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped'), { status: 400 }));
+    await renderApp();
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com/private'); });
+    await click(getButton('Scan'));
+    await click(getButton('Connect browser helper'));
+    expect(container.querySelector('.scan-auth-modal-body input[type="checkbox"]')).toBeNull();
+    expect(container.textContent).not.toContain('Include private thumbnails');
+    expect(getButton('Use this login').disabled).toBe(false);
+    await click(getButton('Use this login'));
+    expect(api.createScanJob).toHaveBeenCalledTimes(1);
+    expect(api.createScanJob.mock.calls[0][0].authSessionId).toBe('helper-session');
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
   });
 
   test.runIf(!AUTHENTICATED_SCAN_ENABLED)('disabled beta scans normally without auth requests or controls', async () => {

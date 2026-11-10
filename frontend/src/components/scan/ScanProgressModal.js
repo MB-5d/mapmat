@@ -121,7 +121,7 @@ const ScanProgressModal = ({
   );
   const phaseMessage = {
     discovering: 'Finding pages...',
-    scanning: 'Capturing pages...',
+    scanning: 'Scanning pages...',
     finalizing: 'Preparing your map...',
   }[scanProgress.phase];
   const displayMessage = isStoppingScan
@@ -199,7 +199,7 @@ const ScanProgressModal = ({
               <span>Discovered {formatCount(discoveredCount)}</span>
               <span>Accounted {formatCount(accountedCount)}</span>
               <span>Fetched {formatCount(fetchedCount)}</span>
-              <span>Captured successfully {formatCount(capturedCount)}</span>
+              <span>Scanned successfully {formatCount(capturedCount)}</span>
               <span>Visible on map {formatCount(visibleCount)}</span>
               <span>Grouped {formatCount(deferredCount)}</span>
               {blockedCount > 0 ? <span>Crawl restricted {formatCount(blockedCount)}</span> : null}

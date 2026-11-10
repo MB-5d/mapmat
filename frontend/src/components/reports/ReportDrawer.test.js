@@ -719,7 +719,7 @@ describe('ReportDrawer', () => {
     expect(coverage.textContent).toContain('Discovered27,719');
     expect(coverage.textContent).toContain('Accounted15,243');
     expect(coverage.textContent).toContain('Fetched5,000');
-    expect(coverage.textContent).toContain('Captured4,979');
+    expect(coverage.textContent).toContain('Scanned4,979');
     expect(coverage.textContent).toContain('Visible on map3');
     expect(coverage.textContent).toContain('Grouped10,243');
     expect(coverage.textContent).toContain('Remaining12,476');
@@ -757,7 +757,7 @@ describe('ReportDrawer', () => {
     });
 
     expect(container.textContent).toContain('Scan reached the discovery safety limit.');
-    expect(container.textContent).toContain('valid results captured and grouped');
+    expect(container.textContent).toContain('valid results scanned and grouped');
   });
 
 });

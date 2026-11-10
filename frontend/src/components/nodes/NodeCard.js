@@ -19,7 +19,7 @@ import Button from '../ui/Button';
 import CaptureImage from '../ui/CaptureImage';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
-import { ANNOTATION_STATUS_LABELS, AUTHENTICATED_SCAN_ENABLED, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
+import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
 
 const NODE_STATUS_BADGE_STYLE = {
   new: 'info',
@@ -156,7 +156,7 @@ const NodeCard = ({
       return {
         icon: Lock,
         label: 'Login-protected page',
-        text: AUTHENTICATED_SCAN_ENABLED ? 'Rescan with password for a preview' : 'Private preview unavailable',
+        text: 'Private preview unavailable',
         variant: 'blocked',
       };
     }
@@ -300,12 +300,12 @@ const NodeCard = ({
         ? 'Upgrade to see full map'
         : (
           isImportGhost || isFocusGhost
-            ? 'Inferred structural context; this is not a captured page'
+            ? 'Inferred structural context; this is not a scanned page'
             : undefined
         )}
       aria-label={
         isImportGhost || isFocusGhost
-          ? `${node.title}, inferred structural context, not a captured page`
+          ? `${node.title}, inferred structural context, not a scanned page`
           : undefined
       }
       style={{ cursor: isStructuralNode ? 'default' : (isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab'))) }}

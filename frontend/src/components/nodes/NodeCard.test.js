@@ -5,7 +5,6 @@ import fs from 'fs';
 import path from 'path';
 
 import { NodeCard } from './NodeCard';
-import { AUTHENTICATED_SCAN_ENABLED } from '../../utils/constants';
 
 const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 const getCssRule = (selector) => {
@@ -611,7 +610,7 @@ describe('NodeCard', () => {
         />
       );
     });
-    expect(container.textContent).toContain(AUTHENTICATED_SCAN_ENABLED ? 'Rescan with password for a preview' : 'Private preview unavailable');
+    expect(container.textContent).toContain('Private preview unavailable');
     expect(container.querySelector('.thumb-placeholder-blocked')).not.toBeNull();
   });
 
