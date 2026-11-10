@@ -60,8 +60,7 @@ async function main() {
     await json(`/scan-auth/sessions/${session.sessionId}/action`, { action: 'password', text: password });
     assert.equal((await json(`/scan-auth/sessions/${session.sessionId}/complete`, {})).ready, true);
     scanning = true;
-    const created = await json('/scan-jobs', { url: site + '/', maxPages: 150, options: { authenticatedPages: true }, authSessionId: session.sessionId,
-      ...(process.env.SCAN_AUTH_EXPIRY_TEST_CAPTURE === 'true' ? { authenticatedCaptureType: 'thumb' } : {}) });
+    const created = await json('/scan-jobs', { url: site + '/', maxPages: 150, options: { authenticatedPages: true }, authSessionId: session.sessionId });
     const runningSession = await json(`/scan-auth/sessions/${session.sessionId}`);
     const expiry = Date.parse(runningSession.expiresAt);
     console.log(JSON.stringify({ phase: 'running', lifetimeMinutes: ttl / 60000, expiresAt: runningSession.expiresAt }));

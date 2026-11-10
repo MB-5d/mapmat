@@ -43,4 +43,18 @@ async function claimRace() {
   assert.equal(second.statusCode,409);assert.equal(creates,1);persisted.resolve();await pending;
   assert.equal(first.statusCode,200);assert.equal(session.jobId,'job');
 }
-(async()=>{await contextCancellation();await claimRace();console.log('Passed: canceled browser startup closes its context; simultaneous requests cannot reuse one login.');})().catch(e=>{console.error(e);process.exitCode=1;});
+async function capacityResponse() {
+  let handler;
+  const sessions = new Map([['one', { ownerKey:'owner', jobId:'one', createdAt:1 }], ['two', { ownerKey:'owner', jobId:'two', createdAt:2 }]]);
+  const sandbox = { app:{ post:(_path,...handlers)=>{handler=handlers.at(-1);} }, authMiddleware(){}, requireAuth(){}, scanLimiter(){}, requireApiKey(){},
+    SCAN_AUTH_FEATURE_ENABLED:true, scanAuthSessions:sessions, cleanupExpiredScanAuthSessions(){}, getScanAuthOwnerKey:()=> 'owner',
+    resolveScanEntitlementForRequestAsync:async()=>({allowed:true}), assertSafeUrl:async u=>u,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source.slice(source.indexOf('function createScanAuthSession('), source.indexOf('function scheduleScanAuthExpiry(')), sandbox);
+  vm.runInContext(source.slice(source.indexOf("app.post('/scan-auth/sessions',"), source.indexOf("app.get('/scan-auth/sessions/:id',")), sandbox);
+  const res={statusCode:200,status(s){this.statusCode=s;return this;},json(body){this.body=body;return this;}};
+  await handler({body:{url:'https://example.com/private'}},res);
+  assert.equal(res.statusCode,429); assert.equal(res.body.code,'scan_auth_capacity'); assert.equal(sessions.size,2);
+}
+(async()=>{await contextCancellation();await claimRace();await capacityResponse();console.log('Passed: canceled browser startup closes its context; one login cannot be claimed twice; busy accounts receive a capacity response without disrupting scans.');})().catch(e=>{console.error(e);process.exitCode=1;});

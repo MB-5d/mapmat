@@ -14067,7 +14067,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       } else if (normalizedPartialReason === 'entitlement_cap') {
         showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
       } else if (normalizedPartialReason === 'scan_safety_cap') {
-        showToast('Scan reached the safety limit. Showing the pages captured so far.', 'warning');
+        showToast('Scan reached the safety limit. Showing the pages scanned so far.', 'warning');
       } else if (normalizedPartialReason === 'scan_discovery_cap') {
         showToast('Scan reached the discovery safety limit. Showing the valid results so far.', 'warning');
       } else if (normalizedPartialReason === 'scan_collapsed') {

@@ -300,7 +300,7 @@ const ScanProgressModal = ({
       <div className="cancel-confirm">
         <AlertTriangle size={48} className="cancel-warning-icon" />
         <h3>Stop scanning?</h3>
-        <p>Stop scanning and show the pages captured so far?</p>
+        <p>Stop scanning and show the pages scanned so far?</p>
       </div>
     );
     footer = (

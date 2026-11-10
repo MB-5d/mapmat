@@ -3256,7 +3256,9 @@ function createScanAuthSession({ safeUrl, req }) {
     .sort((a, b) => a.createdAt - b.createdAt);
   while (ownerSessions.length >= 2) {
     const unused = ownerSessions.find((session) => !session.jobId);
-    if (!unused) throw new Error('Two authenticated scans are already running. Try again after one finishes.');
+    if (!unused) throw Object.assign(new Error('Two authenticated scans are already running. Try again after one finishes.'), {
+      status: 429, code: 'scan_auth_capacity',
+    });
     closeScanAuthSession(unused);
     scanAuthSessions.delete(unused.id);
     ownerSessions.splice(ownerSessions.indexOf(unused), 1);
@@ -4425,6 +4427,16 @@ async function fetchPageWithBrowserContext(context, url, capturePage = null) {
       finalUrl,
       responseTime: Date.now() - startedAt,
     };
+  } catch (error) {
+    verifyAccess();
+    if (session && /(?:page|context|browser).*closed/i.test(String(error.message || ''))) {
+      closeScanAuthSession(session);
+      scanAuthSessions.delete(session.id);
+      throw Object.assign(new Error('The sign-in browser connection was interrupted. Log in again and retry this scan.'), {
+        code: 'scan_auth_browser_lost', status: 410,
+      });
+    }
+    throw error;
   } finally {
     if (page) await page.close().catch(() => {});
   }
@@ -6503,6 +6515,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       usedBrowserFetch = Boolean(res.usedBrowser);
       scanDiagnostics.fetchedPageCount += 1;
     } catch (e) {
+      if (e.code === 'scan_auth_browser_lost' || e.code === 'scan_auth_expired') throw e;
       scanDiagnostics.failedFetches += 1;
       failedOutcomeUrls.add(url);
       if (url === seed) {
@@ -10011,10 +10024,10 @@ app.post('/scan-auth/sessions', authMiddleware, requireAuth, scanLimiter, requir
       scanAuthSessions.delete(session.id);
     }
     const message = error.message || 'Failed to create authenticated scan session';
-    const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
+    const status = error.status || (message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
       ? 400
-      : 500;
-    return res.status(status).json({ error: message });
+      : 500);
+    return res.status(status).json({ error: message, ...(error.code ? { code: error.code } : {}) });
   }
 });
 
