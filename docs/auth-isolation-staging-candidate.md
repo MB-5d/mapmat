@@ -12,7 +12,7 @@ is unchanged. Do not promote this candidate yet.
   Scanning itself captures no images. Expiry requires login, not a rescan. Partial
   images survive an ended connection; a retry targets remaining pages.
 - Private images use encrypted map-bound storage, map read permissions, existing
-  image download controls, and durable retention while the owning map exists.
+  image download controls, and durable retention while an authorized original or copied map exists.
   Legacy private pilot images retain their previous 24-hour expiry.
 - Helper 0.4.0: protocol-aware version checks, verified store-link support,
   Chrome update-check states, temporary-permission safety, and explicit staging
@@ -59,11 +59,10 @@ is unchanged. Do not promote this candidate yet.
 3. Deploy and test app flows in real staging, with feature off and on, using
    password and helper logins. Verify slow capture past session expiry, reconnect,
    cancellation/restart, private-image access and user-visible progress.
-4. Complete customer image cases: map duplication/Save As, sharing permissions,
-   historical versions and deleting the original map. Current ciphertext binding
-   is to the original map; duplicated maps need explicit asset authorization and
-   retention handling. Anonymous public-share image delivery is intentionally
-   denied and needs a product decision before promising identical sharing.
+4. Verify the locally passing copied-map/version image cases in staging/Postgres.
+   Ciphertext keeps its original encryption scope; authorized copies now have
+   independent access/retention references. Anonymous public-share image delivery
+   remains denied and needs a product decision before promising identical sharing.
 5. Prepare/approve the Chrome Web Store release and stable store-assigned identity;
    test genuine installation and upgrade from the preceding version in Chrome.
    Manual unpacked reload tests cannot establish automatic store updates.
@@ -88,3 +87,22 @@ That corrected assertion and cloud hard expiry are still **unverified**. No
 additional machine beyond the user's approved limit was created.
 
 Final local HTTP checks also passed for authorized viewer access, outsider denial, role revocation and protected flags on on-demand canvas nodes. Dependency audit: zero known vulnerabilities.
+
+## Continuation: copied images and failure harness
+
+- Private-image references are saved atomically with map creation, updates,
+  individual image updates and versions. Knowing an image URL cannot grant access.
+- Real local app tests passed for owner/viewer copies surviving source deletion,
+  normal image downloads on copies, membership revocation, unknown-role denial,
+  rejected private URLs on all four save paths, failed-reference transaction rollback,
+  historical-image access after replacing the current page, and access revocation
+  after the last referencing map is deleted.
+- Backend checks and ordinary image-capture smoke passed. Local real-browser
+  interruption/expiry now verify lease destruction; capacity/cleanup tests pass.
+- The cloud harness records independent failures and still runs expiry/cleanup.
+  Its final lease calls the real provider destroy method. Namespace validation
+  now has local regression cases for inactive tunnel devices and unsafe interfaces.
+- Further cloud usage is awaiting renewed approval (one machine, 2 CPU / 2 GB,
+  maximum 15 minutes). No new machine has been created in this continuation.
+- Chrome installation checks are blocked by the locked Mac. The helper remains
+  prepared, not installed/published. Neither staging nor production was deployed.

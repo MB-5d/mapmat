@@ -56,6 +56,15 @@ async function ensureImageAssetSchemaAsync() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`);
     await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_private_image_map ON private_image_objects (map_id)');
+    await adapter.executeAsync(`CREATE TABLE IF NOT EXISTS private_image_references (
+      storage_key TEXT NOT NULL, map_id TEXT NOT NULL,
+      PRIMARY KEY (storage_key, map_id)
+    )`);
+    await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_private_image_reference_map ON private_image_references (map_id)');
+    // Upgrade existing captures without changing their encryption scope.
+    await adapter.executeAsync(`INSERT INTO private_image_references (storage_key, map_id)
+      SELECT p.storage_key, p.map_id FROM private_image_objects p JOIN maps m ON m.id = p.map_id
+      WHERE 1 = 1 ON CONFLICT (storage_key, map_id) DO NOTHING`);
     await ensureColumnAsync('map_image_assets', 'retention_expires_at', 'TIMESTAMP');
     await ensureColumnAsync('map_image_assets', 'purge_after', 'TIMESTAMP');
   })();
@@ -245,13 +254,49 @@ async function markImageAssetsStaleByNodeIdsAsync({ mapId, nodeIds, error = 'Sta
 async function registerPrivateImageAsync({ storageKey, mapId, ownerUserId }) {
   await ensureImageAssetSchemaAsync();
   await adapter.executeAsync('INSERT INTO private_image_objects (storage_key, map_id, owner_user_id) VALUES (?, ?, ?)', [storageKey, mapId, ownerUserId]);
+  await adapter.executeAsync('INSERT INTO private_image_references (storage_key, map_id) VALUES (?, ?)', [storageKey, mapId]);
 }
-async function getPrivateImageBindingAsync(storageKey) {
+async function getPrivateImageBindingAsync(storageKey, mapId = null) {
   await ensureImageAssetSchemaAsync();
-  return adapter.queryOneAsync(`SELECT p.* FROM private_image_objects p JOIN maps m ON m.id = p.map_id WHERE p.storage_key = ?`, [storageKey]);
+  return adapter.queryOneAsync(`SELECT p.* FROM private_image_objects p
+    WHERE p.storage_key = ? AND EXISTS (
+      SELECT 1 FROM private_image_references r JOIN maps m ON m.id = r.map_id
+      WHERE r.storage_key = p.storage_key ${mapId ? 'AND r.map_id = ?' : ''}
+    )`, mapId ? [storageKey, mapId] : [storageKey]);
 }
+async function listPrivateImageAccessAsync(storageKeys, userId) {
+  if (!storageKeys.length) return [];
+  await ensureImageAssetSchemaAsync();
+  await require('./collaborationStore').ensureCollaborationSchemaAsync();
+  const rows = [];
+  for (let offset = 0; offset < storageKeys.length; offset += 200) {
+    const keys = storageKeys.slice(offset, offset + 200);
+    rows.push(...await adapter.queryAllAsync(`SELECT p.*, m.user_id AS map_owner_id, mm.role AS membership_role
+      FROM private_image_objects p
+      JOIN private_image_references r ON r.storage_key = p.storage_key
+      JOIN maps m ON m.id = r.map_id
+      LEFT JOIN map_memberships mm ON mm.map_id = m.id AND mm.user_id = ?
+      WHERE p.storage_key IN (${keys.map(() => '?').join(',')})
+        AND (m.user_id = ? OR mm.id IS NOT NULL)`, [userId, ...keys, userId]));
+  }
+  return rows;
+}
+// Caller has verified all source-image and destination-map permissions.
+// Bind references and save together so a failed save cannot grant image access.
+const saveWithPrivateImageReferencesAsync = adapter.transactionAsync(async ({ storageKeys, mapId, save }) => {
+  const result = await save();
+  for (let offset = 0; offset < storageKeys.length; offset += 200) {
+    const keys = storageKeys.slice(offset, offset + 200);
+    await adapter.executeAsync(`INSERT INTO private_image_references (storage_key, map_id)
+      VALUES ${keys.map(() => '(?, ?)').join(',')}
+      ON CONFLICT (storage_key, map_id) DO NOTHING`, keys.flatMap(key => [key, mapId]));
+  }
+  return result;
+});
 
 module.exports = {
+  listPrivateImageAccessAsync,
+  saveWithPrivateImageReferencesAsync,
   registerPrivateImageAsync,
   getPrivateImageBindingAsync,
   ensureImageAssetSchemaAsync,

@@ -1,4 +1,4 @@
-const { readPrivateImageForMap } = require('../utils/privateCaptureService.cjs');
+const { readPrivateImageForMap, saveMapWithPrivateImages } = require('../utils/privateCaptureService.cjs');
 const { isPrivateScanCaptureKey } = require('../utils/privateScanCapture');
 /**
  * API routes for Vellic - Projects, Maps, History, Shares
@@ -2865,20 +2865,25 @@ router.post('/maps', requireAuth, async (req, res) => {
     });
     if (!entitlement) return;
 
-    await mapStore.createMapAsync({
-      id: mapId,
+    await saveMapWithPrivateImages({
       userId: req.user.id,
-      accountId: entitlement.summary.account.id,
-      projectId: normalizedProjectId,
-      name: trimmedName,
-      notes: notes ? notes.trim() : null,
-      url: url || sanitizedTree.root?.url || '',
-      rootData: JSON.stringify(sanitizedTree.root),
-      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
-      connectionsData: connections ? JSON.stringify(connections) : null,
-      colors: colors ? JSON.stringify(colors) : null,
-      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
-      pageCount,
+      mapId,
+      ...sanitizedTree,
+      save: () => mapStore.createMapAsync({
+        id: mapId,
+        userId: req.user.id,
+        accountId: entitlement.summary.account.id,
+        projectId: normalizedProjectId,
+        name: trimmedName,
+        notes: notes ? notes.trim() : null,
+        url: url || sanitizedTree.root?.url || '',
+        rootData: JSON.stringify(sanitizedTree.root),
+        orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+        connectionsData: connections ? JSON.stringify(connections) : null,
+        colors: colors ? JSON.stringify(colors) : null,
+        connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+        pageCount,
+      }),
     });
 
     const map = await mapStore.getMapByIdAsync(mapId);
@@ -2907,7 +2912,7 @@ router.post('/maps', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Create map error:', error);
-    res.status(500).json({ error: 'Failed to save map' });
+    res.status(error.code === 'private_image_access' ? error.status : 500).json({ error: error.code === 'private_image_access' ? error.message : 'Failed to save map' });
   }
 });
 
@@ -3063,7 +3068,12 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     }
     patch.pageCount = updatedPageCount;
 
-    await mapStore.updateMapByIdAsync(id, patch);
+    await saveMapWithPrivateImages({
+      userId: req.user.id,
+      mapId: id,
+      ...sanitizedTree,
+      save: () => mapStore.updateMapByIdAsync(id, patch),
+    });
     if (staleImageNodeIds.length > 0) {
       try {
         await imageAssetStore.markImageAssetsStaleByNodeIdsAsync({
@@ -3091,7 +3101,7 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Update map error:', error);
-    res.status(500).json({ error: 'Failed to update map' });
+    res.status(error.code === 'private_image_access' ? error.status : 500).json({ error: error.code === 'private_image_access' ? error.message : 'Failed to update map' });
   }
 });
 
@@ -3198,9 +3208,14 @@ router.patch('/maps/:id/node-assets', requireAuth, async (req, res) => {
       root: nextMap.root,
       orphans: nextMap.orphans,
     });
-    await mapStore.updateMapByIdAsync(id, {
-      rootData: JSON.stringify(sanitizedTree.root),
-      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+    await saveMapWithPrivateImages({
+      userId: req.user.id,
+      mapId: id,
+      ...sanitizedTree,
+      save: () => mapStore.updateMapByIdAsync(id, {
+        rootData: JSON.stringify(sanitizedTree.root),
+        orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+      }),
     });
     await upsertManifestForNodeAssetUpdates(id, updatesById);
 
@@ -3214,7 +3229,7 @@ router.patch('/maps/:id/node-assets', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Update map node assets error:', error);
-    return res.status(500).json({ error: 'Failed to update map node assets' });
+    return res.status(error.code === 'private_image_access' ? error.status : 500).json({ error: error.code === 'private_image_access' ? error.message : 'Failed to update map node assets' });
   }
 });
 
@@ -3313,18 +3328,23 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
     const title = name?.trim() || 'Updated';
     const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
 
-    await mapStore.createMapVersionAsync({
-      id: versionId,
-      mapId: id,
+    await saveMapWithPrivateImages({
       userId: req.user.id,
-      versionNumber: nextVersion,
-      name: title,
-      notes: notes?.trim() || null,
-      rootData: JSON.stringify(sanitizedTree.root),
-      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
-      connectionsData: connections ? JSON.stringify(connections) : null,
-      colors: colors ? JSON.stringify(colors) : null,
-      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      mapId: id,
+      ...sanitizedTree,
+      save: () => mapStore.createMapVersionAsync({
+        id: versionId,
+        mapId: id,
+        userId: req.user.id,
+        versionNumber: nextVersion,
+        name: title,
+        notes: notes?.trim() || null,
+        rootData: JSON.stringify(sanitizedTree.root),
+        orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+        connectionsData: connections ? JSON.stringify(connections) : null,
+        colors: colors ? JSON.stringify(colors) : null,
+        connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      }),
     });
 
     const allVersions = collaborationEnabled
@@ -3365,7 +3385,7 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
     res.json({ version: serializeMapVersion(saved) });
   } catch (error) {
     console.error('Create map version error:', error);
-    res.status(500).json({ error: 'Failed to create map version' });
+    res.status(error.code === 'private_image_access' ? error.status : 500).json({ error: error.code === 'private_image_access' ? error.message : 'Failed to create map version' });
   }
 });
 

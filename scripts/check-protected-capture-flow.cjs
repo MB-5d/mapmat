@@ -37,13 +37,43 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const lazyNode=await json('/api/maps/'+mapId+'/nodes/'+encodeURIComponent(root.id));assert.equal(lazyNode.node.authCaptureRequired,true);
   const outsider=await post('/auth/login',{email:'other@fixture.local',password:seedPassword});assert(outsider.token);
   const otherHeaders={authorization:'Bearer '+outsider.token};assert.equal((await raw(node.thumbnailUrl,{headers:otherHeaders})).status,404);
+  const copiedBody={name:'Protected image copy',url:site,root:node,orphans:[]};
+  const deniedCopy=await raw('/api/maps',{method:'POST',headers:otherHeaders,body:JSON.stringify(copiedBody)});
+  assert.equal(deniedCopy.status,403,'knowing a private image URL does not grant copy access');
+  assert.equal((await deniedCopy.json()).error.includes('access'),true);
+  const unrelated=await json('/api/maps',{method:'POST',headers:otherHeaders,body:JSON.stringify({name:'Unrelated map',root,orphans:[]})});
+  for(const [suffix,method,body] of [
+    ['', 'PUT', {root:node,orphans:[]}],
+    ['/versions', 'POST', {name:'Unauthorized image version',root:node,orphans:[]}],
+    ['/node-assets', 'PATCH', {updates:[{nodeId:root.id,assets:{thumbnailUrl:node.thumbnailUrl}}]}],
+  ]) {
+    const deniedSave=await raw('/api/maps/'+unrelated.map.id+suffix,{method,headers:otherHeaders,body:JSON.stringify(body)});
+    assert.equal(deniedSave.status,403,'unauthorized private reference blocked at '+suffix);
+    assert((await deniedSave.json()).error.includes('access'));
+  }
+  assert.equal((await raw('/api/maps/'+unrelated.map.id,{method:'DELETE',headers:otherHeaders})).status,200);
   const database=new(require('better-sqlite3'))(path.join(directory,'db.sqlite'));
+  let viewerCopyId;
+
   try {
     database.prepare('INSERT INTO map_memberships (id,map_id,user_id,role) VALUES (?,?,?,?)').run('fixture-viewer',mapId,outsider.user.id,'viewer');
     assert.equal((await raw(node.thumbnailUrl,{headers:otherHeaders})).status,200);
+    const originalCount=database.prepare('SELECT COUNT(*) AS count FROM maps').get().count;
+    database.exec("CREATE TRIGGER fixture_reject_reference BEFORE INSERT ON private_image_references BEGIN SELECT RAISE(ABORT, 'fixture reference failure'); END");
+    try {
+      const failedCopy=await raw('/api/maps',{method:'POST',body:JSON.stringify({...copiedBody,name:'Rolled back copy'})});
+      assert.equal(failedCopy.status,500);
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM maps').get().count,originalCount,'failed reference save must roll back the map');
+    } finally {database.exec('DROP TRIGGER fixture_reject_reference');}
     database.prepare('UPDATE map_memberships SET role=? WHERE id=?').run('none','fixture-viewer');
     assert.equal((await raw(node.thumbnailUrl,{headers:otherHeaders})).status,404);
+    database.prepare('UPDATE map_memberships SET role=? WHERE id=?').run('unexpected-role','fixture-viewer');
+    assert.equal((await raw(node.thumbnailUrl,{headers:otherHeaders})).status,404,'unknown roles fail closed');
+    database.prepare('UPDATE map_memberships SET role=? WHERE id=?').run('viewer','fixture-viewer');
+    const viewerCopy=await json('/api/maps',{method:'POST',headers:otherHeaders,body:JSON.stringify(copiedBody)});
+    viewerCopyId=viewerCopy.map.id;
     database.prepare('DELETE FROM map_memberships WHERE id=?').run('fixture-viewer');
+    assert.equal((await raw(node.thumbnailUrl,{headers:otherHeaders})).status,200,'authorized copy retains its own image access');
   } finally {database.close();}
   const first=await raw(node.thumbnailUrl);assert.equal(first.status,200);assert.equal(first.headers.get('content-type'),'image/jpeg');const bytes=Buffer.from(await first.arrayBuffer());assert(bytes.length>1000);
   assert.equal((await raw('/screenshots/'+node.thumbnailUrl.split('/').pop())).status,404);
@@ -56,6 +86,23 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   await raw('/scan-auth/sessions/'+login.sessionId,{method:'DELETE'});
   assert.equal((await raw(node.thumbnailUrl)).status,200,'saved image survives login removal');
   const reauth=await raw('/api/maps/'+mapId+'/image-capture-jobs',{method:'POST',body:JSON.stringify({captureType:'full',scope:'selected',nodeIds:[root.id],authSessionIds:[login.sessionId]})});assert.equal(reauth.status,409);assert.equal((await reauth.json()).code,'scan_auth_required');
+  const ownerCopy=await post('/api/maps',{...copiedBody,name:'Owner image copy'});
+  await post('/api/maps/'+ownerCopy.map.id+'/versions',{name:'Protected image version',root:node,orphans:[]});
+  const sourceDelete=await raw('/api/maps/'+mapId,{method:'DELETE'});assert.equal(sourceDelete.status,200);
+  assert.equal((await raw(node.thumbnailUrl)).status,200,'owner copy survives source deletion');
+  assert.equal((await raw(node.thumbnailUrl,{headers:otherHeaders})).status,200,'viewer copy survives source deletion');
+  const copyDownload=await raw('/api/maps/'+ownerCopy.map.id+'/images/download',{method:'POST',body:JSON.stringify({scope:'selected',selectedNodeIds:[root.id]})});
+  assert.equal(copyDownload.status,200,'normal download works on a copy after source deletion');
+  assert((await copyDownload.arrayBuffer()).byteLength>1000);
+  const replaced=await json('/api/maps/'+ownerCopy.map.id,{method:'PUT',body:JSON.stringify({root:{...root,id:'replacement'},orphans:[]})});
+  assert(!replaced.map.root.thumbnailUrl,'current map no longer includes the old image');
+  assert.equal((await raw(node.thumbnailUrl)).status,200,'historical version retains image access after current page replacement');
+  await raw('/api/maps/'+ownerCopy.map.id,{method:'DELETE'});
+  assert.equal((await raw(node.thumbnailUrl)).status,404,'former source owner cannot read another account copy');
+  assert.equal((await raw(node.thumbnailUrl,{headers:otherHeaders})).status,200);
+  assert.equal((await raw('/api/maps/'+viewerCopyId,{method:'DELETE',headers:otherHeaders})).status,200);
+  assert.equal((await raw(node.thumbnailUrl,{headers:otherHeaders})).status,404,'last map deletion revokes image access');
+  console.log('PASS authorized copy/version retention, revoked memberships, unknown roles, rejected URL copying, atomic save rollback and last-map deletion.');
   console.log('PASS real local app: password login → map-only scan → Images capture → private saved image → login removal → saved image retained → recapture asks for login without rescanning.');
  }catch(error){console.error(error);console.error(logs.slice(-4000).replaceAll(seedPassword,'[redacted]'));throw error;}
  finally {backend?.kill('SIGTERM');if(backend&&backend.exitCode===null)await new Promise(r=>backend.once('exit',r));fixture.closeAllConnections();await new Promise(r=>fixture.close(r));fs.rmSync(directory,{recursive:true,force:true});}
