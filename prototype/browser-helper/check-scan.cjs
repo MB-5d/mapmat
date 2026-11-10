@@ -43,7 +43,7 @@ const { startLab } = require('../protected-site/run.cjs');
     assert.equal((await helper('import', session.helperPairingCode, payload)).status, 200);
     assert.equal((await helper('import', session.helperPairingCode, payload)).status, 410);
     assert.equal((await api('/scan-auth/sessions/' + session.sessionId + '/complete', {})).ready, true);
-    const job = await api('/scan-jobs', { url: site + '/members', maxPages: 10, options: { authenticatedPages: true }, authSessionId: session.sessionId, authenticatedCaptureType: 'thumb' });
+    const job = await api('/scan-jobs', { url: site + '/members', maxPages: 10, options: { authenticatedPages: true }, authSessionId: session.sessionId });
     let result;
     for (let i = 0; i < 120; i++) {
       const response = await api('/scan-jobs/' + job.jobId + '?access_token=' + job.jobAccessToken);
@@ -54,14 +54,12 @@ const { startLab } = require('../protected-site/run.cjs');
     assert(result, 'Scan timed out');
     const nodes = flatten(result.root);
     assert(!nodes.some(node => node.url?.includes('github-ui-cascade-layer-order')), 'Stylesheet identifiers are not page links');
-    assert.equal(result.authenticatedCaptureSummary.failed, 0, 'Structural ancestors must not be captured');
-    assert.equal(result.authenticatedCaptureSummary.captured, 4);
+    assert(!result.authenticatedCaptureSummary, 'Scanning must not capture images');
     assert(!nodes.some(node => node.httpStatus === 200 && !node.url.startsWith(site + '/members')), 'Do not scan parent or sibling pages with an imported session');
     for (const path of ['/members', '/members/about', '/members/projects', '/members/projects/sample']) {
       const node = nodes.find(item => item.url === site + path);
       assert.equal(node?.httpStatus, 200); assert(!node.authRequired);
-      assert(node.thumbnailUrl.startsWith('/api/private-scan-captures/'));
-      assert.equal((await fetch(apiBase + node.thumbnailUrl)).status, 401);
+      assert(!node.thumbnailUrl && !node.screenshotUrl, 'Protected images remain deferred');
     }
     assert.equal((await fetch(apiBase + '/scan-auth/sessions/' + session.sessionId, { headers: { authorization: 'Bearer ' + lab.token } })).status, 404);
     const cancelled = await api('/scan-auth/sessions', { url: site + '/members', browserHelper: true });
@@ -71,6 +69,6 @@ const { startLab } = require('../protected-site/run.cjs');
     const publicPage = await api('/scan-auth/sessions', { url: site + '/', browserHelper: true });
     assert.equal((await helper('import', publicPage.helperPairingCode, payload)).status, 200);
     assert.equal((await fetch(apiBase + '/scan-auth/sessions/' + publicPage.sessionId + '/complete', { method: 'POST', headers: { authorization: 'Bearer ' + lab.token } })).status, 409);
-    console.log('Passed: standalone password/code session, helper import, signed-out comparison, four-page scan, private captures, replay rejection, cancellation and post-scan deletion. Chrome extension UI and real providers still require live testing.');
+    console.log('Passed: standalone password/code session, helper import, signed-out comparison, four-page map-only scan, replay rejection, cancellation and post-scan deletion. Chrome extension UI and real providers still require live testing.');
   } finally { await lab.close(); fs.rmSync(lab.dir, { recursive: true, force: true }); }
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

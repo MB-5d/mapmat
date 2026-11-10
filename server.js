@@ -76,6 +76,7 @@ const { createScanAuthProxy } = require('./utils/scanAuthProxy');
 const { hasSimplePasswordGate, submitSimpleScanPassword } = require('./utils/scanAuthPassword');
 const {
   getInvalidScanResultMessage,
+  getRootOnlyCollapseReasons,
   getInvalidScanResultReason,
   hardenCollapsedScanResult,
   flagScanScopeDiscoveryFailure,
@@ -4409,7 +4410,7 @@ async function fetchPageWithBrowserContext(context, url, capturePage = null) {
       session.passwordQueue = unlock.catch(() => {});
       await unlock;
     }
-    if ((response?.status() || 200) < 400) await waitForAuthenticatedPageReady(page, { verifyAccess });
+    if (session && (response?.status() || 200) < 400) await waitForAuthenticatedPageReady(page, { verifyAccess });
     const html = await page.content();
     if (Buffer.byteLength(String(html || ''), 'utf8') > SCAN_HTML_RESPONSE_MAX_BYTES) {
       throw new Error('Scan page response too large');
@@ -8447,6 +8448,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   scanDiagnostics.visitedCount = visited.size;
   scanDiagnostics.pageMapCount = pageMap.size;
   scanDiagnostics.queueRemaining = Math.max(0, queue.length - queueIndex);
+  scanDiagnostics.confirmedQueueRemaining = queue.slice(queueIndex).filter(item => item.source !== 'common_path').length;
   scanDiagnostics.rootChildCount = root?.children?.length || 0;
   scanDiagnostics.treeNodeCount = countScanTreeNodes(root);
   scanDiagnostics.capturedTreeNodeCount = capturedTreeNodeCount;
@@ -8531,22 +8533,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     || reason === 'scan_safety_cap'
     || reason === 'scan_discovery_cap'
   );
-  const hasRootOnlyCollapseSignal = scanDiagnostics.rootAllowedLinks > 0
-    || scanDiagnostics.sitemapUrlsQueued > 0
-    || scanDiagnostics.commonPathActive > 0
-    || scanDiagnostics.renderedLinksQueued > 0
-    || scanDiagnostics.queueRemaining > 0
-    || pageMap.size > 1;
-  if (!targetedGroupCapture && canOverrideRootOnlyPartialReason(partialReason) && capturedTreeNodeCount <= 1 && hasRootOnlyCollapseSignal) {
+  const rootOnlyCollapseReasons = getRootOnlyCollapseReasons({ root, scanDiagnostics });
+  if (!targetedGroupCapture && canOverrideRootOnlyPartialReason(partialReason) && capturedTreeNodeCount <= 1 && rootOnlyCollapseReasons.length) {
     const previousPartialReason = partialReason;
     partialReason = 'scan_collapsed';
-    const reasons = [];
-    if (scanDiagnostics.rootAllowedLinks > 0) reasons.push('root_links_found');
-    if (scanDiagnostics.sitemapUrlsQueued > 0) reasons.push('sitemap_urls_queued');
-    if (scanDiagnostics.commonPathActive > 0) reasons.push('common_paths_active');
-    if (scanDiagnostics.renderedLinksQueued > 0) reasons.push('rendered_links_queued');
-    if (scanDiagnostics.queueRemaining > 0) reasons.push('queue_had_discovered_pages');
-    if (pageMap.size > 1) reasons.push('page_map_has_pages');
+    const reasons = rootOnlyCollapseReasons;
     scanDiagnostics.collapseReason = reasons.join(',') || 'root_only_with_discovery_signals';
     if (previousPartialReason && previousPartialReason !== partialReason) {
       scanDiagnostics.previousPartialReason = previousPartialReason;

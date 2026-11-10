@@ -95,6 +95,8 @@ function createFixtureServer(mode) {
       res.end(body);
     };
 
+    if (mode === 'root-single' && url.pathname === '/') return send(200, '<title>One-page homepage</title><h1>Only page</h1>');
+
     if (mode === 'root-linked' && url.pathname === '/') {
       return send(200, '<title>Home</title><a href="/one">One</a><a href="/two">Two</a><a href="/three">Three</a>');
     }
@@ -289,6 +291,7 @@ async function waitForMappedCount(jobId, accessToken, expectedCount) {
 async function runCheck() {
   await waitForHealth();
   const withFixture = async (mode, callback) => {
+    if (process.env.SCAN_COLLAPSE_CASE && mode !== process.env.SCAN_COLLAPSE_CASE) return;
     const fixture = await createFixtureServer(mode);
     const base = `http://127.0.0.1:${fixture.address().port}`;
     try {
@@ -361,6 +364,14 @@ async function runCheck() {
     const brokenJob = await scanExpectingFailure(`${base}/broken-robots-sitemap`);
     assert.strictEqual(brokenJob.status, 'failed', 'broken discovery fixture should fail instead of creating a one-node map');
     assert(/No map was created/.test(brokenJob.error || ''), 'broken discovery failure should explain that no map was created');
+  });
+
+  await withFixture('root-single', async (base) => {
+    const result = await scan(base + '/', { maxPages: 2 });
+    assert.strictEqual(countCapturedTree(result.root), 1);
+    assert.strictEqual(result.scanDiagnostics.confirmedQueueRemaining, 0);
+    assert(result.scanDiagnostics.queueRemaining > 0, 'fixture must leave guessed paths unvisited');
+    assert.notStrictEqual(result.partialReason, 'scan_collapsed');
   });
 
   await withFixture('one-page', async (base) => {
