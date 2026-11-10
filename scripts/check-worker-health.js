@@ -59,7 +59,10 @@ async function main() {
       DB_PROVIDER: 'sqlite',
       DB_PATH: path.join(tempDir, 'vellic.db'),
       DATABASE_URL: '',
-      TEST_AUTH_ENABLED: 'false',
+      // A stale worker setting must not create or reset shared login accounts.
+      TEST_AUTH_ENABLED: 'true',
+      TEST_AUTH_SEED_EMAIL: 'worker-fixture@test.vellic.local',
+      TEST_AUTH_SEED_PASSWORD: 'fixture-only-not-a-real-login',
       AUTH_HEADER_FALLBACK: 'false',
       EMAIL_PROVIDER: 'log',
     },
@@ -76,7 +79,12 @@ async function main() {
     const nonHealthRoute = await fetch(`${baseUrl}/`);
     assert.equal(nonHealthRoute.status, 404);
     assert.deepEqual(await nonHealthRoute.json(), { error: 'Not found' });
-    console.log('[worker-health] Passed. Worker mode exposes only the Railway health endpoint.');
+    assert(output.join('').includes('[auth] Test auth mode: DISABLED'), 'Worker test auth must stay disabled even when configured true');
+    const database = new (require('better-sqlite3'))(path.join(tempDir, 'vellic.db'), { readonly: true });
+    try {
+      assert.equal(database.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0, 'Worker startup cannot seed login accounts');
+    } finally { database.close(); }
+    console.log('[worker-health] Passed. Worker exposes only health and cannot seed/reset test accounts.');
   } finally {
     await stopChild(child);
     fs.rmSync(tempDir, { recursive: true, force: true });

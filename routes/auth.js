@@ -55,7 +55,9 @@ function parseEnvBool(value, fallback = false) {
   return fallback;
 }
 
-const TEST_AUTH_ENABLED = parseEnvBool(process.env.TEST_AUTH_ENABLED, !isProd);
+// Background workers share the user database but must never seed/reset accounts.
+const TEST_AUTH_ENABLED = process.env.RUN_MODE !== 'worker'
+  && parseEnvBool(process.env.TEST_AUTH_ENABLED, !isProd);
 const TEST_AUTH_SEED_EMAIL = (process.env.TEST_AUTH_SEED_EMAIL || 'admin@vellic.io').trim().toLowerCase();
 const TEST_AUTH_SEED_PASSWORD = process.env.TEST_AUTH_SEED_PASSWORD || 'Admin123';
 const TEST_AUTH_SEED_NAME = process.env.TEST_AUTH_SEED_NAME || 'Vellic Admin';

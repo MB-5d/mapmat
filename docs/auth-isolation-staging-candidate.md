@@ -1,7 +1,8 @@
 # Auth isolation and capture-later candidate — 2026-11-10
 
-Status: local work on `codex/auth-isolation-capture-later`; not deployed. Production
-is unchanged. Do not promote this candidate yet.
+Status: candidate code deployed to staging at `296504f`; browser isolation and
+protected capture-later remain disabled pending scoped credentials and integrated
+staging tests. Production is unchanged. Do not promote this candidate yet.
 
 ## Implemented
 
@@ -130,3 +131,24 @@ Final local HTTP checks also passed for authorized viewer access, outsider denia
   warning remains. These do not substitute for a live Postgres capture test.
 - Next code rollout targets staging only with isolation and protected capture
   still disabled. No account-wide Railway token is to be deployed.
+
+## Live staging verification
+
+- Commit `296504f` deployed successfully to staging web and screenshot worker.
+  Frontend deployment `dpl_BDwGqtVw6txcpDRCfPMr1VMpp6wW` serves
+  `https://app-staging.vellic.io/app`. Postgres runtime health and TLS/auth/CORS
+  checks passed after deployment. Production deployment remains
+  `972bb404-b3a4-427e-8419-abc8dd861178`.
+- Actual Chrome/staging UI recognizes helper 0.4.0 and reports temporary access
+  off. Pairing setup, continuing without a login, and a public example.com scan
+  through to a canvas node passed. No private session was transferred.
+- Real Chrome permission query after manual upgrade returned only the staging
+  API origin and `alarms`; no cookie/scripting/site grants. Chrome's update-check
+  API returned `no_update` (this does not establish a store upgrade).
+- Fresh uninstall/reinstall of helper 0.4.0 passed with the same identity.
+  Incognito and local-file access are off. Invalid pairing-code feedback passed.
+- Review found the worker's stale test-auth flag can execute shared-account
+  seeding at module import, despite exposing only health. Worker mode now forces
+  test-auth off. The disposable worker check deliberately sets the old flag true
+  and verifies disabled test auth plus zero seeded users. Web/test fixtures retain
+  their existing behavior. No existing account credentials were changed by this fix.
