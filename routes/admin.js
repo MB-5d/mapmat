@@ -767,6 +767,10 @@ async function serializeImageAssetRow(row, { checkObject }) {
   };
 }
 
+// The operational read-only check belongs to api.js and its API-key guard.
+// Do not let the console's cookie guard shadow that single endpoint.
+router.get('/coediting', (_req, _res, next) => next('router'));
+
 router.use(ensureAdminConsoleEnabled);
 router.use(async (_req, _res, next) => {
   try {
