@@ -2,7 +2,8 @@ import React, { forwardRef, useEffect, useRef, useState } from 'react';
 import { fetchPrivateScanCapture } from '../../api';
 
 const CaptureImage = forwardRef(({ src, onError, ...props }, ref) => {
-  const privateCapture = String(src || '').startsWith('/api/private-scan-captures/');
+  const privateCapture = String(src || '').startsWith('/api/private-scan-captures/')
+    || /^\/api\/shares\/[^/]+\/images\//.test(String(src || ''));
   const [resolved, setResolved] = useState(null);
   const errorHandler = useRef(onError);
   errorHandler.current = onError;

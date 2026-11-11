@@ -6,13 +6,13 @@ import { fetchPrivateScanCapture } from '../../api';
 
 vi.mock('../../api', () => ({ fetchPrivateScanCapture: vi.fn() }));
 
-test('private images use authenticated blobs and release them on unmount', async () => {
+test.each(['/api/private-scan-captures/', '/api/shares/fixture/images/'])('private and shared images resolve API blobs and release them: %s', async (prefix) => {
   const container = document.createElement('div');
   const root = createRoot(container);
   URL.createObjectURL = vi.fn(() => 'blob:private-fixture');
   URL.revokeObjectURL = vi.fn();
   fetchPrivateScanCapture.mockResolvedValue(new Blob(['fixture'], { type: 'image/png' }));
-  const src = `/api/private-scan-captures/private_scan_${'a'.repeat(48)}.bin`;
+  const src = `${prefix}private_scan_${'a'.repeat(48)}.bin`;
   await act(async () => root.render(<CaptureImage src={src} alt="Private page" />));
   expect(fetchPrivateScanCapture).toHaveBeenCalledWith(src, expect.any(AbortSignal));
   expect(container.querySelector('img').getAttribute('src')).toBe('blob:private-fixture');

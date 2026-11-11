@@ -2436,6 +2436,7 @@ const isStoredScreenshotAsset = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return false;
   if (/^\/api\/private-scan-captures\/private_scan_[a-f0-9]{48}\.bin$/.test(raw)) return true;
+  if (/^\/api\/shares\/[a-zA-Z0-9-]+\/images\/private_scan_[a-f0-9]{48}\.bin$/.test(raw)) return true;
   if (raw.startsWith('/screenshots/') || raw.includes('/screenshots/')) return true;
   const withoutQuery = raw.split(/[?#]/)[0];
   if (SCREENSHOT_ASSET_FILENAME_PATTERN.test(withoutQuery)) return true;

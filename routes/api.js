@@ -1,5 +1,5 @@
-const { readPrivateImageForMap, saveMapWithPrivateImages } = require('../utils/privateCaptureService.cjs');
-const { isPrivateScanCaptureKey } = require('../utils/privateScanCapture');
+const { readPrivateImageForMap, saveMapWithPrivateImages, privateImageKeys, resolvePrivateMapAccess, getPrivateCaptureStore } = require('../utils/privateCaptureService.cjs');
+const { isPrivateScanCaptureKey, PRIVATE_CAPTURE_KEY } = require('../utils/privateScanCapture');
 /**
  * API routes for Vellic - Projects, Maps, History, Shares
  */
@@ -4085,6 +4085,11 @@ router.post('/shares', requireAuth, async (req, res) => {
     }
 
     const sanitizedTree = sanitizeMapTreeForStorage({ root: shareRoot, orphans: shareOrphans });
+    for (const key of privateImageKeys(sanitizedTree.root, sanitizedTree.orphans)) {
+      if (!await resolvePrivateMapAccess(req.user.id, key)) {
+        return res.status(403).json({ error: 'You no longer have access to an image in this map.' });
+      }
+    }
     const expiresAt = expires_in_days
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
@@ -4186,6 +4191,47 @@ router.get('/shares/:id/status', async (req, res) => {
   }
 });
 
+// Share links grant access only to images present in that share's current tree.
+// Keep the original encrypted object private and recheck revocation on every read.
+function shareImageUrls(parsed, shareId) {
+  const copy = JSON.parse(JSON.stringify(parsed));
+  const pending = [copy.root, ...(copy.orphans || [])];
+  while (pending.length) {
+    const node = pending.pop();
+    if (!node) continue;
+    for (const field of ['thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl']) {
+      const prefix = '/api/private-scan-captures/';
+      if (String(node[field] || '').startsWith(prefix)) {
+        node[field] = '/api/shares/' + encodeURIComponent(shareId) + '/images/' + node[field].slice(prefix.length);
+      }
+    }
+    pending.push(...(node.children || []));
+  }
+  return copy;
+}
+
+router.get('/shares/:id/images/:filename', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  try {
+    if (!PRIVATE_CAPTURE_KEY.test(req.params.filename)) return res.sendStatus(404);
+    const share = await shareStore.getShareWithUserByIdAsync(req.params.id);
+    if (!share || (share.expires_at && new Date(share.expires_at) < new Date())) return res.sendStatus(404);
+    const map = share.map_id ? await mapStore.getMapByIdAsync(share.map_id) : null;
+    if (share.map_id && (!map || (share.project_id && map.project_id !== share.project_id))) return res.sendStatus(404);
+    const parsed = map ? (await getSharePayloadForCurrentMap({ share, mapRow: map })).parsed : parseMapFields(share);
+    if (!privateImageKeys(parsed.root, parsed.orphans).includes(req.params.filename)) return res.sendStatus(404);
+    let object;
+    if (map) object = await readPrivateImageForMap(req.params.filename, map.id);
+    else {
+      const binding = await resolvePrivateMapAccess(share.user_id, req.params.filename);
+      if (binding) object = await getPrivateCaptureStore().read({ key: req.params.filename, mapId: binding.mapId, ownerKey: 'user:' + binding.ownerUserId });
+    }
+    if (!object) return res.sendStatus(404);
+    res.type(object.contentType).send(object.buffer);
+  } catch { res.sendStatus(404); }
+});
+
 router.get('/shares/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -4228,7 +4274,7 @@ router.get('/shares/:id', async (req, res) => {
     res.json({
       share: {
         id: share.id,
-        ...parsedShare,
+        ...shareImageUrls(parsedShare, share.id),
         mapId: share.map_id || null,
         mapName: sharedMap?.name || null,
         projectId: sharedMap?.project_id || share.project_id || null,
