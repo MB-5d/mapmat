@@ -1,154 +1,132 @@
-# Auth isolation and capture-later candidate — 2026-11-10
+# Authenticated scanning: staging readiness
 
-Status: candidate code deployed to staging at `296504f`; browser isolation and
-protected capture-later remain disabled pending scoped credentials and integrated
-staging tests. Production is unchanged. Do not promote this candidate yet.
+Updated 2026-11-10. **Not approved for production.** Production remains at
+`071a10f07ef31d82c4d958bf6d988999858dd53c`.
 
-## Implemented
+## Tested behavior
 
-- Dedicated authenticated browser VMs; a separate public-browser VM; capacity
-  bound; no app secrets in the browser image; no direct network interface in the
-  browser namespace; public-address-only proxy; absolute lifetime and cleanup.
-- Existing map Images jobs can reuse a login until its original 30-minute deadline.
-  Scanning itself captures no images. Expiry requires login, not a rescan. Partial
-  images survive an ended connection; a retry targets remaining pages.
-- Private images use encrypted map-bound storage, map read permissions, existing
-  image download controls, and durable retention while an authorized original or copied map exists.
-  Legacy private pilot images retain their previous 24-hour expiry.
-- Helper 0.4.0: protocol-aware version checks, verified store-link support,
-  Chrome update-check states, temporary-permission safety, and explicit staging
-  installation instructions. No store link or published release is invented.
+The implementation below passed the scoped staging test. Its new isolation and
+protected capture-later settings are now restored to off; the temporary test
+credentials are revoked. This is not persistent staging enablement.
 
-## Evidence
+Scanning creates map nodes without capturing images. Protected pages use the
+normal Images controls afterward. An active site connection can be reused until
+its original deadline; expiry requires signing in again, not rescanning the map.
+Previously saved private images remain available to authorized map readers.
 
-- Backend, authenticated-scanning and ordinary image-capture regression suites passed.
-- Current staging TLS, auth configuration/CORS, API and Postgres health passed.
-  The authenticated staging smoke suite requires the normal QA account credentials;
-  none were available locally. Test-auth bypass remains disabled in staging.
-- Frontend build passed; existing bundle-size warning remains.
-- Helper integration, hosted/local policy, permissions and fixture suites passed.
-- Frontend helper, app contract, node, toolbar and private-image tests passed (99).
-- Local real-browser transport and image test passed. This does not establish VM
-  network isolation.
-- Local real-app fixture passed: password login → scan without images → thumbnail
-  and full-image capture → normal JPEG download → remove login → saved image still
-  readable → recapture requires a new login, without rescanning.
-- Unit security checks passed for encrypted map storage, owner/member access,
-  cross-map denial, deleted-map cleanup, atomic claims, concurrent replay,
-  expiry-before-save, and a login form appearing after page readiness.
-- Three additional approved Railway machines were verified DESTROYED:
-  `6331e87d-f6bd-4133-8188-46d82f3218e4`,
-  `f3520daf-4c91-4ba6-8e00-7d24fbf34831`,
-  `788215bf-8357-4d50-b5c2-d6543b12e5e7`.
-- Cloud diagnosis found root-only Node installation and a version-manager shim;
-  copy the actual `process.execPath` executable. Kernel owner firewall rules are
-  unavailable; network namespaces work and replace that approach.
-- New namespace browser loaded example.com and produced a screenshot. The denial
-  probe stopped at an assertion that expected only a thrown network error rather
-  than also accepting proxy denial HTTP statuses. This is **not** a completed
-  denial/bypass/expiry test. Corrected suite:
-  `scripts/check-isolated-scan-browser-cloud.cjs --approved-staging-test`.
+Authenticated browsers run in separate Railway machines with no app secrets,
+app checkout or private-network access. Chromium uses its sandbox inside a
+network namespace and a public-address-only proxy. Connections have an absolute
+lifetime, per-process capacity limit and verified cleanup. Public browser work
+uses a separate machine. Staging currently has one web instance.
 
-## Outstanding production gates
+## Fixes found during integrated testing
 
-1. Cloud deny/bypass/namespace/interruption/expiry and verified VM destruction
-   passed on the approved final continuation machine below. Repeat the complete
-   application flows in staging after configuring its scoped credentials.
-2. Configure a staging-scoped Railway project token, checkpoint and deployment
-   capacity. Never deploy the local account token. Verify all services executing
-   browser jobs use the boundary, and measure cost/startup latency/concurrency.
-3. Deploy and test app flows in real staging, with feature off and on, using
-   password and helper logins. Verify slow capture past session expiry, reconnect,
-   cancellation/restart, private-image access and user-visible progress.
-4. Verify the locally passing copied-map/version image cases in staging/Postgres.
-   Ciphertext keeps its original encryption scope; authorized copies now have
-   independent access/retention references. Anonymous public-share image delivery
-   remains denied and needs a product decision before promising identical sharing.
-5. Prepare/approve the Chrome Web Store release and stable store-assigned identity;
-   test genuine installation and upgrade from the preceding version in Chrome.
-   Manual unpacked reload tests cannot establish automatic store updates.
+- `fa000e8`: the console's cookie middleware no longer shadows the read-only
+  operational health endpoint. Its existing API-key guard still applies;
+  keys cannot grant access to console routes.
+- `4f95450`: a usable partial/page-limited scan retains its live connection for
+  later images. The regression fixture now exercises a partial scan.
+- `58aacc3`: Vite includes the protected capture setting in real frontend builds.
+  Component tests alone did not reveal the omitted build setting.
+- `c29adbe`: after abrupt web-process loss, running, paused and stopping protected
+  capture jobs fail with a reconnect message. Saved images/progress remain.
+  Separate worker restarts, completed captures and public image jobs are excluded.
+  Conditional job updates prevent overwriting an already settled job.
+- Earlier staging fix `fd1b156` prevents worker startup from seeding/resetting
+  shared test accounts, even with its stale test-auth environment flag.
 
-New server/client capture flags default off. Production isolation configuration
-currently fails closed. No new hosting, token or store publication was enabled
-by saving these files.
+## Verified evidence
 
-Prepared helper package (not installed): `/private/tmp/vellic-staging-helper-0.4.0/vellic-scan-helper.zip`, stable staging identity `ggfnbddajhcphpacfojplhmcfgkfghok`.
-Browser checkpoint from the successful startup/public-image probe: `vellic-browser-e21be52ee0b1c34e`; the preparation script derives its canonical build name from all allowlisted files and package versions.
+- Dedicated cloud boundary test passed public page/image capture, private,
+  metadata, loopback and IPv6 denial, direct-egress denial, cookie isolation,
+  namespace restrictions, interrupted connection cleanup, hard expiry and real
+  provider destruction. Machine `62e39497-6934-4975-9019-96c3164898cb` was removed.
+- Integrated staging tests use generated protected pages and normal QA sign-in,
+  actual Postgres and R2. No GitHub or Stripe session was transferred in this run.
+- Ordinary public scanning passed with isolation configured. That crawl used the
+  HTTP path and did not itself allocate a browser machine.
+- Password login, map-only partial scan, private thumbnails/full-page capture,
+  normal JPEG download, unauthorized access/copy denial and saved map/version
+  creation passed against staging.
+- Actual R2 object inspection confirmed version-2 encrypted binary storage.
+  Guest/other-account image access and the public screenshot route were denied.
+- A slow protected capture ran through the real five-minute test login deadline.
+  Its settled result was stopped with `authRequired`, saved zero new images, and
+  returned a reconnect requirement. Existing images remained readable; expired
+  session reuse returned 409. No protected requests started after expiry.
+- Actual Chrome verified the normal Images menu, a saved private full-size image,
+  and Images → selected page → password → capture after expiry without a rescan.
+  The new full-size protected image was visibly verified.
+- Graceful staging web restart stopped an active private capture, removed the
+  session and retained the saved image. A new helper-protocol import, access
+  verification and active cancellation passed afterward. The imported cookie was
+  generated fixture data; this is not a repeat of real-provider Google/2FA tests.
+- Abrupt local process-loss regression passed for running, paused and stopping
+  private jobs, plus worker/public/completed-job exclusions. Full backend checks
+  in Postgres mode, protected capture regressions, ordinary image-job smoke and
+  frontend production build passed. Postgres-mode fixtures partly use SQLite;
+  the integrated staging checks above provide the live Postgres evidence.
+- Helper 0.4.0 manual Chrome upgrade/fresh install passed under stable staging ID
+  `ggfnbddajhcphpacfojplhmcfgkfghok`. Its active permissions were only staging API
+  access and alarms; Incognito and file access were off. Staging recognized the
+  installed version. Chrome's `no_update` result is not store-upgrade evidence.
 
-## Final approved cloud machine
+## Test scope and configuration
 
-`38ff4624-5d4d-4cde-aa19-5a0a2ac91b2e` was created from the namespace
-checkpoint and verified DESTROYED. Public page/image, private/metadata/loopback/
-IPv6 denial, direct-egress denial and separate-context cookie tests all passed.
-The subsequent interface assertion expected exactly `lo`; Linux also reports
-default `tunl0`, `sit0` and `ip6tnl0` device names. Their flags and addresses were not retained in the failed assertion output. This assertion stopped the
-suite before hard expiry. The harness now checks that every non-loopback device
-is down and unaddressed, consistent with the runtime's network-interface check.
-That corrected assertion and cloud hard expiry are still **unverified**. No
-additional machine beyond the user's approved limit was created.
+The user approved at most six temporary browser machines, 2 CPU / 2 GB each,
+one disposable protected site and one staging-scoped key for one hour. The test
+window had a deadline of **2026-11-11 00:38:32 UTC**. Resource cleanup completed after 43
+minutes, within the approved hour. Test settings were restored; this is not
+persistent enablement for all staging users.
 
-Final local HTTP checks also passed for authorized viewer access, outsider denial, role revocation and protected flags on on-demand canvas nodes. Dependency audit: zero known vulnerabilities.
+The mandatory scoped coediting preflight was run after fixing its routing.
+It rejects the existing global policy because it is a scope-change check. No
+coediting change is proposed or applied: live health, valid current policy and
+zero policy differences were separately verified. No safety settings were
+changed to make that check pass.
 
-## Continuation: copied images and failure harness
+Three unrelated staging image/screenshot rows still say running with timestamps
+from May 2026. They were not changed by this work and were not current activity.
 
-- Private-image references are saved atomically with map creation, updates,
-  individual image updates and versions. Knowing an image URL cannot grant access.
-- Real local app tests passed for owner/viewer copies surviving source deletion,
-  normal image downloads on copies, membership revocation, unknown-role denial,
-  rejected private URLs on all four save paths, failed-reference transaction rollback,
-  historical-image access after replacing the current page, and access revocation
-  after the last referencing map is deleted.
-- Backend checks and ordinary image-capture smoke passed. Local real-browser
-  interruption/expiry now verify lease destruction; capacity/cleanup tests pass.
-- The cloud harness records independent failures and still runs expiry/cleanup.
-  Its final lease calls the real provider destroy method. Namespace validation
-  now has local regression cases for inactive tunnel devices and unsafe interfaces.
-- Further cloud usage is awaiting renewed approval (one machine, 2 CPU / 2 GB,
-  maximum 15 minutes). No new machine has been created in this continuation.
-- Chrome installation checks are blocked by the locked Mac. The helper remains
-  prepared, not installed/published. Neither staging nor production was deployed.
+## Remaining production gates
 
-## Approved continuation cloud test and manual helper update
+1. Prepare the production helper identity/package and approved Chrome Web Store
+   distribution; verify genuine customer installation and automatic upgrades.
+   Manual unpacked Chrome tests do not establish that delivery path.
+2. Prepare and review production-specific isolation/helper configuration, scoped
+   credentials, capacity, expected startup latency and hosting cost. Current
+   configuration deliberately accepts staging only and rejects production.
+   Memory-only login ownership still requires a bounded single web instance.
+3. Decide how private images should behave in anonymous public map shares.
+   Current behavior denies anonymous access; authorized copies retain independent
+   access and retention. Do not promise ordinary public image-sharing behavior.
+4. Verify abrupt application-process loss in the cloud. The attempted remote
+   SIGKILL did not terminate PID 1, so that attempt is not a passed crash test.
+   Actual local SIGKILL recovery, graceful cloud app restart and forced cloud
+   browser destruction passed; those cover different failure conditions.
 
-- Machine `62e39497-6934-4975-9019-96c3164898cb` restored checkpoint
-  `vellic-browser-e21be52ee0b1c34e` in the staging environment (2 CPU / 2 GB).
-  Public page/screenshot, private/metadata/loopback/IPv6 denial, direct-egress
-  denial, separate-context cookies and namespace restrictions all passed.
-- Client interruption stopped its remote browser process. Hard expiry disconnected
-  Playwright and called real provider destruction. Final removal was verified.
-  This used the one newly approved machine; no further test VM was created.
-- Chrome's existing helper was manually updated from 0.3.0 to 0.4.0 under the same
-  identity. Manifest permission sets are unchanged, checksum verified, and
-  Incognito access is off. This is manual-upgrade evidence, not a store release.
-- The currently deployed staging app still expects exactly 0.3.0, so it rejects
-  the newer helper until the prepared compatibility code and artifact are deployed.
-- Staging web flags were checked: isolation/capture-later are unset (off), helper
-  remains David B. only, test-auth and private networks are false, one web replica.
-  No isolation token is configured. The worker's existing test-auth flag is true,
-  but worker mode exposes only health; review that setting before broader rollout.
-- Postgres-mode backend checks, helper checks, and a frontend build using the
-  actual mapmat-staging public build settings passed. The usual bundle-size
-  warning remains. These do not substitute for a live Postgres capture test.
-- Next code rollout targets staging only with isolation and protected capture
-  still disabled. No account-wide Railway token is to be deployed.
+## Final interruption and cleanup evidence
 
-## Live staging verification
+- Destroying the final cloud browser during an active capture stopped the job,
+  removed its login and preserved the previously saved image. The settled job
+  reports `complete` with a stopped result; it does not report successful capture.
+- Actual Postgres copy/version retention passed: a copied image survived source
+  deletion and removal from the current map while a version retained it. Deleting
+  the final referencing map revoked access.
+- All six integrated-test browser machines were verified DESTROYED. The
+  disposable protected site was removed and the staging-scoped key was revoked;
+  its authentication was rejected afterward.
+- Both services' temporary settings exactly match their original values, and
+  the collaboration policy hash is unchanged. The frontend was rebuilt with
+  protected capture-later off. The helper remains limited to David B.'s account.
+- Both disposable maps, 14 encrypted test objects and 12 test-job rows were
+  removed. No unrelated records were deleted.
+- Restored staging web and worker deployments succeeded at `c29adbe`.
+  Final staging TLS, sign-in configuration/CORS and Postgres health checks passed.
+  Production remains deployment `972bb404-b3a4-427e-8419-abc8dd861178`, commit
+  `071a10f07ef31d82c4d958bf6d988999858dd53c`.
 
-- Commit `296504f` deployed successfully to staging web and screenshot worker.
-  Frontend deployment `dpl_BDwGqtVw6txcpDRCfPMr1VMpp6wW` serves
-  `https://app-staging.vellic.io/app`. Postgres runtime health and TLS/auth/CORS
-  checks passed after deployment. Production deployment remains
-  `972bb404-b3a4-427e-8419-abc8dd861178`.
-- Actual Chrome/staging UI recognizes helper 0.4.0 and reports temporary access
-  off. Pairing setup, continuing without a login, and a public example.com scan
-  through to a canvas node passed. No private session was transferred.
-- Real Chrome permission query after manual upgrade returned only the staging
-  API origin and `alarms`; no cookie/scripting/site grants. Chrome's update-check
-  API returned `no_update` (this does not establish a store upgrade).
-- Fresh uninstall/reinstall of helper 0.4.0 passed with the same identity.
-  Incognito and local-file access are off. Invalid pairing-code feedback passed.
-- Review found the worker's stale test-auth flag can execute shared-account
-  seeding at module import, despite exposing only health. Worker mode now forces
-  test-auth off. The disposable worker check deliberately sets the old flag true
-  and verifies disabled test auth plus zero seeded users. Web/test fixtures retain
-  their existing behavior. No existing account credentials were changed by this fix.
+Sanitized test results are retained locally in
+`/private/tmp/vellic-integrated-staging/*-result.json`; temporary files containing
+test sessions and configuration snapshots are removed after final verification.
