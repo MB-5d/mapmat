@@ -85,7 +85,7 @@
     "check:scan-auth:active-expiry": "node scripts/check-scan-auth-active-expiry.js",
     "check:browser-helper": "node scripts/check-browser-helper-integration.cjs && node prototype/browser-helper/check.cjs && node prototype/browser-helper/check-hosted.cjs && node prototype/browser-helper/check-permissions.cjs && node prototype/browser-helper/check-cloud-fixture.cjs",
     "check:scan-browser-isolation": "node scripts/check-isolated-browser-pool.cjs && node scripts/check-isolated-scan-browser.cjs",
-    "check:protected-capture": "node scripts/check-protected-capture.cjs && node scripts/check-protected-capture-flow.cjs",
+    "check:protected-capture": "node scripts/check-protected-capture.cjs && node scripts/check-protected-capture-flow.cjs && node scripts/check-protected-capture-recovery.cjs",
     "check:admin-health-routing": "node scripts/check-admin-health-routing.js"
   },
   "engines": {

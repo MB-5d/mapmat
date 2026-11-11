@@ -193,12 +193,13 @@ function markJobCompleteAsync(id, completeStatus, resultJson, ...activeStatuses)
   `, [completeStatus, resultJson, id, ...statuses]);
 }
 
-function markJobFailedAsync(id, failedStatus, errorText) {
+function markJobFailedAsync(id, failedStatus, errorText, allowedStatuses = []) {
+  const statuses = normalizeStatuses(allowedStatuses);
   return adapter.executeAsync(`
     UPDATE jobs
     SET status = ?, error = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `, [failedStatus, errorText, id]);
+    WHERE id = ?${statuses.length ? ` AND status IN (${statuses.map(() => '?').join(', ')})` : ''}
+  `, [failedStatus, errorText, id, ...statuses]);
 }
 
 function normalizeStatuses(statuses) {

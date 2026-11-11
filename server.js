@@ -1967,6 +1967,20 @@ const recoverInterruptedScanJobs = async () => {
   });
 };
 
+const recoverInterruptedProtectedCaptureJobs = async () => {
+  // Login state belongs to this single web process, never the screenshot worker.
+  if (!RUN_WEB || !JOB_WORKER_TYPES.includes(JOB_TYPES.imageCapture)) return;
+  const statuses = [JOB_STATUS.running, JOB_STATUS.paused, JOB_STATUS.stopping];
+  const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(JOB_TYPES.imageCapture, statuses);
+  for (const row of rows) {
+    const payload = getJobPayload(row);
+    if (!Array.isArray(payload.authSessionIds) || !payload.authSessionIds.length) continue;
+    if (payload.authSessionIds.some(id => scanAuthSessions.has(id))) continue;
+    await jobStore.markJobFailedAsync(row.id, JOB_STATUS.failed,
+      'Image capture was interrupted. Saved images are still available. Sign in again to capture the remaining pages.', statuses);
+  }
+};
+
 const createJobStatusReader = (id, throttleMs = 1000) => {
   let lastCheck = 0;
   let lastStatus = null;
@@ -2942,7 +2956,7 @@ async function runImageCaptureJob(jobId, payload) {
           if (summary.authRequired) throw Object.assign(Error(summary.authRequired.message),{code:'scan_auth_required'});
           assertScanAuthSessionActive(session);
           validateCaptureClaim(session, { ownerKey: payload.authSessionOwnerKey, jobId, url: safeUrl });
-          if ([JOB_STATUS.canceled, JOB_STATUS.stopping].includes(await readStatus())) throw Object.assign(Error('Image capture stopped.'), {code:'scan_auth_canceled'});
+          if (![JOB_STATUS.running, JOB_STATUS.paused].includes(await readStatus())) throw Object.assign(Error('Image capture stopped.'), {code:'scan_auth_canceled'});
         };
         await verifyAccess();
         if (!session.captureContextPromise) session.captureContextPromise = createAuthenticatedBrowserContext(session.storageState, undefined, session, {deviceScaleFactor:captureType==='full'?SCREENSHOT_FULL_DEVICE_SCALE_FACTOR:SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR,reducedMotion:'reduce'});
@@ -9848,8 +9862,8 @@ if (JOB_WORKER_TYPES.length > 0) {
     runJobLoop().catch((err) => console.error('Job loop error:', err));
   }, JOB_POLL_INTERVAL_MS);
   setTimeout(() => {
-    recoverInterruptedScanJobs()
-      .catch((err) => console.error('Interrupted scan recovery error:', err))
+    Promise.all([recoverInterruptedScanJobs(), recoverInterruptedProtectedCaptureJobs()])
+      .catch((err) => console.error('Interrupted browser job recovery error:', err))
       .finally(() => {
         runJobLoop().catch((err) => console.error('Job loop error:', err));
       });
