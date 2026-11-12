@@ -25,8 +25,15 @@ async function captureProtectedImage({ session, url, captureType, mapId, ownerUs
     await register({storageKey:asset.key,mapId,ownerUserId});
     const small=await store.save({ownerKey:'user:'+ownerUserId,mapId,buffer:smallBuffer});
     await register({storageKey:small.key,mapId,ownerUserId});
-    asset={...asset,width:width*scale,height:(captureType==='full'?fullHeight:height)*scale,private:true,thumbnailUrl:small.url,
-      ...(captureType==='thumb'?{thumbnailFullUrl:asset.url}:{}),type:captureType};
+    asset = {
+      ...asset,
+      width: Math.round(width * scale),
+      height: Math.round((captureType === 'full' ? fullHeight : height) * scale),
+      private: true,
+      thumbnailUrl: small.url,
+      ...(captureType === 'thumb' ? { thumbnailFullUrl: asset.url } : {}),
+      type: captureType,
+    };
   });
   return asset;
 }

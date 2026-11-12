@@ -8,7 +8,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   if(req.method==='POST'){req.resume();req.on('end',()=>{res.writeHead(303,{'set-cookie':'fixture_login=yes; Path=/; SameSite=Lax',location:'/private'});res.end();});return;}
   res.setHeader('Content-Type','text/html');
   if(!String(req.headers.cookie||'').includes('fixture_login=yes')){res.end('<title>Protected fixture</title><form method="post" action="/login"><input type="password" name="password"><button>Unlock</button></form>');return;}
-  res.end('<title>Private fixture '+req.url+'</title><style>body{background:#a8d5f9;font-family:Arial;margin:32px}main{height:1300px}</style><main><h1>Private capture-later fixture</h1><p>This generated content must remain available after login expires, without exposing it publicly.</p><a href="'+req.url+'/next">Another protected page</a></main>');
+  res.end('<title>Private fixture '+req.url+'</title><style>body{background:#a8d5f9;font-family:Arial;margin:0}main{height:1301px;display:flow-root}</style><main><h1>Private capture-later fixture</h1><p>This generated content must remain available after login expires, without exposing it publicly.</p><a href="'+req.url+'/next">Another protected page</a></main>');
  });
  await new Promise(r=>fixture.listen(0,'127.0.0.1',r));const site='http://127.0.0.1:'+fixture.address().port+'/private';
  const portServer=http.createServer();await new Promise(r=>portServer.listen(0,'127.0.0.1',r));const port=portServer.address().port;await new Promise(r=>portServer.close(r));
@@ -17,7 +17,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const json=async(url,options={})=>{const response=await raw(url,options);const data=await response.json();assert(response.ok,`${url}: ${response.status} ${data.error||''}`);return data;};
  const post=(url,body)=>json(url,{method:'POST',body:JSON.stringify(body||{})});
  try {
-  backend=spawn(process.execPath,['server.js'],{cwd:path.resolve(__dirname,'..'),env:{...process.env,NODE_ENV:'test',DB_PROVIDER:'sqlite',DB_PATH:path.join(directory,'db.sqlite'),HOST:'127.0.0.1',PORT:String(port),RUN_MODE:'web',COLLABORATION_BACKEND_ENABLED:'true',JOB_WORKER_TYPES:'scan,image_capture',TEST_AUTH_ENABLED:'true',AUTH_HEADER_FALLBACK:'true',TEST_AUTH_SEED_EMAIL:'admin@vellic.io',TEST_AUTH_SEED_PASSWORD:seedPassword,SCAN_AUTH_FEATURE_ENABLED:'true',SCAN_AUTH_CAPTURE_LATER_ENABLED:'true',SCAN_BROWSER_ISOLATION:'off',ALLOW_PRIVATE_NETWORKS:'true',PRIVATE_SCAN_CAPTURE_KEY:crypto.randomBytes(32).toString('hex'),SCREENSHOT_STORAGE_PROVIDER:'local',SCREENSHOT_STORAGE_DIR:path.join(directory,'images'),EMAIL_PROVIDER:'log'},stdio:['ignore','pipe','pipe']});
+  backend=spawn(process.execPath,['server.js'],{cwd:path.resolve(__dirname,'..'),env:{...process.env,NODE_ENV:'test',DB_PROVIDER:'sqlite',DB_PATH:path.join(directory,'db.sqlite'),HOST:'127.0.0.1',PORT:String(port),RUN_MODE:'web',COLLABORATION_BACKEND_ENABLED:'true',JOB_WORKER_TYPES:'scan,image_capture',TEST_AUTH_ENABLED:'true',AUTH_HEADER_FALLBACK:'true',TEST_AUTH_SEED_EMAIL:'admin@vellic.io',TEST_AUTH_SEED_PASSWORD:seedPassword,SCAN_AUTH_FEATURE_ENABLED:'true',SCAN_AUTH_CAPTURE_LATER_ENABLED:'true',SCREENSHOT_FULL_DEVICE_SCALE_FACTOR:'1.5',SCAN_BROWSER_ISOLATION:'off',ALLOW_PRIVATE_NETWORKS:'true',PRIVATE_SCAN_CAPTURE_KEY:crypto.randomBytes(32).toString('hex'),SCREENSHOT_STORAGE_PROVIDER:'local',SCREENSHOT_STORAGE_DIR:path.join(directory,'images'),EMAIL_PROVIDER:'log'},stdio:['ignore','pipe','pipe']});
   const output=chunk=>{logs=(logs+chunk).slice(-12000);seeded||=/Seeded test account|Refreshed test account/.test(logs);};backend.stdout.on('data',output);backend.stderr.on('data',output);
   for(let i=0;i<100;i++){if(backend.exitCode!==null)throw Error('Backend stopped: '+logs);try{if(seeded&&(await raw('/health')).ok)break;}catch{}await sleep(100);}
   token=(await post('/auth/login',{email:'admin@vellic.io',password:seedPassword})).token;assert(token);
@@ -96,7 +96,9 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const download=await raw('/api/maps/'+mapId+'/images/download',{method:'POST',body:JSON.stringify({scope:'selected',selectedNodeIds:[root.id]})});
   assert.equal(download.status,200);assert(download.headers.get('content-type').includes('image/jpeg'));assert(download.headers.get('content-disposition').includes('.jpg'));assert((await download.arrayBuffer()).byteLength>1000);
   const fullJob=await post('/api/maps/'+mapId+'/image-capture-jobs',{captureType:'full',scope:'all',authSessionIds:[login.sessionId]});
-  assert.equal((await wait('/api/maps/'+mapId+'/image-capture-jobs/'+fullJob.jobId+'?includeResult=true')).saved,1);
+  const fullCapture=await wait('/api/maps/'+mapId+'/image-capture-jobs/'+fullJob.jobId+'?includeResult=true');
+  assert.equal(fullCapture.saved,1);
+  assert.equal(fullCapture.results[0].height,1952,'odd page height at 1.5x must be a whole pixel count');
   const fullMap=await json('/api/maps/'+mapId);assert(fullMap.map.root.fullScreenshotUrl.startsWith('/api/private-scan-captures/'));
   await raw('/scan-auth/sessions/'+login.sessionId,{method:'DELETE'});
   assert.equal((await raw(node.thumbnailUrl)).status,200,'saved image survives login removal');
