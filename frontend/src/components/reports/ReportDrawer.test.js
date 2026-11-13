@@ -637,6 +637,21 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('https://example.com/private');
   });
 
+  test('separates pages needing login from other scan restrictions', () => {
+    renderDrawer({
+      scanMeta: {
+        partialReason: 'auth_required',
+        blockedSections: [
+          { url: 'https://example.com/limited', reason: 'crawler_limited' },
+          { url: 'https://example.com/private', reason: 'auth_required' },
+        ],
+      },
+    });
+
+    expect(container.textContent).toContain('Login required at https://example.com/private.');
+    expect(container.textContent).toContain('Blocked at https://example.com/limited.');
+  });
+
   test('hides stale scan-limit warning when a saved map only has one real page', () => {
     renderDrawer({
       entries: [entries[0]],
@@ -704,7 +719,7 @@ describe('ReportDrawer', () => {
     expect(coverage.textContent).toContain('Discovered27,719');
     expect(coverage.textContent).toContain('Accounted15,243');
     expect(coverage.textContent).toContain('Fetched5,000');
-    expect(coverage.textContent).toContain('Captured4,979');
+    expect(coverage.textContent).toContain('Scanned4,979');
     expect(coverage.textContent).toContain('Visible on map3');
     expect(coverage.textContent).toContain('Grouped10,243');
     expect(coverage.textContent).toContain('Remaining12,476');
@@ -742,7 +757,7 @@ describe('ReportDrawer', () => {
     });
 
     expect(container.textContent).toContain('Scan reached the discovery safety limit.');
-    expect(container.textContent).toContain('valid results captured and grouped');
+    expect(container.textContent).toContain('valid results scanned and grouped');
   });
 
 });

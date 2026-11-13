@@ -104,25 +104,35 @@ function requireHttps(report, scope, key, { label = key } = {}) {
   return value;
 }
 
-function requireHttpsOrigins(report, scope, key, { label = key } = {}) {
+function requireHttpsOrigins(report, scope, key, { label = key, helperOrigin = null } = {}) {
   const value = requireValue(report, scope, key, { label });
   if (!value) return [];
   const origins = value.split(',').map((entry) => entry.trim()).filter(Boolean);
-  if (!origins.length || origins.some((origin) => !isHttpsUrl(origin))) {
-    report.error(scope, key, `${label} must contain only comma-separated https origins`);
+  if (!origins.length || origins.some((origin) => !isHttpsUrl(origin) && origin !== helperOrigin)) {
+    report.error(scope, key, `${label} must contain only https origins${helperOrigin ? " and the reviewed helper origin" : ""}`);
     return origins;
   }
-  report.info(scope, key, `${label} contains ${origins.length} https origin(s)`);
+  report.info(scope, key, `${label} contains ${origins.length} approved origin(s)`);
   return origins;
 }
 
 function checkBackend(report) {
   const scope = 'backend';
+  let stagingHelper = null;
+  if (getEnvValue('SCAN_AUTH_BROWSER_HELPER') === 'true') {
+    try {
+      stagingHelper = require('../utils/scanBrowserHelper/config.cjs').helperConfig();
+      if (stagingHelper?.mode !== 'staging') throw Error('Use staging helper mode for staging readiness.');
+    } catch (error) {
+      stagingHelper = null;
+      report.error(scope, 'SCAN_AUTH_BROWSER_HELPER', error.message);
+    }
+  }
 
   requireExact(report, scope, 'NODE_ENV', 'production');
   requireExact(report, scope, 'DB_PROVIDER', 'postgres');
   requireValue(report, scope, 'DATABASE_URL');
-  requireHttpsOrigins(report, scope, 'FRONTEND_URL');
+  requireHttpsOrigins(report, scope, 'FRONTEND_URL', { helperOrigin: stagingHelper ? 'chrome-extension://' + stagingHelper.extensionId : null });
   requireValue(report, scope, 'JWT_SECRET');
   requireValue(report, scope, 'ADMIN_API_KEY');
 
@@ -136,7 +146,7 @@ function checkBackend(report) {
     report.warn(scope, 'ADMIN_API_KEY', 'ADMIN_API_KEY looks short for a shared staging environment');
   }
 
-  requireBoolean(report, scope, 'ALLOW_VERCEL_PREVIEWS', true);
+  requireBoolean(report, scope, 'ALLOW_VERCEL_PREVIEWS', !stagingHelper);
   requireBoolean(report, scope, 'COLLABORATION_BACKEND_ENABLED', true);
   requireBoolean(report, scope, 'REALTIME_BASELINE_ENABLED', true);
   requireBoolean(report, scope, 'COEDITING_EXPERIMENT_ENABLED', true);

@@ -8,6 +8,8 @@ import {
 } from '@dnd-kit/core';
 import {
   ExternalLink,
+  Eye,
+  EyeOff,
   Check,
   Loader2,
   MessageSquare,
@@ -18,6 +20,7 @@ import {
 } from 'lucide-react';
 
 import * as api from './api';
+import BrowserHelperSetup from './components/scanning/BrowserHelperSetup';
 import createIllustrationDark from './assets/home/create-illustration-dark.png';
 import createIllustration from './assets/home/create-illustration.png';
 import modifyIllustrationDark from './assets/home/modify-illustration-dark.png';
@@ -57,6 +60,7 @@ import ScanBar from './components/scan/ScanBar';
 import ScanProgressModal from './components/scan/ScanProgressModal';
 import VersionEditPromptModal from './components/modals/VersionEditPromptModal';
 import Button from './components/ui/Button';
+import CheckboxField from './components/ui/CheckboxField';
 import Avatar from './components/ui/Avatar';
 import SegmentedControl from './components/ui/SegmentedControl';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from './components/ui/Menu';
@@ -83,6 +87,7 @@ import {
   LAYOUT,
   TESTER_NOT_READY_MESSAGE,
   AUTHENTICATED_SCAN_ENABLED,
+  PROTECTED_CAPTURE_LATER_ENABLED,
 } from './utils/constants';
 import {
   findMapNameConflict,
@@ -2430,6 +2435,8 @@ const mapHasThumbnailAsset = (rootNode, orphanNodes = []) => {
 const isStoredScreenshotAsset = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return false;
+  if (/^\/api\/private-scan-captures\/private_scan_[a-f0-9]{48}\.bin$/.test(raw)) return true;
+  if (/^\/api\/shares\/[a-zA-Z0-9-]+\/images\/private_scan_[a-f0-9]{48}\.bin$/.test(raw)) return true;
   if (raw.startsWith('/screenshots/') || raw.includes('/screenshots/')) return true;
   const withoutQuery = raw.split(/[?#]/)[0];
   if (SCREENSHOT_ASSET_FILENAME_PATTERN.test(withoutQuery)) return true;
@@ -3173,6 +3180,18 @@ const mergeRescanResults = ({
   });
 
   const hydratedKeys = new Set();
+  const imageFields = ['thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl'];
+  const isPrivateImage = (value) => String(value || '').startsWith('/api/private-scan-captures/');
+  const markRetainedPrivatePreview = (existing, next) => {
+    if (!imageFields.some((field) => isPrivateImage(existing[field]) && next[field] === existing[field])) return next;
+    return {
+      ...next,
+      authCaptureRequired: true,
+      authPreviewUnavailable: true,
+      ...(existing.privateCaptureExpiresAt != null && next.privateCaptureExpiresAt == null
+        ? { privateCaptureExpiresAt: existing.privateCaptureExpiresAt } : {}),
+    };
+  };
   const preserveFields = [
     'id',
     'title',
@@ -3203,11 +3222,15 @@ const mergeRescanResults = ({
       if (key) hydratedKeys.add(key);
       if (existing.id) hydratedKeys.add(`id:${existing.id}`);
       preserveFields.forEach((field) => {
+        // Do not pair a fresh private thumbnail with an older full-size image
+        // whose expiry belongs to a different capture.
+        if (imageFields.includes(field) && (node[field] || imageFields.some((key) => isPrivateImage(node[key])))) return;
         const value = existing[field];
         if (value !== undefined && value !== null && value !== '') {
           next[field] = value;
         }
       });
+      return markRetainedPrivatePreview(existing, next);
     }
     return next;
   };
@@ -3227,7 +3250,7 @@ const mergeRescanResults = ({
       if (!key || hydratedKeys.has(key) || nextKeys.has(key)) return false;
       return hasUserPreservedNodeState(node, manualNodeIds);
     })
-    .map((node) => ({
+    .map((node) => markRetainedPrivatePreview(node, {
       ...node,
       children: [],
       orphanType: node.orphanType || 'orphan',
@@ -3237,6 +3260,24 @@ const mergeRescanResults = ({
     root: nextRootHydrated,
     orphans: normalizeOrphans([...nextOrphansHydrated, ...preservedMissing]),
   };
+};
+
+const deferAuthenticatedPreviews = ({ root, orphans = [] }) => {
+  const deferNode = (node) => {
+    if (!node) return node;
+    const isPage = node.url && !node.isMissing && !node.isVirtualMissing
+      && !node.isStructural && !node.isFile && !node.isError
+      && node.scanStatus !== 'missing' && node.nodeKind !== 'deferred-group';
+    return {
+      ...node,
+      ...(isPage ? {
+        authCaptureRequired: true,
+        authPreviewUnavailable: node.authPreviewUnavailable !== false,
+      } : {}),
+      children: (node.children || []).map(deferNode),
+    };
+  };
+  return { root: deferNode(root), orphans: orphans.map(deferNode) };
 };
 
 const applyDeferredCaptureResult = ({
@@ -3597,6 +3638,7 @@ export const __testing = {
   getDisplayScanLayerAvailability,
   applyScanArtifacts,
   mergeRescanResults,
+  deferAuthenticatedPreviews,
   applyDeferredCaptureResult,
   reconcileDeferredCaptureScanMeta,
   createDefaultLayerToggleState,
@@ -3643,7 +3685,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanOptions, setScanOptions] = useState({
     inactivePages: true,
     subdomains: false,
-    authenticatedPages: false,
+    authenticatedPages: AUTHENTICATED_SCAN_ENABLED,
     orphanPages: false,
     errorPages: true,
     brokenLinks: false,
@@ -3920,6 +3962,25 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [guestScanPrompt, setGuestScanPrompt] = useState(null);
   const [scanLimitPrompt, setScanLimitPrompt] = useState(null);
   const [scanAuthPrompt, setScanAuthPrompt] = useState(null);
+  const [showScanPassword, setShowScanPassword] = useState(false);
+  const [scanHelperReady, setScanHelperReady] = useState(false);
+  const [scanHelperStatus, setScanHelperStatus] = useState('waiting');
+  const scanAuthRequestRef = useRef(0);
+  const captureLoginSessionsRef = useRef(new Set());
+  const rememberCaptureLogin = id => {
+    const ids = captureLoginSessionsRef.current;
+    ids.delete(id); ids.add(id);
+    while (ids.size > 10) ids.delete(ids.values().next().value);
+  };
+  useEffect(() => () => {
+    captureLoginSessionsRef.current.forEach(id => api.deleteScanAuthSession(id).catch(() => {}));
+    captureLoginSessionsRef.current.clear();
+  }, [currentUser?.id]);
+  // Preserve the remote browser implementation while its interaction is deferred from beta.
+  const scanAuthBrowserBetaEnabled = false;
+  const scanAuthHelperEnabled = process.env.REACT_APP_SCAN_AUTH_BROWSER_HELPER === 'true'
+    && (['localhost', '127.0.0.1'].includes(window.location.hostname)
+      || (window.location.protocol === 'https:' && window.location.origin === process.env.REACT_APP_SCAN_AUTH_HELPER_ORIGIN));
   const [screenshotDownloadUpsell, setScreenshotDownloadUpsell] = useState(null);
   const [entitlementLockModal, setEntitlementLockModal] = useState(null);
   const [plansModal, setPlansModal] = useState(null);
@@ -3950,6 +4011,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     ? '∞'
     : formatEntitlementCount(Math.max(0, Number(screenshotCreditMeter?.remaining || 0)));
   const scanAuthBrowserImageRef = useRef(null);
+  const scanAuthBrowserTextRef = useRef(null);
+  const scanAuthBrowserPasswordRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [showSupportDrawer, setShowSupportDrawer] = useState(false);
@@ -3971,7 +4034,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
-    if (!sessionId) return undefined;
+    if (!scanAuthBrowserBetaEnabled || !sessionId || (scanAuthPrompt?.authBrowser?.simplePasswordGate
+      && !scanAuthPrompt?.authBrowser?.browserMode)) return undefined;
     let active = true;
     let lastObjectUrl = '';
     const loadScreenshot = async () => {
@@ -4006,7 +4070,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       window.clearInterval(interval);
       if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
     };
-  }, [scanAuthPrompt?.authBrowser?.sessionId]);
+  }, [
+    scanAuthPrompt?.authBrowser?.sessionId,
+    scanAuthPrompt?.authBrowser?.simplePasswordGate,
+    scanAuthPrompt?.authBrowser?.browserMode,
+  ]);
   // Shape: { title, message, onConfirm, onCancel, placeholder, defaultValue }
 
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
@@ -4375,6 +4443,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       isLoggedIn,
       requestedPages: DEFAULT_SCAN_REQUESTED_PAGES,
     });
+  const { hasAuthenticatedPages, hasPublicCapturePages } = useMemo(() => {
+    const nodes = collectNodesDeep(root, orphans);
+    return {
+      hasAuthenticatedPages: nodes.some((node) => node.authCaptureRequired || node.authPreviewUnavailable || node.authRequired),
+      hasPublicCapturePages: nodes.some((node) => isImageCaptureEligibleNode(node) && (PROTECTED_CAPTURE_LATER_ENABLED || (!node.authCaptureRequired && !node.authPreviewUnavailable))),
+    };
+  }, [root, orphans]);
   const canTopbarRescan = hasTopbarRescanChanges || hasEntitlementRescanUpgrade;
   useEffect(() => {
     if (!hasMap) {
@@ -4396,7 +4471,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const hasAnyThumbnails = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => isStoredScreenshotAsset(node.thumbnailUrl) && !invalidThumbnailAssetIds.has(node.id));
+    return nodes.some((node) => (isStoredScreenshotAsset(node.thumbnailUrl) || String(node.thumbnailUrl || '').startsWith('/api/private-scan-captures/')) && !invalidThumbnailAssetIds.has(node.id));
   }, [root, orphans, invalidThumbnailAssetIds]);
 
   const hasStoredImageAsset = useCallback(isStoredScreenshotAsset, []);
@@ -10526,7 +10601,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           ...(cachedNode || visibleNode || {}),
           url: cachedNode?.url || visibleNode?.url || '',
         };
-      }).filter(isImageCaptureEligibleNode);
+      }).filter((node) => isImageCaptureEligibleNode(node) && (PROTECTED_CAPTURE_LATER_ENABLED || (!node.authCaptureRequired && !node.authPreviewUnavailable)));
       return {
         targetIds: new Set(candidates.map((node) => node.id)),
         candidates,
@@ -10541,7 +10616,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => baseIds.has(node.id))
       : allNodes;
-    const targetNodes = scopedNodes.filter(isImageCaptureEligibleNode);
+    const targetNodes = scopedNodes.filter((node) => isImageCaptureEligibleNode(node) && (PROTECTED_CAPTURE_LATER_ENABLED || (!node.authCaptureRequired && !node.authPreviewUnavailable)));
     const orderedTargets = orderThumbnailNodes(targetNodes);
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
@@ -10808,6 +10883,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     targetIds,
     cachedCount = 0,
     unavailableCount = 0,
+    viewNodeId = null,
   }) => {
     if (!currentMap?.id) return false;
     const mapId = currentMap.id;
@@ -10835,7 +10911,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       const response = await api.createMapImageCaptureJob(mapId, {
         captureType,
         scope,
-        nodeIds: scope === 'selected' ? Array.from(selectedNodeIds) : [],
+        nodeIds: scope === 'selected' ? Array.from(targetIdSet) : [],
+        ...(PROTECTED_CAPTURE_LATER_ENABLED ? {authSessionIds:Array.from(captureLoginSessionsRef.current).slice(-10)} : {}),
         targetMode,
         force: scope === 'selected' || targetMode === 'captured',
       });
@@ -10844,6 +10921,16 @@ export default function App({ currentRoute, navigateToRoute }) {
       imageCaptureJobRef.current = { mapId, jobId, mode };
       setActiveImageCaptureJob({ mapId, jobId, mode });
     } catch (error) {
+      if (PROTECTED_CAPTURE_LATER_ENABLED && (error.code || error.payload?.code) === 'scan_auth_required') {
+        const loginUrl = error.url || error.payload?.url;
+        if (loginUrl) {
+          setThumbnailStats(prev => ({ ...prev, stopped:true }));
+          setScanAuthPrompt({url:loginUrl,sampleUrls:[loginUrl],authCount:1,interactiveLoginSupported:true,
+            loading:false,error:'Sign in to capture images for these protected pages.',
+            captureRequest:{mapId,scope,captureType,mode,targetMode,targets,targetIds,cachedCount,unavailableCount,viewNodeId}});
+          return true;
+        }
+      }
       const isActiveJobConflict = error?.code === 'IMAGE_CAPTURE_JOB_ACTIVE'
         || error?.payload?.code === 'IMAGE_CAPTURE_JOB_ACTIVE';
       const activeJobId = error?.jobId || error?.payload?.jobId;
@@ -10931,6 +11018,16 @@ export default function App({ currentRoute, navigateToRoute }) {
 
           setThumbnailStats((prev) => ({ ...prev, finalizing: true }));
           const summary = finalJob.result || finalJob.progress || {};
+          if (PROTECTED_CAPTURE_LATER_ENABLED && summary.authRequired?.url) {
+            const remaining = targets.filter(node => !imageCaptureSavedRef.current.has(String(node.id)));
+            setThumbnailStats(prev => ({...prev, stopped:true, finalizing:false}));
+            setScanAuthPrompt({url:summary.authRequired.url,sampleUrls:[summary.authRequired.url],authCount:1,
+              interactiveLoginSupported:true,loading:false,error:summary.authRequired.message,
+              captureRequest:{mapId,scope:'selected',captureType,mode,targetMode:'remaining',targets:remaining,viewNodeId,
+                targetIds:new Set(remaining.map(node=>node.id)),cachedCount:0,unavailableCount:0}});
+            await refreshCurrentUser();
+            return true;
+          }
           await waitForCanvasThumbnailLoads(Number(summary.total || targets.length || 0));
           await refreshTimelineAfterImageCapture();
           const shown = Math.max(0, Number(summary.saved ?? summary.verified ?? summary.captured ?? imageCaptureSavedRef.current.size) || 0);
@@ -10964,6 +11061,11 @@ export default function App({ currentRoute, navigateToRoute }) {
             skipped,
             pipeline: 'job',
           });
+          if (viewNodeId) {
+            const assets = (summary.nodeAssetUpdates || []).find(update => String(update.nodeId) === String(viewNodeId))?.assets;
+            const image = captureType === 'full' ? assets?.fullScreenshotUrl : assets?.thumbnailFullUrl || assets?.thumbnailUrl;
+            if (image) { setImageLoading(true); setFullImageUrl(image); }
+          }
           await refreshCurrentUser();
           return true;
         }
@@ -11013,7 +11115,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       setThumbnailScopeIds(new Set());
       setShowThumbnails(true);
       setShowImageMenu(false);
-      showToast('No pages with URLs to capture', 'info');
+      showToast(collectAllNodesWithOrphans(root, orphans).some((node) => node.authCaptureRequired || node.authPreviewUnavailable)
+        ? 'Image capture for protected pages is not available yet.' : 'No pages with URLs to capture', 'info');
       return;
     }
     if (targetMode === 'captured' && candidates.length === 0) {
@@ -11381,7 +11484,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => scopedIds.has(node.id))
       : allNodes;
-    const orderedTargets = orderThumbnailNodes(scopedNodes.filter(isImageCaptureEligibleNode));
+    const orderedTargets = orderThumbnailNodes(scopedNodes.filter((node) => isImageCaptureEligibleNode(node) && (PROTECTED_CAPTURE_LATER_ENABLED || (!node.authCaptureRequired && !node.authPreviewUnavailable))));
     const forceRecapture = scope === 'selected';
     const recaptureCapturedOnly = targetMode === 'captured';
     let candidates = [];
@@ -11487,6 +11590,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (isDirectImage) {
       setImageLoading(true);
       setFullImageUrl(urlOrImage);
+      return;
+    }
+    const selectedPage = nodeId
+      ? collectAllNodesWithOrphans(root, orphans).find((node) => node.id === nodeId)
+      : null;
+    if (selectedPage?.authCaptureRequired || selectedPage?.authPreviewUnavailable) {
+      if (!PROTECTED_CAPTURE_LATER_ENABLED) { showToast('Image capture for protected pages is not available yet.', 'info'); return; }
+      if (!guardImageCaptureAvailable(captureType === 'thumb' ? 'thumbnail' : 'screenshot') || !guardImageCapturePersistenceReady()) return;
+      if (!await confirmScreenshotCreditUsage({mode:captureType === 'thumb' ? 'thumbnail' : 'screenshot',captureType,count:1,scope:'selected'})) return;
+      await runMapImageCaptureJob({scope:'selected',captureType,mode:captureType==='thumb'?'thumbnail':'screenshot',targets:[selectedPage],targetIds:new Set([selectedPage.id]),viewNodeId:selectedPage.id});
       return;
     }
     const normalizedCaptureType = captureType === 'thumb' ? 'thumb' : 'full';
@@ -11616,7 +11729,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     const { candidates: targets, total, cachedCount } = getFullScreenshotCandidates(scope, invalidIds, targetMode);
     if (total === 0) {
       setShowImageMenu(false);
-      showToast('No pages with URLs to capture', 'info');
+      showToast(collectAllNodesWithOrphans(root, orphans).some((node) => node.authCaptureRequired || node.authPreviewUnavailable)
+        ? 'Image capture for protected pages is not available yet.' : 'No pages with URLs to capture', 'info');
       return;
     }
     if (targetMode === 'captured' && targets.length === 0) {
@@ -13603,9 +13717,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         isLoggedIn: effectiveIsLoggedIn,
         requestedPages: DEFAULT_SCAN_REQUESTED_PAGES,
       });
-    const shouldMergeScanResult = isUnsavedScannedMap
+    const shouldMergeScanResult = (isUnsavedScannedMap
       && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig)
-      && !shouldReplaceEntitlementLimitedMap;
+      && !shouldReplaceEntitlementLimitedMap);
     const requestedPages = DEFAULT_SCAN_REQUESTED_PAGES;
     const fallbackScanEntitlementPreview = getClientScanEntitlementPreview(requestedPages, {
       user: effectiveCurrentUser,
@@ -13623,19 +13737,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setScanProgress(createEmptyScanProgress());
     startScanTimers();
 
-    const entitlementPreviewPromise = api.getScanEntitlementPreview({ maxPages: requestedPages });
-    const authPrecheckPromise = effectiveIsLoggedIn
-      && AUTHENTICATED_SCAN_ENABLED
-      && activeScanOptions.authenticatedPages
-      && !authFlow.skipAuthPrecheck
-      ? api.precheckScanAuth({
-        url,
-        options: activeScanOptions,
-      })
-      : Promise.resolve(null);
-    const [entitlementResult, authPrecheckResult] = await Promise.allSettled([
-      entitlementPreviewPromise,
-      authPrecheckPromise,
+    const [entitlementResult] = await Promise.allSettled([
+      api.getScanEntitlementPreview({ maxPages: requestedPages }),
     ]);
 
     let scanEntitlementPreview = fallbackScanEntitlementPreview;
@@ -13677,23 +13780,31 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     const maxPagesForRequest = requestedPages;
 
-    if (authPrecheckResult.status === 'fulfilled') {
-      const precheck = authPrecheckResult.value;
-      if (precheck?.authRequired) {
+    if (effectiveIsLoggedIn && AUTHENTICATED_SCAN_ENABLED && activeScanOptions.authenticatedPages && !authFlow.skipAuthPrecheck) {
+      try {
+        const precheck = await api.precheckScanAuth({ url, options: activeScanOptions });
+        if (precheck?.authRequired || scanAuthHelperEnabled) {
+          resetScanUi();
+          setScanAuthPrompt({
+            url, preserveName,
+            authFlow: { ...authFlow, skipScanLimitPrompt: true, scanOptionsOverride: activeScanOptions },
+            authCount: precheck.authCount || 0,
+            sampleUrls: precheck.sampleUrls || [],
+            interactiveLoginSupported: precheck.interactiveLoginSupported === true,
+            loading: false, error: '',
+          });
+          return;
+        }
+      } catch (error) {
         resetScanUi();
         setScanAuthPrompt({
-          url,
-          preserveName,
-          authCount: precheck.authCount || 0,
-          sampleUrls: precheck.sampleUrls || [],
-          interactiveLoginSupported: precheck.interactiveLoginSupported === true,
-          loading: false,
-          error: '',
+          url, preserveName,
+          authFlow: { ...authFlow, skipScanLimitPrompt: true, scanOptionsOverride: activeScanOptions },
+          precheckFailed: true, loading: false,
+          error: 'We could not check this site for protected pages. Retry, or choose to scan without login.',
         });
         return;
       }
-    } else {
-      console.warn('Authenticated scan pre-check failed:', authPrecheckResult.reason);
     }
 
     setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
@@ -13704,7 +13815,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scanConfig = {
       ...activeScanOptions,
       authenticatedPages: AUTHENTICATED_SCAN_ENABLED
-        ? Boolean(activeScanOptions.authenticatedPages || authFlow.authSessionId)
+        ? Boolean(effectiveIsLoggedIn && (activeScanOptions.authenticatedPages || authFlow.authSessionId))
         : false,
     };
     let jobId;
@@ -13754,6 +13865,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
     } catch (err) {
       console.error('Scan job creation failed:', err);
+      if (authFlow.authSessionId) {
+        api.deleteScanAuthSession(authFlow.authSessionId).catch(() => {});
+      }
       if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) {
         return;
       }
@@ -13918,6 +14032,8 @@ export default function App({ currentRoute, navigateToRoute }) {
           manualConnections,
         });
       }
+      if (authFlow.authSessionId) merged = deferAuthenticatedPreviews(merged);
+      if (PROTECTED_CAPTURE_LATER_ENABLED && data.authConnection?.sessionId) rememberCaptureLogin(data.authConnection.sessionId);
       const realPageCount = countPageNodes(merged.root);
       const visiblePageCount = realPageCount
         + merged.orphans.reduce((total, orphan) => total + countPageNodes(orphan), 0);
@@ -13931,7 +14047,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         : scannedCrosslinks;
       setRoot(displayMerged.root);
       setOrphans(displayMerged.orphans);
-      setShowThumbnails(false);
+      setShowThumbnails(Boolean(data.authenticatedCaptureSummary?.captured));
       setThumbnailScopeIds(null);
       resetThumbnailQueue(0);
       setConnections(nextConnections);
@@ -13995,11 +14111,18 @@ export default function App({ currentRoute, navigateToRoute }) {
       } else if (normalizedPartialReason === 'entitlement_cap') {
         showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
       } else if (normalizedPartialReason === 'scan_safety_cap') {
-        showToast('Scan reached the safety limit. Showing the pages captured so far.', 'warning');
+        showToast('Scan reached the safety limit. Showing the pages scanned so far.', 'warning');
       } else if (normalizedPartialReason === 'scan_discovery_cap') {
         showToast('Scan reached the discovery safety limit. Showing the valid results so far.', 'warning');
       } else if (normalizedPartialReason === 'scan_collapsed') {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (normalizedPartialReason === 'auth_required') {
+        const locked = data.blockedSections?.filter((section) => section.reason === 'auth_required').length || 0;
+        showToast(`Partial scan: ${locked} page${locked === 1 ? '' : 's'} still require${locked === 1 ? 's' : ''} login.`, 'warning');
+      } else if (data.authenticatedCaptureWarning) {
+        showToast(data.authenticatedCaptureWarning, 'warning');
+      } else if (data.authenticatedCaptureSummary?.failed > 0) {
+        showToast(`Scan finished, but ${data.authenticatedCaptureSummary.failed} image captures failed. ${data.authenticatedCaptureSummary.captured} captured.`, 'warning');
       } else if (data.blockedSections?.length) {
         const blockedUrl = data.blockedSections[0]?.url || hostname;
         showToast(`Scan complete. Crawling was restricted at ${blockedUrl}.`, 'warning');
@@ -14388,31 +14511,79 @@ export default function App({ currentRoute, navigateToRoute }) {
   const continueScanWithoutTargetAuth = () => {
     const prompt = scanAuthPrompt;
     if (!prompt?.url) return;
+    scanAuthRequestRef.current += 1;
+    setShowScanPassword(false);
     if (prompt.authBrowser?.sessionId) {
       api.deleteScanAuthSession(prompt.authBrowser.sessionId).catch(() => {});
     }
     setScanAuthPrompt(null);
-    scan(prompt.url, prompt.preserveName, { skipAuthPrecheck: true });
+    scan(prompt.url, prompt.preserveName, { ...prompt.authFlow, skipAuthPrecheck: true });
   };
 
   const closeScanAuthPrompt = () => {
+    scanAuthRequestRef.current += 1;
+    setShowScanPassword(false);
     const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
     if (sessionId) api.deleteScanAuthSession(sessionId).catch(() => {});
     setScanAuthPrompt(null);
   };
 
-  const startTargetAuthLogin = async () => {
+  const resumeAfterTargetLogin = (prompt, sessionId) => {
+    setScanAuthPrompt(null);
+    if (prompt.captureRequest) {
+      if (prompt.captureRequest.mapId !== currentMap?.id) {
+        api.deleteScanAuthSession(sessionId).catch(() => {});
+        showToast('The map changed. Choose Images again on the map you want to capture.', 'info');
+        return;
+      }
+      rememberCaptureLogin(sessionId);
+      runMapImageCaptureJob(prompt.captureRequest);
+      return;
+    }
+    scan(prompt.url,prompt.preserveName,{...prompt.authFlow,skipAuthPrecheck:true,authSessionId:sessionId});
+  };
+
+  const startTargetAuthLogin = async (method = 'helper') => {
     const prompt = scanAuthPrompt;
-    if (!prompt?.url || prompt.loading) return;
+    const useHelper = scanAuthHelperEnabled && method !== 'password';
+    if (!prompt?.url || prompt.loading || (useHelper && !scanHelperReady)) return;
+    const requestId = ++scanAuthRequestRef.current;
+    setShowScanPassword(false);
     setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
     try {
-      const session = await api.createScanAuthSession({ url: prompt.url });
+      if (prompt.authBrowser?.sessionId) await api.deleteScanAuthSession(prompt.authBrowser.sessionId);
+      setScanHelperStatus('waiting');
+      const session = await api.createScanAuthSession({ url: prompt.url, sampleUrls: prompt.sampleUrls,
+        ...(useHelper ? { browserHelper: true } : {}),
+      });
+      if (requestId !== scanAuthRequestRef.current) {
+        if (session?.sessionId) api.deleteScanAuthSession(session.sessionId).catch(() => {});
+        return;
+      }
+      if (useHelper && /^[a-f0-9]{64}$/.test(session.helperPairingCode || '')) {
+        setScanAuthPrompt((current) => current ? { ...current, loading: false, error: '',
+          authBrowser: { sessionId: session.sessionId, helperPairingCode: session.helperPairingCode,
+            helperExpiresAt: session.helperExpiresAt, simplePasswordGate: false },
+        } : current);
+        return;
+      }
+      if (process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE === 'true'
+        && ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+        && /^http:\/\/localhost:4399\/login\?pair=[a-f0-9]{48}$/.test(session.externalLoginUrl || '')) {
+        setScanAuthPrompt((current) => current ? { ...current, loading: false, error: '',
+          authBrowser: { sessionId: session.sessionId, externalLoginUrl: session.externalLoginUrl, simplePasswordGate: false },
+        } : current);
+        return;
+      }
+      if (!session.simplePasswordGate && !scanAuthBrowserBetaEnabled) {
+        if (session?.sessionId) api.deleteScanAuthSession(session.sessionId).catch(() => {});
+        setScanAuthPrompt((current) => current ? {
+          ...current, loading: false, browserUnsupported: true, error: '',
+        } : current);
+        return;
+      }
       if (session?.status === 'ready' && session?.sessionId) {
-        setScanAuthPrompt(null);
-        scan(prompt.url, prompt.preserveName, {
-          skipAuthPrecheck: true,
-          authSessionId: session.sessionId,
-        });
+        resumeAfterTargetLogin(prompt, session.sessionId);
         return;
       }
       if ((session?.status === 'interactive' || session?.interactiveSupported) && session?.sessionId) {
@@ -14423,8 +14594,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           authBrowser: {
             sessionId: session.sessionId,
             pageUrl: session.loginUrl || prompt.url,
-            text: '',
             screenshotUrl: '',
+            simplePasswordGate: Boolean(session.simplePasswordGate),
+            browserMode: false,
           },
         } : current);
         return;
@@ -14435,6 +14607,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         error: session?.message || 'Target-site login is not available in this environment yet.',
       } : current);
     } catch (err) {
+      if (requestId !== scanAuthRequestRef.current) return;
       setScanAuthPrompt((current) => current ? {
         ...current,
         loading: false,
@@ -14453,6 +14626,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         authBrowser: {
           ...current.authBrowser,
           pageUrl: result?.pageUrl || current.authBrowser?.pageUrl,
+          simplePasswordGate: Boolean(result?.simplePasswordGate),
         },
       } : current);
     } catch (err) {
@@ -14477,32 +14651,56 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const typeIntoTargetAuthBrowser = async () => {
-    const text = scanAuthPrompt?.authBrowser?.text || '';
+    const input = scanAuthBrowserTextRef.current;
+    const text = input?.value || '';
     if (!text) return;
-    setScanAuthPrompt((current) => current ? {
-      ...current,
-      authBrowser: {
-        ...current.authBrowser,
-        text: '',
-      },
-    } : current);
+    input.value = '';
     await sendTargetAuthBrowserAction({ action: 'type', text });
+  };
+
+  const submitTargetAuthPassword = async () => {
+    const prompt = scanAuthPrompt;
+    const sessionId = prompt?.authBrowser?.sessionId;
+    const input = scanAuthBrowserPasswordRef.current;
+    const password = input?.value || '';
+    if (!sessionId || prompt.loading) return;
+    if (!password) {
+      setScanAuthPrompt((current) => current ? { ...current, error: 'Enter the site password.' } : current);
+      input?.focus();
+      return;
+    }
+    const requestId = ++scanAuthRequestRef.current;
+    setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
+    try {
+      await api.sendScanAuthAction(sessionId, { action: 'password', text: password });
+      if (requestId !== scanAuthRequestRef.current) return;
+      const session = await api.completeScanAuthSession(sessionId);
+      if (requestId !== scanAuthRequestRef.current) return;
+      if (!session?.ready) throw new Error('That password did not unlock the protected page.');
+      resumeAfterTargetLogin(prompt, sessionId);
+    } catch (err) {
+      if (requestId !== scanAuthRequestRef.current) return;
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        loading: false,
+        error: err?.message || 'That password did not unlock the protected page.',
+      } : current);
+    }
   };
 
   const finishTargetAuthLogin = async () => {
     const prompt = scanAuthPrompt;
     const sessionId = prompt?.authBrowser?.sessionId;
     if (!prompt?.url || !sessionId || prompt.loading) return;
+    const requestId = ++scanAuthRequestRef.current;
     setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
     try {
       const session = await api.completeScanAuthSession(sessionId);
+      if (requestId !== scanAuthRequestRef.current) return;
       if (!session?.ready) throw new Error('Login session was not ready');
-      setScanAuthPrompt(null);
-      scan(prompt.url, prompt.preserveName, {
-        skipAuthPrecheck: true,
-        authSessionId: sessionId,
-      });
+      resumeAfterTargetLogin(prompt, sessionId);
     } catch (err) {
+      if (requestId !== scanAuthRequestRef.current) return;
       setScanAuthPrompt((current) => current ? {
         ...current,
         loading: false,
@@ -21176,6 +21374,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                     validateCurrentMapImageAssets();
                   }
                 },
+                hasAuthenticatedPages,
+                hasPublicCapturePages,
+                protectedCaptureEnabled: PROTECTED_CAPTURE_LATER_ENABLED,
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
                 onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),
                 onUpdateCapturedThumbnails: () => handleThumbnailCapture('all', 'captured'),
@@ -22081,102 +22282,160 @@ export default function App({ currentRoute, navigateToRoute }) {
         <Modal
           show
           onClose={closeScanAuthPrompt}
-          title="This scan may need login"
-          className="scan-auth-modal"
+          title={scanAuthPrompt.captureRequest ? "Sign in to capture images" : scanAuthPrompt.precheckFailed ? "Could not check protected pages" : "This scan may need login"}
+          subtitle={getHostname(scanAuthPrompt.url)}
+          size="sm"
           scrollable
           footer={(
             <>
               <Button
                 variant="secondary"
-                onClick={continueScanWithoutTargetAuth}
+                onClick={scanAuthPrompt.captureRequest ? closeScanAuthPrompt : continueScanWithoutTargetAuth}
                 disabled={scanAuthPrompt.loading}
               >
-                Continue without login
+                {scanAuthPrompt.captureRequest ? 'Cancel' : 'Scan without login'}
               </Button>
-              {scanAuthPrompt.authBrowser?.sessionId ? (
+              {scanAuthPrompt.precheckFailed && !scanAuthHelperEnabled ? (
+                <Button variant="primary" onClick={() => {
+                  const prompt = scanAuthPrompt;
+                  setScanAuthPrompt(null);
+                  scan(prompt.url, prompt.preserveName, prompt.authFlow);
+                }}>Retry check</Button>
+              ) : scanAuthPrompt.authBrowser?.sessionId ? (
                 <Button
                   variant="primary"
-                  onClick={finishTargetAuthLogin}
+                  onClick={scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode
+                    ? submitTargetAuthPassword
+                    : finishTargetAuthLogin}
                   loading={scanAuthPrompt.loading}
+                  disabled={!!scanAuthPrompt.authBrowser.helperPairingCode && scanHelperStatus !== 'connected'}
                 >
-                  Use this login
+                  {scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode
+                    ? (scanAuthPrompt.captureRequest ? 'Unlock and capture' : 'Unlock and scan')
+                    : 'Use this login'}
                 </Button>
-              ) : (
+              ) : !scanAuthPrompt.browserUnsupported ? (
                 <Button
                   variant="primary"
                   onClick={startTargetAuthLogin}
                   loading={scanAuthPrompt.loading}
-                  disabled={!scanAuthPrompt.interactiveLoginSupported || scanAuthPrompt.loading}
+                  disabled={(scanAuthHelperEnabled ? !scanHelperReady : !scanAuthPrompt.interactiveLoginSupported) || scanAuthPrompt.loading}
                 >
-                  {scanAuthPrompt.interactiveLoginSupported ? 'Log in to this site' : 'Login not available yet'}
+                  {scanAuthHelperEnabled ? 'Connect browser helper' : scanAuthPrompt.interactiveLoginSupported ? (process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE === 'true' && scanAuthPrompt.url?.startsWith('http://localhost:4399') ? 'Sign in to test site' : 'Enter password') : 'Login unavailable'}
                 </Button>
-              )}
+              ) : null}
             </>
           )}
         >
           <div className="scan-auth-modal-body">
-            <p>
-              Vellic found {scanAuthPrompt.authCount || 'some'} page{scanAuthPrompt.authCount === 1 ? '' : 's'} that may require login.
-              One login session would apply to this whole scan.
-            </p>
-            {scanAuthPrompt.sampleUrls?.length ? (
-              <ul className="scan-auth-samples">
-                {scanAuthPrompt.sampleUrls.slice(0, 3).map((sampleUrl) => (
-                  <li key={sampleUrl}>{sampleUrl}</li>
-                ))}
-              </ul>
-            ) : null}
+            {scanAuthHelperEnabled && (!scanAuthPrompt.authBrowser || scanAuthPrompt.authBrowser.helperPairingCode) && <BrowserHelperSetup session={scanAuthPrompt.authBrowser} onReady={setScanHelperReady} onStatus={setScanHelperStatus} onRestart={startTargetAuthLogin} loading={scanAuthPrompt.loading} />}
+            {scanAuthHelperEnabled && (!scanAuthPrompt.authBrowser || scanAuthPrompt.authBrowser.helperPairingCode) ? <p>Connect a signed-in browser session to test access to this site's protected pages. Vellic will verify access before continuing.</p> : !scanAuthPrompt.precheckFailed && <p>
+              At least {scanAuthPrompt.authCount || 'one'} page{scanAuthPrompt.authCount === 1 ? '' : 's'} may require a password. The scan may find more.
+            </p>}
+            {scanAuthHelperEnabled && scanAuthPrompt.interactiveLoginSupported && !scanAuthPrompt.authBrowser && <Button variant="secondary" disabled={scanAuthPrompt.loading} onClick={() => startTargetAuthLogin('password')}>Use site password instead</Button>}
             {scanAuthPrompt.authBrowser?.sessionId ? (
               <div className="scan-auth-browser">
-                <div className="scan-auth-browser-bar">
-                  <span>{scanAuthPrompt.authBrowser.pageUrl || scanAuthPrompt.url}</span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => sendTargetAuthBrowserAction({ action: 'press', key: 'Enter' })}
-                  >
-                    Enter
-                  </Button>
-                </div>
-                <button
-                  type="button"
-                  className="scan-auth-browser-frame"
-                  onClick={clickTargetAuthBrowser}
-                  aria-label="Target-site login browser"
-                >
-                  <img
-                    ref={scanAuthBrowserImageRef}
-                    src={scanAuthPrompt.authBrowser.screenshotUrl || ''}
-                    alt="Target-site login screen"
-                    draggable="false"
-                  />
-                </button>
-                <div className="scan-auth-browser-controls">
-                  <TextInput
-                    type="text"
-                    size="sm"
-                    shellClassName="scan-auth-browser-input"
-                    value={scanAuthPrompt.authBrowser.text || ''}
-                    placeholder="Type selected field text here"
-                    onChange={(event) => setScanAuthPrompt((current) => current ? {
-                      ...current,
-                      authBrowser: {
-                        ...current.authBrowser,
-                        text: event.target.value,
-                      },
-                    } : current)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') typeIntoTargetAuthBrowser();
-                    }}
-                  />
-                  <Button variant="secondary" size="sm" onClick={typeIntoTargetAuthBrowser}>
-                    Type
-                  </Button>
-                </div>
+                {scanAuthPrompt.authBrowser.helperPairingCode ? (
+                  <div>
+                    <p>Sign in to this site in Chrome, including any Google or email verification. Open the Vellic Scan Helper for this test on the protected page and paste this code. Pairing expires in five minutes.</p>
+                    <TextInput id="scan-helper-code" label="Browser helper pairing code" type="text" readOnly value={scanAuthPrompt.authBrowser.helperPairingCode} onFocus={(event) => event.target.select()} />
+                    <p>Check that the helper shows the correct site and scanner address before allowing the connection. Then choose Use this login here. Close this dialog to cancel.</p>
+                  </div>
+                ) : scanAuthPrompt.authBrowser.externalLoginUrl ? <p>Sign in on the local test site in your browser. Complete any verification there, then return and choose Use this login.</p> : <p>{PROTECTED_CAPTURE_LATER_ENABLED ? 'Enter the site password. Vellic keeps this connection for up to 30 minutes for scanning and any image captures you request, then removes it. Passwords are never saved in your map.' : 'Enter the password once. Vellic will try it on other protected pages on this site during this scan, then discard it.'}</p>}
+                {scanAuthPrompt.authBrowser.helperPairingCode ? null : scanAuthPrompt.authBrowser.externalLoginUrl ? <a className="inline-link" href={scanAuthPrompt.authBrowser.externalLoginUrl} target="_blank" rel="noreferrer">Open test-site sign-in</a> : scanAuthPrompt.authBrowser.simplePasswordGate && !scanAuthPrompt.authBrowser.browserMode ? (
+                  <div className="scan-auth-password-form">
+                    <TextInput
+                      ref={scanAuthBrowserPasswordRef}
+                      id="scan-site-password"
+                      autoFocus
+                      type={showScanPassword ? 'text' : 'password'}
+                      label="Site password"
+                      error={scanAuthPrompt.error}
+                      fieldClassName="scan-auth-password-field"
+                      autoComplete="off"
+                      disabled={scanAuthPrompt.loading}
+                      onChange={() => setScanAuthPrompt((current) => current ? { ...current, error: '' } : current)}
+                      rightElement={(
+                        <button
+                          type="button"
+                          className="auth-password-toggle"
+                          onClick={() => setShowScanPassword((current) => !current)}
+                          disabled={scanAuthPrompt.loading}
+                          aria-label={showScanPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showScanPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      )}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          submitTargetAuthPassword();
+                        }
+                      }}
+                    />
+                    {scanAuthBrowserBetaEnabled ? <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setScanAuthPrompt((current) => current ? {
+                        ...current,
+                        error: '',
+                        authBrowser: { ...current.authBrowser, browserMode: true },
+                      } : current)}
+                    >
+                      Use browser sign-in instead
+                    </Button> : null}
+                  </div>
+                ) : scanAuthBrowserBetaEnabled ? (
+                  <>
+                    <div className="scan-auth-browser-bar">
+                      <span>{scanAuthPrompt.authBrowser.pageUrl || scanAuthPrompt.url}</span>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => sendTargetAuthBrowserAction({ action: 'press', key: 'Enter' })}
+                      >
+                        Enter
+                      </Button>
+                    </div>
+                    <button
+                      type="button"
+                      className="scan-auth-browser-frame"
+                      onClick={clickTargetAuthBrowser}
+                      aria-label="Target-site login browser"
+                    >
+                      <img
+                        ref={scanAuthBrowserImageRef}
+                        src={scanAuthPrompt.authBrowser.screenshotUrl || ''}
+                        alt="Target-site login screen"
+                        draggable="false"
+                      />
+                    </button>
+                    <div className="scan-auth-browser-controls">
+                      <TextInput
+                        ref={scanAuthBrowserTextRef}
+                        type="password"
+                        size="sm"
+                        shellClassName="scan-auth-browser-input"
+                        placeholder="Type into selected field"
+                        autoComplete="off"
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') typeIntoTargetAuthBrowser();
+                        }}
+                      />
+                      <Button variant="secondary" size="sm" onClick={typeIntoTargetAuthBrowser}>
+                        Type
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
               </div>
             ) : null}
-            {scanAuthPrompt.error ? (
-              <StatusAlert tone="warning" title="Login connection unavailable">
+            {scanAuthPrompt.browserUnsupported ? (
+              <StatusAlert tone="warning" title="Interactive sign-in unavailable">
+                This site needs browser sign-in. This beta supports single-password pages. Continue without login to scan public pages.
+              </StatusAlert>
+            ) : scanAuthPrompt.error && !scanAuthPrompt.authBrowser?.simplePasswordGate ? (
+              <StatusAlert tone="warning" title={scanAuthPrompt.authBrowser?.sessionId ? 'Sign-in incomplete' : 'Login connection unavailable'}>
                 {scanAuthPrompt.error}
               </StatusAlert>
             ) : !scanAuthPrompt.interactiveLoginSupported ? (

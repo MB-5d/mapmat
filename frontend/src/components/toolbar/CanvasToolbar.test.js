@@ -778,6 +778,18 @@ describe('CanvasToolbar', () => {
     });
   });
 
+  test('protected-only maps explain image availability without a rescan action', () => {
+    act(() => root.render(<CanvasToolbar canEdit hasMap showImageMenu
+      imageMenuRef={{ current: null }} hasAuthenticatedPages hasPublicCapturePages={false}
+      onGetThumbnailsAll={vi.fn()} onGetFullScreenshotsAll={vi.fn()} />));
+    expect(container.textContent).toContain('Protected pages');
+    const unavailable = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Image capture not available yet'));
+    expect(unavailable.disabled).toBe(true);
+    expect(container.textContent).not.toContain('Rescan with password');
+    expect(container.textContent).not.toContain('Capture visible area');
+    expect(container.textContent).not.toContain('Capture full page');
+  });
+
   test('uses captured image update actions only when saved images exist', () => {
     const onUpdateCapturedThumbnails = vi.fn();
     const onUpdateCapturedFullScreenshots = vi.fn();

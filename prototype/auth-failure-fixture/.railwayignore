@@ -1,0 +1,4 @@
+check-staging.cjs
+README.md
+*.json
+*.log

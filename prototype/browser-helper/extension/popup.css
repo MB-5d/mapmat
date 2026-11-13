@@ -1,0 +1,16 @@
+:root { color-scheme: light; font-family: system-ui, sans-serif; color: #202124; }
+body { width: 380px; margin: 0; background: #fafafa; }
+main { padding: 20px; }
+h1 { font-size: 23px; margin-top: 8px; }
+h2 { font-size: 17px; overflow-wrap: anywhere; }
+p { font-size: 13px; line-height: 1.5; }
+.eyebrow { color: #555; font-size: 11px; font-weight: 650; letter-spacing: .08em; }
+label { display: block; font-size: 13px; line-height: 1.5; }
+input[type="password"] { box-sizing: border-box; width: 100%; margin: 8px 0; padding: 10px; border: 1px solid #777; border-radius: 6px; }
+button { width: 100%; padding: 11px; margin-top: 10px; border: 1px solid #2442a1; border-radius: 6px; background: #2442a1; color: white; cursor: pointer; font: inherit; font-size: 13px; }
+button:disabled { opacity: .5; cursor: wait; }
+button.secondary { background: transparent; color: #2442a1; }
+.option { margin: 14px 0; }
+.option input { margin-right: 6px; }
+:focus-visible { outline: 3px solid #668cff; outline-offset: 3px; }
+#status { overflow-wrap: anywhere; }

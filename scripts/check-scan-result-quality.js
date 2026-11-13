@@ -238,4 +238,14 @@ assert.strictEqual(
   'focused challenge pages should complete as limited maps so the real issue remains visible'
 );
 
+
+const guessedPaths = makeRootOnlyResult();
+guessedPaths.scanDiagnostics = { queueRemaining: 35, confirmedQueueRemaining: 0, commonPathQueued: 36 };
+hardenCollapsedScanResult(guessedPaths, { progress: { scanned: 2, mapped: 1, queued: 35 } });
+assert.equal(guessedPaths.partialReason, undefined, 'unvisited common-path guesses do not invalidate a real single page');
+const actualPaths = makeRootOnlyResult();
+actualPaths.scanDiagnostics = { queueRemaining: 35, confirmedQueueRemaining: 1, commonPathQueued: 34 };
+hardenCollapsedScanResult(actualPaths);
+assert.equal(actualPaths.partialReason, 'scan_collapsed', 'actual unvisited discovered pages still trigger collapse protection');
+
 console.log('[scan-result-quality] Passed.');

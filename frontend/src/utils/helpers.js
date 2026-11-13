@@ -46,7 +46,11 @@ export const sanitizeUrl = (raw) => {
     const u = new URL(t);
     if (!['http:', 'https:'].includes(u.protocol)) return '';
     if (u.username || u.password) return '';
-    if (!isValidScanHost(u.hostname)) return '';
+    const localPrototype = process.env.REACT_APP_SCAN_AUTH_LOCAL_PROTOTYPE === 'true'
+      && typeof window !== 'undefined'
+      && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+      && u.origin === 'http://localhost:4399';
+    if (!localPrototype && !isValidScanHost(u.hostname)) return '';
     return u.toString();
   } catch {
     return '';

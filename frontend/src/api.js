@@ -8,6 +8,17 @@ const AUTH_TOKEN_KEY = 'vellic_auth_token';
 const LEGACY_AUTH_TOKEN_KEY = 'mapmat_auth_token';
 const COEDITING_AUTH_PROTOCOL = 'vellic-auth';
 
+export async function fetchPrivateScanCapture(url, signal) {
+  const path = String(url || '').split('?')[0];
+  const shared = /^\/api\/shares\/[a-zA-Z0-9-]+\/images\/private_scan_[a-f0-9]{48}\.bin$/.test(path);
+  if (!shared && !/^\/api\/private-scan-captures\/private_scan_[a-f0-9]{48}\.bin$/.test(path)) throw new Error('Invalid private capture');
+  const token = shared ? null : getStoredAuthToken();
+  const response = await fetch(`${API_BASE}${path}`, { credentials: shared ? 'omit' : 'include', signal,
+    redirect: 'error', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!response.ok || !['image/jpeg', 'image/png'].includes(response.headers.get('content-type'))) throw new Error('Private capture unavailable');
+  return response.blob();
+}
+
 function canUseStorage() {
   return typeof window !== 'undefined' && !!window.localStorage;
 }
@@ -1191,4 +1202,10 @@ export async function getMySharesPage({ limit = 50, offset = 0 } = {}) {
 
 export async function deleteShare(id) {
   return fetchApi(`/api/shares/${id}`, { method: 'DELETE' });
+}
+
+export function getBrowserHelperConfig() { return fetchApi('/scan-auth/helper/config'); }
+export async function downloadBrowserHelper() {
+  const { blob, filename } = await fetchBlobResponse('/scan-auth/helper/download');
+  triggerBlobDownload(blob, filename || 'vellic-scan-helper.zip');
 }

@@ -1,3 +1,5 @@
+const { readPrivateImageForMap, saveMapWithPrivateImages, privateImageKeys, resolvePrivateMapAccess, getPrivateCaptureStore } = require('../utils/privateCaptureService.cjs');
+const { isPrivateScanCaptureKey, PRIVATE_CAPTURE_KEY } = require('../utils/privateScanCapture');
 /**
  * API routes for Vellic - Projects, Maps, History, Shares
  */
@@ -1159,7 +1161,7 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
         break;
       }
 
-      const object = await readScreenshotObject(storageKey);
+      const object = isPrivateScanCaptureKey(storageKey) ? await readPrivateImageForMap(storageKey, mapId) : await readScreenshotObject(storageKey);
       if (!object?.buffer || Number(object.size || object.buffer.length || 0) <= 0) {
         missingEntries.push({
           mapId,
@@ -1177,8 +1179,8 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
       }
 
       const extension = getAssetExtension({
-        storageKey,
-        contentType: row.content_type || object.contentType,
+        storageKey: isPrivateScanCaptureKey(storageKey) ? '' : storageKey,
+        contentType: object.contentType || row.content_type,
       });
       const filePath = buildImageDownloadPath({
         descriptor: entry.descriptor,
@@ -1192,7 +1194,7 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
       files.push({
         path: filePath,
         buffer: object.buffer,
-        contentType: row.content_type || object.contentType || getContentTypeForKey(storageKey),
+        contentType: object.contentType || row.content_type || getContentTypeForKey(storageKey),
         nodeId,
         assetField,
       });
@@ -2611,6 +2613,8 @@ router.get('/maps/:id/nodes/:nodeId', requireAuth, async (req, res) => {
         thumbnailFullUrl: node.thumbnailFullUrl || '',
         fullScreenshotUrl: node.fullScreenshotUrl || '',
         authRequired: !!node.authRequired,
+        authCaptureRequired: !!node.authCaptureRequired,
+        authPreviewUnavailable: !!node.authPreviewUnavailable,
         isBroken: !!node.isBroken,
         isInactive: !!node.isInactive,
         isFile: !!node.isFile,
@@ -2861,20 +2865,25 @@ router.post('/maps', requireAuth, async (req, res) => {
     });
     if (!entitlement) return;
 
-    await mapStore.createMapAsync({
-      id: mapId,
+    await saveMapWithPrivateImages({
       userId: req.user.id,
-      accountId: entitlement.summary.account.id,
-      projectId: normalizedProjectId,
-      name: trimmedName,
-      notes: notes ? notes.trim() : null,
-      url: url || sanitizedTree.root?.url || '',
-      rootData: JSON.stringify(sanitizedTree.root),
-      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
-      connectionsData: connections ? JSON.stringify(connections) : null,
-      colors: colors ? JSON.stringify(colors) : null,
-      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
-      pageCount,
+      mapId,
+      ...sanitizedTree,
+      save: () => mapStore.createMapAsync({
+        id: mapId,
+        userId: req.user.id,
+        accountId: entitlement.summary.account.id,
+        projectId: normalizedProjectId,
+        name: trimmedName,
+        notes: notes ? notes.trim() : null,
+        url: url || sanitizedTree.root?.url || '',
+        rootData: JSON.stringify(sanitizedTree.root),
+        orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+        connectionsData: connections ? JSON.stringify(connections) : null,
+        colors: colors ? JSON.stringify(colors) : null,
+        connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+        pageCount,
+      }),
     });
 
     const map = await mapStore.getMapByIdAsync(mapId);
@@ -2903,7 +2912,7 @@ router.post('/maps', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Create map error:', error);
-    res.status(500).json({ error: 'Failed to save map' });
+    res.status(error.code === 'private_image_access' ? error.status : 500).json({ error: error.code === 'private_image_access' ? error.message : 'Failed to save map' });
   }
 });
 
@@ -3059,7 +3068,12 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     }
     patch.pageCount = updatedPageCount;
 
-    await mapStore.updateMapByIdAsync(id, patch);
+    await saveMapWithPrivateImages({
+      userId: req.user.id,
+      mapId: id,
+      ...sanitizedTree,
+      save: () => mapStore.updateMapByIdAsync(id, patch),
+    });
     if (staleImageNodeIds.length > 0) {
       try {
         await imageAssetStore.markImageAssetsStaleByNodeIdsAsync({
@@ -3087,7 +3101,7 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Update map error:', error);
-    res.status(500).json({ error: 'Failed to update map' });
+    res.status(error.code === 'private_image_access' ? error.status : 500).json({ error: error.code === 'private_image_access' ? error.message : 'Failed to update map' });
   }
 });
 
@@ -3194,9 +3208,14 @@ router.patch('/maps/:id/node-assets', requireAuth, async (req, res) => {
       root: nextMap.root,
       orphans: nextMap.orphans,
     });
-    await mapStore.updateMapByIdAsync(id, {
-      rootData: JSON.stringify(sanitizedTree.root),
-      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+    await saveMapWithPrivateImages({
+      userId: req.user.id,
+      mapId: id,
+      ...sanitizedTree,
+      save: () => mapStore.updateMapByIdAsync(id, {
+        rootData: JSON.stringify(sanitizedTree.root),
+        orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+      }),
     });
     await upsertManifestForNodeAssetUpdates(id, updatesById);
 
@@ -3210,7 +3229,7 @@ router.patch('/maps/:id/node-assets', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Update map node assets error:', error);
-    return res.status(500).json({ error: 'Failed to update map node assets' });
+    return res.status(error.code === 'private_image_access' ? error.status : 500).json({ error: error.code === 'private_image_access' ? error.message : 'Failed to update map node assets' });
   }
 });
 
@@ -3309,18 +3328,23 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
     const title = name?.trim() || 'Updated';
     const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
 
-    await mapStore.createMapVersionAsync({
-      id: versionId,
-      mapId: id,
+    await saveMapWithPrivateImages({
       userId: req.user.id,
-      versionNumber: nextVersion,
-      name: title,
-      notes: notes?.trim() || null,
-      rootData: JSON.stringify(sanitizedTree.root),
-      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
-      connectionsData: connections ? JSON.stringify(connections) : null,
-      colors: colors ? JSON.stringify(colors) : null,
-      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      mapId: id,
+      ...sanitizedTree,
+      save: () => mapStore.createMapVersionAsync({
+        id: versionId,
+        mapId: id,
+        userId: req.user.id,
+        versionNumber: nextVersion,
+        name: title,
+        notes: notes?.trim() || null,
+        rootData: JSON.stringify(sanitizedTree.root),
+        orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+        connectionsData: connections ? JSON.stringify(connections) : null,
+        colors: colors ? JSON.stringify(colors) : null,
+        connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      }),
     });
 
     const allVersions = collaborationEnabled
@@ -3361,7 +3385,7 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
     res.json({ version: serializeMapVersion(saved) });
   } catch (error) {
     console.error('Create map version error:', error);
-    res.status(500).json({ error: 'Failed to create map version' });
+    res.status(error.code === 'private_image_access' ? error.status : 500).json({ error: error.code === 'private_image_access' ? error.message : 'Failed to create map version' });
   }
 });
 
@@ -4061,6 +4085,11 @@ router.post('/shares', requireAuth, async (req, res) => {
     }
 
     const sanitizedTree = sanitizeMapTreeForStorage({ root: shareRoot, orphans: shareOrphans });
+    for (const key of privateImageKeys(sanitizedTree.root, sanitizedTree.orphans)) {
+      if (!await resolvePrivateMapAccess(req.user.id, key)) {
+        return res.status(403).json({ error: 'You no longer have access to an image in this map.' });
+      }
+    }
     const expiresAt = expires_in_days
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
@@ -4162,6 +4191,47 @@ router.get('/shares/:id/status', async (req, res) => {
   }
 });
 
+// Share links grant access only to images present in that share's current tree.
+// Keep the original encrypted object private and recheck revocation on every read.
+function shareImageUrls(parsed, shareId) {
+  const copy = JSON.parse(JSON.stringify(parsed));
+  const pending = [copy.root, ...(copy.orphans || [])];
+  while (pending.length) {
+    const node = pending.pop();
+    if (!node) continue;
+    for (const field of ['thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl']) {
+      const prefix = '/api/private-scan-captures/';
+      if (String(node[field] || '').startsWith(prefix)) {
+        node[field] = '/api/shares/' + encodeURIComponent(shareId) + '/images/' + node[field].slice(prefix.length);
+      }
+    }
+    pending.push(...(node.children || []));
+  }
+  return copy;
+}
+
+router.get('/shares/:id/images/:filename', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  try {
+    if (!PRIVATE_CAPTURE_KEY.test(req.params.filename)) return res.sendStatus(404);
+    const share = await shareStore.getShareWithUserByIdAsync(req.params.id);
+    if (!share || (share.expires_at && new Date(share.expires_at) < new Date())) return res.sendStatus(404);
+    const map = share.map_id ? await mapStore.getMapByIdAsync(share.map_id) : null;
+    if (share.map_id && (!map || (share.project_id && map.project_id !== share.project_id))) return res.sendStatus(404);
+    const parsed = map ? (await getSharePayloadForCurrentMap({ share, mapRow: map })).parsed : parseMapFields(share);
+    if (!privateImageKeys(parsed.root, parsed.orphans).includes(req.params.filename)) return res.sendStatus(404);
+    let object;
+    if (map) object = await readPrivateImageForMap(req.params.filename, map.id);
+    else {
+      const binding = await resolvePrivateMapAccess(share.user_id, req.params.filename);
+      if (binding) object = await getPrivateCaptureStore().read({ key: req.params.filename, mapId: binding.mapId, ownerKey: 'user:' + binding.ownerUserId });
+    }
+    if (!object) return res.sendStatus(404);
+    res.type(object.contentType).send(object.buffer);
+  } catch { res.sendStatus(404); }
+});
+
 router.get('/shares/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -4204,7 +4274,7 @@ router.get('/shares/:id', async (req, res) => {
     res.json({
       share: {
         id: share.id,
-        ...parsedShare,
+        ...shareImageUrls(parsedShare, share.id),
         mapId: share.map_id || null,
         mapName: sharedMap?.name || null,
         projectId: sharedMap?.project_id || share.project_id || null,

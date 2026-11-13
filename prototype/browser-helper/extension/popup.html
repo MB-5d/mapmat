@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vellic scan helper</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="config.js"></script>
+  <script src="permissions.js"></script>
+  <script type="module" src="popup.mjs"></script>
+</head>
+<body>
+  <main>
+    <p id="environment" class="eyebrow">TEST ONLY</p>
+    <p id="fixed-destination"></p>
+    <h1>Connect this site</h1>
+    <p>Finish signing in on the protected site first, including Google or email verification. Then open this helper on that page.</p>
+    <form id="pair-form">
+      <label for="pair">Pairing code from Vellic</label>
+      <input id="pair" type="password" autocomplete="off" spellcheck="false" required minlength="64" maxlength="64">
+      <button id="review" type="submit">Review connection</button>
+    </form>
+    <section id="connection" hidden>
+      <h2 id="site"></h2>
+      <p id="destination"></p>
+      <p>This temporarily copies this site's login cookies to the scanner address shown above. That session may grant access to more than the selected page. Use a test account or workspace.</p>
+      <p>Google account cookies, passwords and verification codes are not collected. Closing Vellic's login dialog cancels the pairing. Vellic keeps the connection for up to 30 minutes for scanning and image captures you request, then removes it. Your Chrome login stays signed in.</p>
+      <label class="option"><input id="include-storage" type="checkbox"> Include this site's local storage (may contain private site data; only if needed)</label>
+      <label class="option"><input id="consent" type="checkbox"> Allow this site's session to be copied to the scanner shown above for this scan</label>
+      <button id="connect" type="button">Connect this signed-in page</button>
+      <button id="cancel" type="button" class="secondary">Cancel</button>
+    </section>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+</body>
+</html>

@@ -5,6 +5,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 
 const BACKEND_PORT = Number(process.env.SCAN_AUTH_BACKEND_PORT || 4326);
 const API_BASE = process.env.API_BASE || `http://127.0.0.1:${BACKEND_PORT}`;
@@ -14,6 +15,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
+    signal: options.signal || AbortSignal.timeout(30000),
     headers: {
       'content-type': 'application/json',
       ...(options.headers || {}),
@@ -33,7 +35,7 @@ async function fetchJson(url, options = {}) {
 }
 
 async function fetchRaw(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(30000) });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     throw new Error(`${url} failed ${response.status}: ${text}`);
@@ -54,8 +56,30 @@ function hasSessionCookie(req) {
 }
 
 function createFixtureServer() {
+  const passwordAttempts = new Map();
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://fixture.local');
+    if (url.pathname.startsWith('/page-gates/') && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        passwordAttempts.set(url.pathname, (passwordAttempts.get(url.pathname) || 0) + 1);
+        const correct = new URLSearchParams(body).get('password')
+          === (url.pathname.endsWith('/different') ? 'different-password' : 'fixture-password');
+        const previousUnlocks = String(req.headers.cookie || '').match(/page_unlocks=([^;]*)/)?.[1]?.split(',') || [];
+        const unlocks = [...new Set([...previousUnlocks, url.pathname.split('/').pop()])];
+        setTimeout(() => {
+          res.writeHead(correct ? 200 : 401, {
+            'content-type': 'application/json',
+            ...(correct && !url.pathname.endsWith('/transient') ? {
+              'set-cookie': `page_unlocks=${unlocks.join(',')}; Path=/; SameSite=Lax`,
+            } : {}),
+          });
+          res.end(JSON.stringify({ ok: correct }));
+        }, 350);
+      });
+      return;
+    }
     if (url.pathname === '/login' && req.method === 'POST') {
       req.resume();
       req.on('end', () => {
@@ -67,6 +91,17 @@ function createFixtureServer() {
       });
       return;
     }
+    if (url.pathname === '/slow') {
+      setTimeout(() => {
+        if (res.destroyed) return;
+        const response = hasSessionCookie(req)
+          ? html({ title: 'Slow Private', body: '<h1>Slow Private</h1>' })
+          : html({ status: 401, title: 'Login Required', body: '<h1>Sign in</h1>' });
+        res.writeHead(response.status, response.headers);
+        res.end(response.body);
+      }, 10000);
+      return;
+    }
     let response;
     if (url.pathname === '/') {
       response = html({
@@ -75,8 +110,63 @@ function createFixtureServer() {
           '<h1>Fixture Home</h1>',
           '<a href="/private-a">Private A</a>',
           '<a href="/private-b">Private B</a>',
+          '<a href="/still-locked">Still locked</a>',
         ].join(''),
       });
+    } else if (url.pathname === '/public-check') {
+      response = html({ title: 'Public check', body: '<h1>Public check</h1><a href="/public-check/about">About</a><a href="/public-check/team">Team</a>' });
+    } else if (url.pathname === '/public-check/about' || url.pathname === '/public-check/team') {
+      response = html({ title: url.pathname.endsWith('/about') ? 'About' : 'Team', body: '<h1>Public content</h1><a href="/public-check">Home</a>' });
+    } else if (url.pathname === '/external-form') {
+      response = html({ status: 401, title: 'Secure', body: '<form action="https://example.org/login"><input type="password"><button>Unlock</button></form>' });
+    } else if (url.pathname === '/get-form') {
+      response = html({ status: 401, title: 'Secure', body: '<form method="get" action="/page-gates/page1"><input type="password" name="password"><button>Unlock</button></form>' });
+    } else if (url.pathname === '/page-gates') {
+      response = html({ title: 'Page Gates', body: Array.from({ length: 12 }, (_, index) => (
+        `<a href="/page-gates/page${index + 1}">Page ${index + 1}</a>`
+      )).join('') + '<a href="/page-gates/different">Different password</a><a href="/page-gates/account">Account login</a>' });
+    } else if (url.pathname === '/page-gates/account') {
+      response = html({ status: 401, title: 'Sign in', body: '<form><input type="email"><input type="password"><button>Sign in</button></form>' });
+    } else if (url.pathname.startsWith('/page-gates/')) {
+      const name = url.pathname.split('/').pop();
+      const content = `<h1>Unlocked ${name}</h1>${name === 'page1' ? '<a href="/page-gates/deeper">New protected page</a>' : ''}`;
+      const unlocks = String(req.headers.cookie || '').match(/page_unlocks=([^;]*)/)?.[1]?.split(',') || [];
+      response = unlocks.includes(name)
+        ? html({ title: `Unlocked ${name}`, body: content })
+        : html({ status: 401, title: 'Secure', body: `<form class="password-form">
+          <input type="password" name="password"><button type="submit">Unlock</button><div class="error-message"></div>
+          </form><script>
+          window.Static = { SQUARESPACE_CONTEXT: { pageType: 103 } };
+          const form = document.querySelector('form');
+          form.addEventListener('submit', async event => {
+            event.preventDefault();
+            const response = await fetch(location.pathname, { method: 'POST', body: new URLSearchParams(new FormData(form)) });
+            if (!response.ok) { document.querySelector('.error-message').textContent = 'Incorrect password'; return; }
+            ${name === 'transient' ? `document.body.innerHTML = ${JSON.stringify(content)};` : 'location.reload();'}
+          });</script>` });
+    } else if (url.pathname === '/many') {
+      response = html({
+        title: 'Many Protected Pages',
+        body: Array.from({ length: 12 }, (_, index) => (
+          `<a href="/many/private-${index + 1}">Private ${index + 1}</a>`
+        )).join(''),
+      });
+    } else if (/^\/many\/private-\d+$/.test(url.pathname)) {
+      response = html({
+        status: 401,
+        title: `Login Required ${url.pathname}`,
+        body: `<h1>Sign in for ${url.pathname}</h1>`,
+      });
+    } else if (url.pathname === '/simple-private') {
+      response = hasSessionCookie(req)
+        ? html({ title: 'Simple Private', body: '<h1>Simple Private</h1>' })
+        : html({
+          status: 401,
+          title: 'Password Required',
+          body: '<form method="post" action="/login"><input type="password" name="password"><button type="submit">Unlock</button></form>',
+        });
+    } else if (url.pathname === '/still-locked') {
+      response = html({ status: 401, title: 'Login Required', body: '<h1>Sign in</h1>' });
     } else if (url.pathname === '/private-a' || url.pathname === '/private-b') {
       response = hasSessionCookie(req)
         ? html({
@@ -88,7 +178,7 @@ function createFixtureServer() {
         : html({
           status: 401,
           title: 'Login Required',
-          body: '<h1>Sign in</h1><p>Authentication required.</p>',
+          body: '<h1>Sign in</h1><form method="post" action="/login"><input type="password" name="password" autofocus><button type="submit">Unlock</button></form>',
         });
     } else if (url.pathname === '/login') {
       response = html({
@@ -111,7 +201,10 @@ function createFixtureServer() {
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve(server));
+    server.listen(0, '127.0.0.1', () => {
+      server.passwordAttempts = passwordAttempts;
+      resolve(server);
+    });
   });
 }
 
@@ -152,6 +245,61 @@ async function pollScanJob(jobId, accessToken) {
   throw new Error('Timed out waiting for scan job');
 }
 
+function spawnBackend(tempDir, overrides = {}) {
+  const backend = spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      DB_PATH: path.join(tempDir, 'vellic.db'),
+      HOST: '127.0.0.1',
+      PORT: String(BACKEND_PORT),
+      RUN_MODE: 'web',
+      SCAN_AUTH_FEATURE_ENABLED: 'true',
+      ALLOW_PRIVATE_NETWORKS: 'true',
+      SCREENSHOT_STORAGE_PROVIDER: 'local',
+      SCREENSHOT_STORAGE_DIR: path.join(tempDir, 'captures'),
+      PRIVATE_SCAN_CAPTURE_KEY: crypto.randomBytes(32).toString('hex'),
+      ...overrides,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  backend.testAccountReady = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Test account did not finish seeding')), 30000);
+    backend.stdout.on('data', (chunk) => {
+      if (/\[auth\] (Seeded test account|Refreshed test account credentials)/.test(String(chunk))) {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+  });
+  backend.stdout.on('data', (chunk) => process.stdout.write(chunk));
+  backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
+  return backend;
+}
+
+async function createReadyFixtureSession(fixtureBase, authHeaders, sampleUrls) {
+  const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ url: `${fixtureBase}/login`, sampleUrls }),
+  });
+  await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/action`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ action: 'type', text: 'ok' }),
+  });
+  await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/action`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ action: 'press', key: 'Enter' }),
+  });
+  await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/complete`, {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  return session;
+}
+
 async function main() {
   let backend = null;
   let fixture = null;
@@ -159,33 +307,37 @@ async function main() {
 
   if (!process.env.API_BASE) {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vellic-scan-auth-'));
-    backend = spawn(process.execPath, ['server.js'], {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        DB_PATH: path.join(tempDir, 'vellic.db'),
-        HOST: '127.0.0.1',
-        PORT: String(BACKEND_PORT),
-        RUN_MODE: 'web',
-        SCAN_AUTH_FEATURE_ENABLED: 'true',
-        ALLOW_PRIVATE_NETWORKS: 'true',
-        SCREENSHOT_STORAGE_PROVIDER: 'local',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    backend.stdout.on('data', (chunk) => process.stdout.write(chunk));
-    backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
+    backend = spawnBackend(tempDir);
   }
 
   try {
     fixture = await createFixtureServer();
     const fixtureBase = getServerUrl(fixture);
     await waitForHealth();
+    if (backend) await backend.testAccountReady;
     const login = await fetchJson(`${API_BASE}/auth/login`, {
       method: 'POST',
       body: JSON.stringify({ email: 'admin@vellic.io', password: 'Admin123' }),
     });
     const authHeaders = { authorization: `Bearer ${login.token}` };
+
+    if (backend) {
+      const db = new (require('better-sqlite3'))(path.join(tempDir, 'vellic.db'));
+      const user = db.prepare('SELECT account_id FROM users WHERE email = ?').get('admin@vellic.io');
+      db.prepare("UPDATE billing_accounts SET account_state = 'archived' WHERE id = ?").run(user.account_id);
+      try {
+        for (const endpoint of ['precheck', 'sessions']) {
+          await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/${endpoint}`, {
+            method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase }),
+          }), /failed 403/, 'inactive accounts cannot start login work');
+        }
+      } finally {
+        db.prepare("UPDATE billing_accounts SET account_state = 'active' WHERE id = ?").run(user.account_id); db.close();
+      }
+      await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions`, {
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase, browserHelper: true }),
+      }), /failed 403: Browser helper is not available/);
+    }
 
     const precheck = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
       method: 'POST',
@@ -193,15 +345,137 @@ async function main() {
       body: JSON.stringify({ url: `${fixtureBase}/` }),
     });
     assert.strictEqual(precheck.authRequired, true, 'precheck should find login-gated pages');
-    assert.strictEqual(precheck.authCount, 2, 'precheck should find both protected pages');
+    assert.strictEqual(precheck.authCount, 3, 'precheck should find all protected pages');
     assert.strictEqual(precheck.interactiveLoginSupported, true, 'precheck should expose interactive login support');
+
+    const injected = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/`, options: { authSessionStorageState: {
+        cookies: [{ name: 'fixture_session', value: 'ok', domain: '127.0.0.1', path: '/' }], origins: []
+      }, _authenticatedCapture: true } }),
+    });
+    assert.strictEqual(injected.authCount, precheck.authCount, 'precheck must ignore client-supplied login state');
+
+    const manyPrecheck = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/many` }),
+    });
+    assert.strictEqual(manyPrecheck.authCount, 12, 'precheck should inspect more than eight linked protected pages');
+
+    const pageGateSession = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, sampleUrls: [`${fixtureBase}/page-gates/account`, `${fixtureBase}/page-gates/page1`] }),
+    });
+    assert.strictEqual(pageGateSession.simplePasswordGate, true, 'mixed gates must find the supported password form after an account form');
+    assert.strictEqual(pageGateSession.loginUrl, `${fixtureBase}/page-gates/page1`);
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}/action`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'incorrect' }),
+    }), /failed 409: This site did not accept the password/);
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}/action`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'fixture-password' }),
+    });
+    const pageGateReady = await fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}/complete`, {
+      method: 'POST', headers: authHeaders,
+    });
+    assert.strictEqual(pageGateReady.ready, true, 'delayed JavaScript login must finish before verification');
+    assert.ok(!JSON.stringify(pageGateReady).includes('fixture-password'), 'password must not be returned');
+    const pageGateJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, maxPages: 100, options: { authenticatedPages: true }, authSessionId: pageGateSession.sessionId }),
+    });
+    const pageGateResult = await pollScanJob(pageGateJob.jobId, pageGateJob.jobAccessToken);
+    const pageGateNodes = flattenTree(pageGateResult.root);
+    assert.strictEqual(pageGateResult.authenticatedCaptureSummary, undefined, 'scans must not capture images');
+    assert.ok(pageGateNodes.every(node => !node.thumbnailUrl && !node.fullScreenshotUrl));
+    for (const name of [...Array.from({ length: 12 }, (_, index) => `page${index + 1}`), 'deeper']) {
+      const node = pageGateNodes.find((item) => item.url === `${fixtureBase}/page-gates/${name}`);
+      assert.ok(node && !node.authRequired && node.title === `Unlocked ${name}`, `one password must unlock ${name}`);
+    }
+    assert.strictEqual(fixture.passwordAttempts.get('/page-gates/different'), 1, 'a different password must not trigger repeated retries');
+    assert.ok(!fixture.passwordAttempts.has('/page-gates/account'), 'account-login fields must not receive the site password');
+    assert.strictEqual(pageGateResult.partialReason, 'auth_required', 'different login boundaries must remain accurately locked');
+    assert.ok(!JSON.stringify(pageGateResult).includes('fixture-password'), 'scan results must never contain the password');
+    for (const name of Array.from({ length: 12 }, (_, index) => `page${index + 1}`)) {
+      assert.strictEqual(fixture.passwordAttempts.get(`/page-gates/${name}`), name === 'page1' ? 2 : 1, `access to ${name} must survive later unlocks`);
+    }
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${pageGateSession.sessionId}`, { headers: authHeaders }), /failed 404/);
+
+    const transientSession = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/page-gates`, sampleUrls: [`${fixtureBase}/page-gates/transient`] }),
+    });
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${transientSession.sessionId}/action`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'fixture-password' }),
+    }), /failed 409: The page opened, but the site did not keep this login/);
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${transientSession.sessionId}`, { method: 'DELETE', headers: authHeaders });
+
+    const externalForm = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: fixtureBase, sampleUrls: [`${fixtureBase}/external-form`] }),
+    });
+    assert.strictEqual(externalForm.simplePasswordGate, false, 'an external form action must not receive the site password');
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions/${externalForm.sessionId}/action`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'fixture-password' }),
+    }), /failed 409: This site needs interactive sign-in/);
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${externalForm.sessionId}`, { method: 'DELETE', headers: authHeaders });
+    const getForm = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: fixtureBase, sampleUrls: [`${fixtureBase}/get-form`] }),
+    });
+    assert.strictEqual(getForm.simplePasswordGate, false, 'a native GET form must not put the password in a URL');
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${getForm.sessionId}`, { method: 'DELETE', headers: authHeaders });
+
+    const simpleGate = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/`, sampleUrls: [`${fixtureBase}/simple-private`] }),
+    });
+    assert.strictEqual(simpleGate.loginUrl, `${fixtureBase}/simple-private`, 'login should open the protected page');
+    assert.strictEqual(simpleGate.simplePasswordGate, true, 'single-field password gates should use the direct form');
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${simpleGate.sessionId}/action`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ action: 'password', text: 'ok' }),
+    });
+    const completedSimpleGate = await fetchJson(`${API_BASE}/scan-auth/sessions/${simpleGate.sessionId}/complete`, {
+      method: 'POST',
+      headers: authHeaders,
+    });
+    assert.strictEqual(completedSimpleGate.ready, true, 'direct password submission should unlock the page');
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${simpleGate.sessionId}`, {
+      method: 'DELETE',
+      headers: authHeaders,
+    });
+
+    const withoutLogin = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/`, maxPages: 100, options: { authenticatedPages: true } }),
+    });
+    const withoutLoginResult = await pollScanJob(withoutLogin.jobId, withoutLogin.jobAccessToken);
+    assert.strictEqual(withoutLoginResult.partialReason, 'auth_required');
+    assert.ok(flattenTree(withoutLoginResult.root).some((node) => (
+      node.url === `${fixtureBase}/private-a` && node.authRequired
+    )), 'continuing without login should label protected pages');
 
     const interactive = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ url: `${fixtureBase}/login` }),
+      body: JSON.stringify({ url: `${fixtureBase}/login`, sampleUrls: precheck.sampleUrls }),
     });
     assert.strictEqual(interactive.status, 'interactive', 'login flow should create an interactive browser session');
+
+    let rejectedBeforeLogin = false;
+    try {
+      await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/complete`, {
+        method: 'POST',
+        headers: authHeaders,
+      });
+    } catch (error) {
+      rejectedBeforeLogin = /failed 409/.test(error.message);
+    }
+    assert.strictEqual(rejectedBeforeLogin, true, 'unfinished login must not be accepted');
 
     const loginScreen = await fetchRaw(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/screenshot`, {
       headers: authHeaders,
@@ -228,51 +502,22 @@ async function main() {
     });
     assert.strictEqual(completedInteractive.ready, true, 'interactive login should capture a ready storage state');
 
-    const interactiveScreenshot = await fetchJson(
+    await assert.rejects(() => fetchJson(
       `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${interactive.sessionId}`,
       { headers: authHeaders }
-    );
-    assert.ok(interactiveScreenshot.thumbnailUrl, 'interactive auth session should capture protected pages');
-    await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}`, {
-      method: 'DELETE',
-      headers: authHeaders,
-    });
-
-    const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
-      method: 'POST',
-      headers: authHeaders,
-      body: JSON.stringify({
-        url: `${fixtureBase}/`,
-        storageState: {
-          cookies: [{
-            name: 'fixture_session',
-            value: 'ok',
-            domain: '127.0.0.1',
-            path: '/',
-            httpOnly: false,
-            secure: false,
-            sameSite: 'Lax',
-          }],
-          origins: [],
-        },
-      }),
-    });
-    assert.strictEqual(session.status, 'ready', 'storage state should create a ready auth session');
-
-    const screenshot = await fetchJson(
-      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${session.sessionId}`,
-      { headers: authHeaders }
-    );
-    assert.ok(screenshot.thumbnailUrl, 'same auth session should capture another protected page');
-
+    ), /failed 400: Image capture for protected pages/);
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ url: fixtureBase, authSessionId: interactive.sessionId, authenticatedCaptureType: 'thumb' }),
+    }), /failed 400: Image capture is separate/);
     const created = await fetchJson(`${API_BASE}/scan-jobs`, {
       method: 'POST',
       headers: authHeaders,
       body: JSON.stringify({
-        url: `${fixtureBase}/private-a`,
-        maxPages: 10,
+        url: `${fixtureBase}/`,
+        maxPages: 100,
         options: { authenticatedPages: true },
-        authSessionId: session.sessionId,
+        authSessionId: interactive.sessionId,
       }),
     });
     const result = await pollScanJob(created.jobId, created.jobAccessToken);
@@ -281,10 +526,15 @@ async function main() {
     assert.ok(privateA, 'authenticated scan should include private A');
     assert.strictEqual(privateA.authRequired, false, 'private A should not remain auth-gated');
     assert.strictEqual(privateA.title, 'Private A');
+    const privateB = nodes.find((node) => node.url === `${fixtureBase}/private-b`);
+    assert.ok(privateB && !privateB.authRequired, 'one login should unlock the second protected page');
+    assert.strictEqual(result.partial, true, 'a page still locked after login should make the scan partial');
+    assert.strictEqual(result.partialReason, 'auth_required');
+    assert.ok(result.blockedSections.some((section) => section.url === `${fixtureBase}/still-locked`));
 
     let deleted = false;
     try {
-      await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}`, {
+      await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}`, {
         headers: authHeaders,
       });
     } catch (error) {
@@ -292,10 +542,154 @@ async function main() {
     }
     assert.strictEqual(deleted, true, 'scan auth session should be deleted after job completion');
 
+    await assert.rejects(() => fetchJson(
+      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${interactive.sessionId}`,
+      { headers: authHeaders }
+    ), /failed 400:/);
+    await assert.rejects(() => fetchJson(`${API_BASE}/scan`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url: `${fixtureBase}/`, authSessionId: interactive.sessionId }),
+    }), /failed 400:/);
+    await assert.rejects(() => fetchJson(
+      `${API_BASE}/scan-stream?url=${encodeURIComponent(fixtureBase)}&authSessionId=${interactive.sessionId}`,
+      { headers: authHeaders }
+    ), /failed 400:/);
+
+    const rescanSession = await createReadyFixtureSession(fixtureBase, authHeaders, precheck.sampleUrls);
+    const rescanJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        url: `${fixtureBase}/`,
+        maxPages: 100,
+        options: { authenticatedPages: true },
+        authSessionId: rescanSession.sessionId,
+      }),
+    });
+    const rescanResult = await pollScanJob(rescanJob.jobId, rescanJob.jobAccessToken);
+    assert.ok(flattenTree(rescanResult.root).some((node) => (
+      node.url === `${fixtureBase}/private-b` && !node.authRequired
+    )), 'a fresh login should unlock protected pages on a rescan');
+
+    const canceledSession = await createReadyFixtureSession(fixtureBase, authHeaders, precheck.sampleUrls);
+    const canceledJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        url: `${fixtureBase}/`,
+        maxPages: 10,
+        options: { authenticatedPages: true },
+        authSessionId: canceledSession.sessionId,
+      }),
+    });
+    await fetchJson(`${API_BASE}/scan-jobs/${canceledJob.jobId}/cancel`, {
+      method: 'POST',
+      headers: authHeaders,
+    });
+    const canceledStatus = await fetchJson(`${API_BASE}/scan-jobs/${canceledJob.jobId}?access_token=${canceledJob.jobAccessToken}`);
+    assert.strictEqual(canceledStatus.job.status, 'canceled', 'canceled scan should not complete');
+    let canceledSessionRemoved = false;
+    try {
+      await fetchJson(`${API_BASE}/scan-auth/sessions/${canceledSession.sessionId}`, { headers: authHeaders });
+    } catch (error) {
+      canceledSessionRemoved = /failed 404/.test(error.message);
+    }
+    assert.strictEqual(canceledSessionRemoved, true, 'canceling a scan should discard its login');
+
+    if (backend) {
+      console.log('[scan-auth-session] Checking interrupted scan recovery.');
+      const restartSession = await createReadyFixtureSession(fixtureBase, authHeaders, precheck.sampleUrls);
+      console.log('[scan-auth-session] Restart login ready.');
+      console.log('[scan-auth-session] Creating interrupted job.');
+      const interruptedJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          url: `${fixtureBase}/slow`,
+          maxPages: 10,
+          options: { authenticatedPages: true },
+          authSessionId: restartSession.sessionId,
+        }),
+      });
+      console.log('[scan-auth-session] Interrupting job.');
+      const exited = new Promise((resolve) => backend.once('exit', resolve));
+      assert.strictEqual(backend.kill('SIGKILL'), true, 'fixture backend should accept the stop signal');
+      await exited;
+      console.log('[scan-auth-session] Initial backend stopped.');
+      backend = spawnBackend(tempDir);
+      await waitForHealth();
+      const interruptedStatus = await fetchJson(
+        `${API_BASE}/scan-jobs/${interruptedJob.jobId}?access_token=${interruptedJob.jobAccessToken}`
+      );
+      assert.strictEqual(interruptedStatus.job.status, 'failed', 'restarted scan must not resume without its login');
+      assert.ok(/interrupted/i.test(interruptedStatus.job.error || ''));
+    }
+
+    if (backend) {
+      const checkMapFallback = async () => {
+        const url = `${fixtureBase}/page-gates/page1`;
+        const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+          method: 'POST', headers: authHeaders, body: JSON.stringify({ url, sampleUrls: [url] }),
+        });
+        await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/action`, {
+          method: 'POST', headers: authHeaders, body: JSON.stringify({ action: 'password', text: 'fixture-password' }),
+        });
+        await fetchJson(`${API_BASE}/scan-auth/sessions/${session.sessionId}/complete`, { method: 'POST', headers: authHeaders });
+        const job = await fetchJson(`${API_BASE}/scan-jobs`, {
+          method: 'POST', headers: authHeaders,
+          body: JSON.stringify({ url, maxPages: 6, options: { authenticatedPages: true }, authSessionId: session.sessionId }),
+        });
+        const result = await pollScanJob(job.jobId, job.jobAccessToken);
+        assert.ok(!result.authenticatedCaptureWarning);
+        assert.strictEqual(result.authenticatedCaptureSummary, undefined, 'fallback must not charge for or create images');
+        assert.ok(flattenTree(result.root).some((node) => node.url === url && !node.authRequired), 'fallback must still unlock and map the page');
+      };
+      const restartWith = async (overrides) => {
+        const exited = new Promise((resolve) => backend.once('exit', resolve));
+        backend.kill('SIGKILL');
+        await exited;
+        backend = spawnBackend(tempDir, overrides);
+        await waitForHealth();
+        await backend.testAccountReady;
+      };
+      // Only the disposable fixture database is changed here.
+      const fixtureDb = new (require('better-sqlite3'))(path.join(tempDir, 'vellic.db'));
+      const fixtureUser = fixtureDb.prepare('SELECT id, account_id FROM users WHERE email = ?').get('admin@vellic.io');
+      fixtureDb.prepare(`INSERT INTO usage_ledger_entries (id, account_id, user_id, meter, entry_type, quantity, source)
+        VALUES (?, ?, ?, 'screenshot_credits', 'debit', 10000, 'included')`)
+        .run(crypto.randomUUID(), fixtureUser.account_id, fixtureUser.id);
+      fixtureDb.close();
+      await checkMapFallback();
+      await restartWith({ PRIVATE_SCAN_CAPTURE_KEY: '' });
+      await checkMapFallback();
+      await restartWith({ SCAN_AUTH_FEATURE_ENABLED: 'false' });
+      const disabled = await fetchJson(`${API_BASE}/scan-auth/precheck`, {
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase }),
+      });
+      assert.strictEqual(disabled.featureDisabled, true);
+      await assert.rejects(() => fetchJson(`${API_BASE}/scan-auth/sessions`, {
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ url: fixtureBase }),
+      }), /failed 503/);
+      const publicJob = await fetchJson(`${API_BASE}/scan-jobs`, {
+        method: 'POST', headers: authHeaders,
+        body: JSON.stringify({ url: `${fixtureBase}/public-check`, maxPages: 10, options: { authenticatedPages: false } }),
+      });
+      const publicResult = await pollScanJob(publicJob.jobId, publicJob.jobAccessToken);
+      assert.ok(flattenTree(publicResult.root).some((node) => node.title === 'About'), 'regular scanning must discover public children with the backend beta disabled');
+      console.log('[scan-auth-session] Missing storage, zero credits, and backend-disabled regular scan passed.');
+    }
+
     console.log('[scan-auth-session] Passed.');
   } finally {
-    if (fixture) await new Promise((resolve) => fixture.close(resolve));
-    if (backend) backend.kill('SIGTERM');
+    if (backend) backend.kill('SIGKILL');
+    if (fixture) {
+      fixture.closeAllConnections();
+      await Promise.race([
+        new Promise((resolve) => fixture.close(resolve)),
+        sleep(3000),
+      ]);
+    }
     if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }

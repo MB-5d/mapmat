@@ -121,7 +121,7 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Fetched 354');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Discovered 407');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Accounted 384');
-    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Captured successfully 350');
+    expect(container.querySelector('.scan-outcome-note').textContent).toContain('Scanned successfully 350');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Visible on map 321');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Grouped 30');
     expect(container.querySelector('.scan-outcome-note').textContent).toContain('Crawl restricted 2');
@@ -181,7 +181,7 @@ describe('ScanProgressModal', () => {
       );
     });
 
-    expect(container.textContent).toContain('Capturing pages...');
+    expect(container.textContent).toContain('Scanning pages...');
     expect(container.textContent).not.toContain('Older rotating message');
   });
 
@@ -331,7 +331,7 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('Stop scanning?');
-    expect(container.textContent).toContain('Stop scanning and show the pages captured so far?');
+    expect(container.textContent).toContain('Stop scanning and show the pages scanned so far?');
     expect(container.textContent).toContain('Stop');
     expect(container.textContent).toContain('Cancel');
 

@@ -16,6 +16,7 @@ import NodeActionBar from './NodeActionBar';
 import NodeBadge from './NodeBadge';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
+import CaptureImage from '../ui/CaptureImage';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
@@ -143,6 +144,20 @@ const NodeCard = ({
         label: extension ? `${extension} file` : 'File link',
         text: 'No page preview',
         variant: 'file',
+      };
+    }
+    if (node?.isMissing || node?.isVirtualMissing || node?.scanStatus === 'missing') {
+      return { icon: ImageOff, label: 'Missing page', text: 'No page preview', variant: 'file' };
+    }
+    if (node?.isError || node?.scanStatus === 'error') {
+      return { icon: AlertTriangle, label: node.httpErrorLabel || 'Page unavailable', text: 'No page preview', variant: 'error' };
+    }
+    if (node?.authCaptureRequired || node?.authPreviewUnavailable || node?.authRequired) {
+      return {
+        icon: Lock,
+        label: 'Login-protected page',
+        text: 'Private preview unavailable',
+        variant: 'blocked',
       };
     }
     if (node?.thumbnailCaptureFailed) {
@@ -285,12 +300,12 @@ const NodeCard = ({
         ? 'Upgrade to see full map'
         : (
           isImportGhost || isFocusGhost
-            ? 'Inferred structural context; this is not a captured page'
+            ? 'Inferred structural context; this is not a scanned page'
             : undefined
         )}
       aria-label={
         isImportGhost || isFocusGhost
-          ? `${node.title}, inferred structural context, not a captured page`
+          ? `${node.title}, inferred structural context, not a scanned page`
           : undefined
       }
       style={{ cursor: isStructuralNode ? 'default' : (isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab'))) }}
@@ -351,7 +366,7 @@ const NodeCard = ({
           )}
           {hasThumb && shouldLoadThumb && !thumbError ? (
             <>
-              <img
+              <CaptureImage
                 className="thumb-img"
                 src={thumb}
                 alt={node.title}
@@ -373,6 +388,9 @@ const NodeCard = ({
                 }}
                 style={{ opacity: thumbLoading ? 0 : 1 }}
               />
+              {node?.authPreviewUnavailable && !thumbLoading && (
+                <span className="thumb-stale-label">Not updated by this scan</span>
+              )}
               {!thumbLoading && (
                 <button
                   className="thumb-fullsize-btn"

@@ -8,6 +8,7 @@ import { MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import TextInput from '../ui/TextInput';
 import { AUTHENTICATED_SCAN_ENABLED } from '../../utils/constants';
 import Icon from '../ui/Icon';
+import { useAuth } from '../../contexts/AuthContext';
 
 const ScanBar = ({
   canEdit,
@@ -35,6 +36,7 @@ const ScanBar = ({
   onClearUrl,
   showClearUrl,
 }) => {
+  const { isLoggedIn } = useAuth();
   const inputPlaceholder = placeholder || 'https://example.com';
 
   if (!canEdit) {
@@ -133,9 +135,10 @@ const ScanBar = ({
                 {AUTHENTICATED_SCAN_ENABLED ? (
                   <CheckboxField
                     className="layers-panel-item scan-options-checkbox"
-                    checked={options.authenticatedPages}
+                    checked={isLoggedIn && options.authenticatedPages}
                     onChange={() => onOptionChange('authenticatedPages')}
-                    disabled={controlsDisabled || optionsDisabled}
+                    disabled={controlsDisabled || optionsDisabled || !isLoggedIn}
+                    description={!isLoggedIn ? 'Log in to Vellic to scan password-protected pages.' : ''}
                     label="Authenticated pages"
                   />
                 ) : null}

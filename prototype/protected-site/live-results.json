@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-08",
+  "environment": "isolated local prototype",
+  "google": {
+    "realProviderSignIn": true,
+    "userCompletedBrowserSignIn": true,
+    "freshGoogleSecondFactorChallenge": "not verified",
+    "scanCompletedAtUtc": "2026-11-08 18:31:19",
+    "protectedPagesHttp200": 4,
+    "protectedPrivateThumbnails": 4,
+    "anonymousImageStatus": 401,
+    "ownerImageStatus": 200
+  },
+  "passwordAndEmailCode": {
+    "realEmailReceivedAndCodeEnteredByUser": true,
+    "scanCompletedAtUtc": "2026-11-08 18:33:38",
+    "protectedPagesHttp200": 4,
+    "protectedPrivateThumbnails": 4,
+    "anonymousImageStatus": 401,
+    "ownerImageStatus": 200
+  },
+  "totalPagesPerScan": 5,
+  "stagingOrProductionChanged": false,
+  "limitation": "Cooperative test-site integration supplies its own temporary session. Generic third-party site login without a browser helper is not established."
+}

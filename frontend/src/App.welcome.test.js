@@ -3,11 +3,14 @@ import { createRoot } from 'react-dom/client';
 
 import App, { WELCOME_MODAL_STORAGE_KEY } from './App';
 import * as api from './api';
+import { AUTHENTICATED_SCAN_ENABLED } from './utils/constants';
 import { LocaleProvider } from './contexts/LocaleContext';
 import { ROUTE_SURFACES, createAppHomeRoute } from './utils/appRoutes';
 
 vi.mock('./api', () => ({
   getMe: vi.fn(),
+  getBrowserHelperConfig: vi.fn(),
+  getScanAuthSession: vi.fn(),
   getShare: vi.fn(),
   getShareStatus: vi.fn(),
   getProjects: vi.fn(),
@@ -23,6 +26,11 @@ vi.mock('./api', () => ({
   refreshBillingAccount: vi.fn(),
   createScanJob: vi.fn(),
   precheckScanAuth: vi.fn(),
+  createScanAuthSession: vi.fn(),
+  getScanAuthScreenshot: vi.fn(),
+  sendScanAuthAction: vi.fn(),
+  completeScanAuthSession: vi.fn(),
+  deleteScanAuthSession: vi.fn(),
   login: vi.fn(),
   signup: vi.fn(),
 }));
@@ -111,6 +119,7 @@ describe('App blank home and welcome modal', () => {
   };
 
   beforeEach(() => {
+    vi.stubEnv('REACT_APP_SCAN_AUTH_BROWSER_HELPER', 'false');
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -129,6 +138,10 @@ describe('App blank home and welcome modal', () => {
     api.getMapAccessPreview.mockResolvedValue({ map: null });
     api.login.mockResolvedValue({ user: defaultUser });
     api.signup.mockResolvedValue({ user: defaultUser });
+    api.deleteScanAuthSession.mockResolvedValue({ success: true });
+    api.getScanEntitlementPreview.mockResolvedValue({
+      entitlement: { requestedPages: 50000, allowedPages: 50000, capped: false },
+    });
 
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -143,6 +156,8 @@ describe('App blank home and welcome modal', () => {
     container = null;
     root = null;
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    delete window.chrome;
     vi.clearAllMocks();
     window.localStorage.clear();
     Object.defineProperty(window, 'opener', {
@@ -365,6 +380,246 @@ describe('App blank home and welcome modal', () => {
 
     expect(getSaveMapModal()).not.toBeNull();
     expect(container.textContent).toContain('Create map');
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('simple protected pages show a direct password field instead of a screenshot', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockResolvedValue({
+      authRequired: true,
+      authCount: 9,
+      sampleUrls: ['https://example.com/private'],
+      interactiveLoginSupported: true,
+    });
+    api.createScanAuthSession.mockResolvedValue({
+      status: 'interactive',
+      sessionId: 'test-session',
+      loginUrl: 'https://example.com/private',
+      simplePasswordGate: true,
+    });
+    api.sendScanAuthAction.mockResolvedValue({ success: true });
+    api.completeScanAuthSession.mockRejectedValue(new Error('Password not accepted'));
+
+    await renderApp();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-bar__input'), 'https://example.com');
+      await flushAsync();
+    });
+    await click(getButton('Scan'));
+    expect(container.textContent).toContain('At least 9 pages');
+    expect(container.querySelector('.modal-sm')).not.toBeNull();
+    expect(container.textContent).not.toContain('https://example.com/private');
+    await click(getButton('Enter password'));
+
+    expect(container.querySelector('.scan-auth-password-form input[type="password"]')).not.toBeNull();
+    expect(document.activeElement.id).toBe('scan-site-password');
+    expect(container.querySelector('.scan-auth-browser-frame')).toBeNull();
+    expect(getButton('Use browser sign-in instead')).toBeUndefined();
+    expect(api.getScanAuthScreenshot).not.toHaveBeenCalled();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-auth-password-form input'), 'test-password');
+      await flushAsync();
+    });
+    await click(container.querySelector('button[aria-label="Show password"]'));
+    expect(container.querySelector('#scan-site-password').type).toBe('text');
+    expect(container.querySelector('#scan-site-password').value).toBe('test-password');
+    await click(container.querySelector('button[aria-label="Hide password"]'));
+    await click(getButton('Unlock and scan'));
+    expect(api.sendScanAuthAction).toHaveBeenCalledWith('test-session', {
+      action: 'password',
+      text: 'test-password',
+    });
+    expect(container.textContent).toContain('Password not accepted');
+    expect(container.querySelector('#scan-site-password').value).toBe('test-password');
+    expect(container.querySelector('.field-error').textContent).toBe('Password not accepted');
+    expect(container.querySelector('#scan-site-password').getAttribute('aria-invalid')).toBe('true');
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('unsupported browser login gives a clear limit and cleans up without showing screenshot controls', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, authCount: 2, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'unsupported-session', status: 'interactive', simplePasswordGate: false });
+    await renderApp();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-bar__input'), 'https://example.com');
+      await flushAsync();
+    });
+    await click(getButton('Scan'));
+    await click(getButton('Enter password'));
+    expect(container.textContent).toContain('Interactive sign-in unavailable');
+    expect(container.querySelector('.scan-auth-browser-frame')).toBeNull();
+    expect(getButton('Type')).toBeUndefined();
+    expect(getButton('Use this login')).toBeUndefined();
+    expect(api.deleteScanAuthSession).toHaveBeenCalledWith('unsupported-session');
+    expect(api.getScanAuthScreenshot).not.toHaveBeenCalled();
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED).each(['password', 'without login'])('scan limit acknowledgement survives continuing %s', async (choice) => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.getScanEntitlementPreview.mockResolvedValue({
+      entitlement: { requestedPages: 50000, allowedPages: 100, capped: true },
+    });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, authCount: 10, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'limit-session', status: 'interactive', simplePasswordGate: true });
+    api.sendScanAuthAction.mockResolvedValue({ success: true });
+    api.completeScanAuthSession.mockResolvedValue({ ready: true });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped after scan creation'), { status: 400 }));
+    await renderApp();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-bar__input'), 'https://example.com');
+      await flushAsync();
+    });
+    await click(getButton('Scan'));
+    expect(container.textContent).toContain('Scan limits');
+    expect(api.precheckScanAuth).not.toHaveBeenCalled();
+    await click(getButton('Continue'));
+    expect(api.precheckScanAuth).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('At least 10 pages');
+    if (choice === 'password') {
+      await click(getButton('Enter password'));
+      await act(async () => { changeValue(container.querySelector('#scan-site-password'), 'test-password'); });
+      await click(getButton('Unlock and scan'));
+    } else {
+      await click(getButton('Scan without login'));
+    }
+    expect(api.createScanJob).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain('Scan limits');
+    expect(api.createScanJob.mock.calls[0][0].options.authenticatedPages).toBe(true);
+    if (choice === 'password') expect(api.createScanJob.mock.calls[0][0].authSessionId).toBe('limit-session');
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
+    expect(api.precheckScanAuth).toHaveBeenCalledTimes(1);
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('closing during password submission prevents the delayed response from starting a scan', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, authCount: 2, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'cancel-session', status: 'interactive', simplePasswordGate: true });
+    let finishAction;
+    api.sendScanAuthAction.mockImplementation(() => new Promise((resolve) => { finishAction = resolve; }));
+    await renderApp();
+    await act(async () => {
+      changeValue(container.querySelector('.scan-bar__input'), 'https://example.com');
+      await flushAsync();
+    });
+    await click(getButton('Scan'));
+    await click(getButton('Enter password'));
+    await act(async () => {
+      changeValue(container.querySelector('#scan-site-password'), 'test-password');
+      await flushAsync();
+    });
+    await click(getButton('Unlock and scan'));
+    await click(container.querySelector('.modal-close'));
+    await act(async () => {
+      finishAction({ success: true });
+      await flushAsync();
+    });
+    expect(api.completeScanAuthSession).not.toHaveBeenCalled();
+    expect(api.deleteScanAuthSession).toHaveBeenCalledWith('cancel-session');
+    expect(container.querySelector('#scan-site-password')).toBeNull();
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED).each(['retry', 'without login'])('failed precheck waits for an explicit %s choice', async (choice) => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockRejectedValueOnce(new Error('Unavailable'));
+    api.precheckScanAuth.mockResolvedValue({ authRequired: false });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped'), { status: 400 }));
+    await renderApp();
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
+    await click(getButton('Scan'));
+    expect(container.textContent).toContain('Could not check protected pages');
+    expect(api.createScanJob).not.toHaveBeenCalled();
+    await click(getButton(choice === 'retry' ? 'Retry check' : 'Scan without login'));
+    expect(api.createScanJob).toHaveBeenCalledTimes(1);
+    expect(api.precheckScanAuth).toHaveBeenCalledTimes(choice === 'retry' ? 2 : 1);
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('password login starts a map-only scan without image options', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, sampleUrls: ['https://example.com/private'], interactiveLoginSupported: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'images', status: 'interactive', simplePasswordGate: true });
+    api.sendScanAuthAction.mockResolvedValue({ success: true });
+    api.completeScanAuthSession.mockResolvedValue({ ready: true });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped'), { status: 400 }));
+    await renderApp();
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
+    await click(getButton('Scan'));
+    await click(getButton('Enter password'));
+    expect(container.querySelector('.scan-auth-modal-body input[type="checkbox"]')).toBeNull();
+    expect(container.textContent).not.toContain('Include private thumbnails');
+    await act(async () => { changeValue(container.querySelector('#scan-site-password'), 'test-password'); });
+    await click(getButton('Unlock and scan'));
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('helper-enabled users can choose a password without installing the helper', async () => {
+    vi.stubEnv('REACT_APP_SCAN_AUTH_BROWSER_HELPER', 'true');
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.getBrowserHelperConfig.mockRejectedValue(Object.assign(new Error('Not available for this account'), { status: 403 }));
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true, interactiveLoginSupported: true, sampleUrls: ['https://example.com/private'] });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'password-fallback', status: 'interactive', simplePasswordGate: true });
+    await renderApp();
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
+    await click(getButton('Scan'));
+    expect(getButton('Connect browser helper').disabled).toBe(true);
+    await click(getButton('Use site password instead'));
+    expect(container.querySelector('#scan-site-password')).not.toBeNull();
+    expect(api.createScanAuthSession.mock.calls[0][1]?.browserHelper).not.toBe(true);
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('browser helper login starts a map-only scan without image options', async () => {
+    vi.stubEnv('REACT_APP_SCAN_AUTH_BROWSER_HELPER', 'true');
+    suppressWelcomeModal();
+    const config = { enabled: true, extensionId: 'a'.repeat(32), version: '0.3.0', origin: 'https://api-staging.vellic.io', temporaryAccessRemoved: true };
+    window.chrome = { runtime: { sendMessage: (_id, _message, reply) => reply(config) } };
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.getBrowserHelperConfig.mockResolvedValue(config);
+    api.getScanAuthSession.mockResolvedValue({ helperImported: true });
+    api.precheckScanAuth.mockResolvedValue({ authRequired: true });
+    api.createScanAuthSession.mockResolvedValue({ sessionId: 'helper-session', helperPairingCode: 'a'.repeat(64), helperExpiresAt: Date.now() + 60000 });
+    api.completeScanAuthSession.mockResolvedValue({ ready: true });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped'), { status: 400 }));
+    await renderApp();
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com/private'); });
+    await click(getButton('Scan'));
+    await click(getButton('Connect browser helper'));
+    expect(container.querySelector('.scan-auth-modal-body input[type="checkbox"]')).toBeNull();
+    expect(container.textContent).not.toContain('Include private thumbnails');
+    expect(getButton('Use this login').disabled).toBe(false);
+    await click(getButton('Use this login'));
+    expect(api.createScanJob).toHaveBeenCalledTimes(1);
+    expect(api.createScanJob.mock.calls[0][0].authSessionId).toBe('helper-session');
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
+  });
+
+  test.runIf(!AUTHENTICATED_SCAN_ENABLED)('disabled beta scans normally without auth requests or controls', async () => {
+    suppressWelcomeModal();
+    api.getMe.mockResolvedValue({ user: defaultUser });
+    api.createScanJob.mockRejectedValue(Object.assign(new Error('Test stopped'), { status: 400 }));
+    await renderApp();
+    await click(getButton('Options'));
+    expect(container.textContent).not.toContain('Authenticated pages');
+    await act(async () => { changeValue(container.querySelector('.scan-bar__input'), 'https://example.com'); });
+    await click(getButton('Scan'));
+    expect(api.precheckScanAuth).not.toHaveBeenCalled();
+    expect(api.createScanAuthSession).not.toHaveBeenCalled();
+    expect(api.createScanJob.mock.calls[0][0].options.authenticatedPages).toBe(false);
+    expect(api.createScanJob.mock.calls[0][0].authenticatedCaptureType).toBeUndefined();
+  });
+
+  test.runIf(AUTHENTICATED_SCAN_ENABLED)('guests see a disabled unchecked auth option and sign-in explanation', async () => {
+    suppressWelcomeModal();
+    await renderApp();
+    await click(getButton('Options'));
+    const label = [...container.querySelectorAll('label')].find((item) => item.textContent.includes('Authenticated pages'));
+    expect(label.querySelector('input').checked).toBe(false);
+    expect(label.querySelector('input').disabled).toBe(true);
+    expect(label.textContent).toContain('Log in to Vellic');
   });
 
   test('logged-in modify opens the projects panel', async () => {
